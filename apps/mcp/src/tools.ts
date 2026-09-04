@@ -1,0 +1,224 @@
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
+import type { ExtensionBridge } from './bridge';
+
+function textResult(value: unknown) {
+  const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  return { content: [{ type: 'text' as const, text }] };
+}
+
+function errorResult(error: unknown) {
+  const text = error instanceof Error ? error.message : String(error);
+  return { content: [{ type: 'text' as const, text }], isError: true };
+}
+
+export function registerTools(server: McpServer, bridge: ExtensionBridge): void {
+  server.registerTool(
+    'browser_navigate',
+    {
+      description: 'Navigate to a URL',
+      inputSchema: { url: z.string() },
+    },
+    async ({ url }) => {
+      try {
+        return textResult(await bridge.send('browser_navigate', { url }));
+      }
+      catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_go_back',
+    { description: 'Go back in history', inputSchema: {} },
+    async () => {
+      try {
+        return textResult(await bridge.send('browser_go_back'));
+      }
+      catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_go_forward',
+    { description: 'Go forward in history', inputSchema: {} },
+    async () => {
+      try {
+        return textResult(await bridge.send('browser_go_forward'));
+      }
+      catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_snapshot',
+    {
+      description: 'Capture accessibility snapshot of the current page. Use this for getting references to elements to interact with.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return textResult(await bridge.send('browser_snapshot'));
+      }
+      catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_click',
+    {
+      description: 'Perform click on a web page',
+      inputSchema: {
+        element: z.string().describe('Human-readable element description used to obtain permission to interact with the element'),
+        ref: z.string().describe('Exact target element reference from the page snapshot'),
+      },
+    },
+    async ({ element, ref }) => {
+      try {
+        return textResult(await bridge.send('browser_click', { element, ref }));
+      }
+      catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_hover',
+    {
+      description: 'Hover over element on page',
+      inputSchema: {
+        element: z.string().describe('Human-readable element description used to obtain permission to interact with the element'),
+        ref: z.string().describe('Exact target element reference from the page snapshot'),
+      },
+    },
+    async ({ element, ref }) => {
+      try {
+        return textResult(await bridge.send('browser_hover', { element, ref }));
+      }
+      catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_type',
+    {
+      description: 'Type text into editable element',
+      inputSchema: {
+        element: z.string().describe('Human-readable element description used to obtain permission to interact with the element'),
+        ref: z.string().describe('Exact target element reference from the page snapshot'),
+        text: z.string().describe('Text to type into the element'),
+        submit: z.boolean().describe('Whether to submit entered text (press Enter after)'),
+      },
+    },
+    async ({ element, ref, text, submit }) => {
+      try {
+        return textResult(await bridge.send('browser_type', { element, ref, text, submit }));
+      }
+      catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_select_option',
+    {
+      description: 'Select an option in a dropdown',
+      inputSchema: {
+        element: z.string().describe('Human-readable element description used to obtain permission to interact with the element'),
+        ref: z.string().describe('Exact target element reference from the page snapshot'),
+        values: z.array(z.string()).describe('Array of values to select in the dropdown. This can be a single value or multiple values.'),
+      },
+    },
+    async ({ element, ref, values }) => {
+      try {
+        return textResult(await bridge.send('browser_select_option', { element, ref, values }));
+      }
+      catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_press_key',
+    {
+      description: 'Press a key on the keyboard',
+      inputSchema: {
+        key: z.string().describe('Name of the key to press or a character to generate, such as ArrowLeft or a'),
+      },
+    },
+    async ({ key }) => {
+      try {
+        return textResult(await bridge.send('browser_press_key', { key }));
+      }
+      catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_wait',
+    {
+      description: 'Wait for a specified time in seconds',
+      inputSchema: {
+        time: z.number().describe('The time to wait in seconds'),
+      },
+    },
+    async ({ time }) => {
+      const ms = Math.min(Math.max(time, 0), 30) * 1000;
+      await new Promise(resolve => setTimeout(resolve, ms));
+      return textResult(`waited ${ms / 1000} seconds`);
+    },
+  );
+
+  server.registerTool(
+    'browser_screenshot',
+    {
+      description: 'Take a screenshot of the current page',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const result = await bridge.send('browser_screenshot') as { data: string; mimeType: string };
+        return {
+          content: [{
+            type: 'image' as const,
+            data: result.data,
+            mimeType: result.mimeType,
+          }],
+        };
+      }
+      catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_get_console_logs',
+    {
+      description: 'Get the console logs from the browser',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return textResult(await bridge.send('browser_get_console_logs'));
+      }
+      catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+}

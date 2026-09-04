@@ -1,0 +1,24 @@
+{
+  "name": "@cursor-chrome/mcp",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "cursor-chrome-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@cursor-chrome/protocol": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.25.3",
+    "ws": "^8.18.3",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/ws": "^8.18.1",
+    "tsdown": "^0.16.8",
+    "typescript": "^5.9.3"
+  }
+}
