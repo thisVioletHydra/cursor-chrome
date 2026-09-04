@@ -14,7 +14,7 @@ async function main(): Promise<void> {
 
   const server = new McpServer({
     name: 'cursor-chrome',
-    version: '0.1.0',
+    version: '0.2.0',
   });
   registerTools(server, bridge);
 
@@ -22,12 +22,17 @@ async function main(): Promise<void> {
   await server.connect(transport);
   log('mcp stdio ready');
 
+  let shuttingDown = false;
   const shutdown = () => {
+    if (shuttingDown)
+      return;
+    shuttingDown = true;
     bridge.close();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+  process.stdin.on('end', shutdown);
 }
 
 main().catch((error) => {

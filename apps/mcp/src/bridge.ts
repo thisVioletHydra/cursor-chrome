@@ -15,25 +15,38 @@ export class ExtensionBridge {
   }>();
 
   async listen(): Promise<void> {
-    this.wss = await new Promise<WebSocketServer>((resolve, reject) => {
-      const wss = new WebSocketServer({ host: WS_HOST, port: WS_PORT });
-      wss.once('listening', () => resolve(wss));
-      wss.once('error', (error) => {
-        if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {
-          reject(new Error(`Port ${WS_PORT} busy. Close the other MCP or kill whatever holds 127.0.0.1:${WS_PORT}.`));
-          return;
-        }
-        reject(error);
-      });
-    });
-
+    this.wss = await this.bind();
     this.wss.on('connection', (socket) => {
-      if (this.socket && this.socket.readyState === socket.OPEN) {
-        socket.close(1000, 'already connected');
-        return;
+      if (this.socket && this.socket !== socket) {
+        this.socket.close(1000, 'replaced');
+        this.socket = undefined;
       }
       this.attach(socket);
     });
+  }
+
+  private async bind(): Promise<WebSocketServer> {
+    for (let attempt = 0; attempt < 15; attempt++) {
+      try {
+        return await new Promise<WebSocketServer>((resolve, reject) => {
+          const wss = new WebSocketServer({ host: WS_HOST, port: WS_PORT });
+          wss.once('listening', () => resolve(wss));
+          wss.once('error', (error) => {
+            wss.close();
+            reject(error);
+          });
+        });
+      }
+      catch (error) {
+        const busy = (error as NodeJS.ErrnoException).code === 'EADDRINUSE';
+        if (!busy || attempt === 14)
+          throw busy
+            ? new Error(`Port ${WS_PORT} busy. Close the other MCP or kill whatever holds 127.0.0.1:${WS_PORT}.`)
+            : error;
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+    }
+    throw new Error(`Port ${WS_PORT} busy`);
   }
 
   get connected(): boolean {

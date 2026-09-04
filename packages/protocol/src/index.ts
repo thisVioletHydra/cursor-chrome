@@ -4,6 +4,7 @@ export const WS_URL = `ws://${WS_HOST}:${WS_PORT}`;
 
 export const COMMANDS = [
   'browser_navigate',
+  'browser_new_tab',
   'browser_go_back',
   'browser_go_forward',
   'browser_snapshot',

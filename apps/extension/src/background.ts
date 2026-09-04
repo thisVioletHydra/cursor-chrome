@@ -32,9 +32,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message?.type === 'reconnect') {
     void (async () => {
-      await ensureOffscreen();
-      await chrome.runtime.sendMessage({ type: 'reconnect' }).catch(() => {});
-      sendResponse({ ok: true });
+      try {
+        await ensureOffscreen();
+        await waitOffscreen();
+        await chrome.runtime.sendMessage({ type: 'reconnect' });
+        sendResponse({ ok: true, detail: 'reconnect sent' });
+      }
+      catch (error) {
+        const text = error instanceof Error ? error.message : String(error);
+        detail = text;
+        sendResponse({ ok: false, error: text });
+      }
     })();
     return true;
   }
@@ -78,6 +86,16 @@ async function ensureOffscreen(): Promise<void> {
   }
 }
 
+async function waitOffscreen(): Promise<void> {
+  for (let i = 0; i < 20; i++) {
+    const ping = await chrome.runtime.sendMessage({ type: 'ping-offscreen' }).catch(() => null);
+    if (ping)
+      return;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  throw new Error('Offscreen document did not start');
+}
+
 async function setBadge(on: boolean): Promise<void> {
   await chrome.action.setBadgeText({ text: on ? 'ON' : 'OFF' });
   await chrome.action.setBadgeBackgroundColor({ color: on ? '#0a0' : '#c00' });
@@ -86,6 +104,9 @@ async function setBadge(on: boolean): Promise<void> {
 async function runCommand(method: CommandName, params: Record<string, unknown>): Promise<unknown> {
   if (method === 'ping')
     return { ok: true, connected };
+
+  if (method === 'browser_new_tab')
+    return newTab(String(params.url || ''));
 
   const tab = await activeTab();
   if (method === 'browser_navigate')
@@ -109,6 +130,16 @@ async function activeTab(): Promise<chrome.tabs.Tab> {
   if (anyTab?.id != null)
     return anyTab;
   throw new Error('No Chrome tab available');
+}
+
+async function newTab(url: string): Promise<unknown> {
+  if (url && RESTRICTED.test(url))
+    throw new Error(`Cannot open restricted URL: ${url}`);
+  const created = await chrome.tabs.create(url ? { url, active: true } : { active: true });
+  if (created.id != null && url)
+    await waitComplete(created.id, 15_000);
+  const fresh = created.id != null ? await chrome.tabs.get(created.id) : created;
+  return { id: fresh.id, url: fresh.url || url || '' };
 }
 
 async function navigate(tab: chrome.tabs.Tab, url: string): Promise<unknown> {

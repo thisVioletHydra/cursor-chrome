@@ -58,12 +58,12 @@ function connect(): void {
 
   socket.addEventListener('close', () => {
     socket = null;
-    status(false, 'socket closed');
+    status(false, 'socket closed — MCP down or replaced');
     scheduleReconnect();
   });
 
   socket.addEventListener('error', () => {
-    status(false, 'socket error');
+    status(false, 'no MCP on ws://127.0.0.1:18765');
   });
 }
 

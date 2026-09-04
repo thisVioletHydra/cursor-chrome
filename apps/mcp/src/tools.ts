@@ -16,12 +16,30 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'browser_navigate',
     {
-      description: 'Navigate to a URL',
+      description: 'Navigate the current tab to a URL. Destroys that tab\'s page. Prefer browser_new_tab if the user wants to keep the current tab.',
       inputSchema: { url: z.string() },
     },
     async ({ url }) => {
       try {
         return textResult(await bridge.send('browser_navigate', { url }));
+      }
+      catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_new_tab',
+    {
+      description: 'Open a new browser tab. Use this instead of browser_navigate when the current tab should stay put. Later click/type/snapshot go to the new tab.',
+      inputSchema: {
+        url: z.string().optional().describe('URL to open. Omit for a blank tab.'),
+      },
+    },
+    async ({ url }) => {
+      try {
+        return textResult(await bridge.send('browser_new_tab', url ? { url } : {}));
       }
       catch (error) {
         return errorResult(error);
