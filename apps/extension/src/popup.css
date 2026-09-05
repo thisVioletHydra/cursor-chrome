@@ -6,7 +6,7 @@
 body {
   margin: 0;
   padding: 12px 14px;
-  width: 240px;
+  width: 280px;
   background: #111;
   color: #eee;
 }
@@ -21,6 +21,7 @@ h1 {
   font-weight: 600;
 }
 
+#status.native { color: #5eead4; }
 #status.on { color: #3ddc84; }
 #status.off { color: #ff6b6b; }
 

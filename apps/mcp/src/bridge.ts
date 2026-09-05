@@ -4,10 +4,13 @@ import { WebSocketServer, type WebSocket } from 'ws';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const CONNECT_WAIT_MS = 8_000;
+const HEARTBEAT_MS = 20_000;
+const PING_TIMEOUT_MS = 5_000;
 
 export class ExtensionBridge {
   private wss: WebSocketServer | undefined;
   private socket: WebSocket | undefined;
+  private heartbeat: ReturnType<typeof setInterval> | undefined;
   private readonly pending = new Map<string, {
     resolve: (value: unknown) => void;
     reject: (error: Error) => void;
@@ -23,6 +26,7 @@ export class ExtensionBridge {
       }
       this.attach(socket);
     });
+    this.startHeartbeat();
   }
 
   private async bind(): Promise<WebSocketServer> {
@@ -53,7 +57,7 @@ export class ExtensionBridge {
     return this.socket?.readyState === 1;
   }
 
-  async send(method: CommandName, params: Record<string, unknown> = {}): Promise<unknown> {
+  async send(method: CommandName, params: Record<string, unknown> = {}, timeoutMs = REQUEST_TIMEOUT_MS): Promise<unknown> {
     await this.waitForSocket();
     const socket = this.socket;
     if (!socket || socket.readyState !== 1) {
@@ -67,13 +71,14 @@ export class ExtensionBridge {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`Timed out waiting for ${method}`));
-      }, REQUEST_TIMEOUT_MS);
+      }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       socket.send(JSON.stringify(request));
     });
   }
 
   close(): void {
+    this.stopHeartbeat();
     for (const [id, item] of this.pending) {
       clearTimeout(item.timer);
       item.reject(new Error('Bridge closed'));
@@ -111,6 +116,29 @@ export class ExtensionBridge {
       if (this.socket === socket)
         this.socket = undefined;
     });
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeat = setInterval(() => {
+      if (!this.connected)
+        return;
+      void this.send('ping', {}, PING_TIMEOUT_MS).catch(() => {
+        try {
+          this.socket?.close();
+        }
+        catch {
+          // already gone
+        }
+      });
+    }, HEARTBEAT_MS);
+  }
+
+  private stopHeartbeat(): void {
+    if (!this.heartbeat)
+      return;
+    clearInterval(this.heartbeat);
+    this.heartbeat = undefined;
   }
 
   private async waitForSocket(): Promise<void> {

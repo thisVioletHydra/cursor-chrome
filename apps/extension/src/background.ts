@@ -1,10 +1,18 @@
-import type { CommandName } from '@cursor-chrome/protocol';
+import type { CommandName, WsRequest, WsResponse } from '@cursor-chrome/protocol';
+import { NATIVE_CHUNK_BYTES, NATIVE_HOST_NAME } from '@cursor-chrome/protocol';
 
 const ALARM = 'cc-keepalive';
 const RESTRICTED = /^(chrome|chrome-extension|edge|about|devtools|chrome-search):/i;
+const HOST_MISSING = /native messaging host not found|forbidden|does not exist/i;
+
+type Transport = 'native' | 'offscreen' | 'none';
 
 let connected = false;
 let detail = 'starting';
+let transport: Transport = 'none';
+let nativePort: chrome.runtime.Port | null = null;
+let nativeRetry: ReturnType<typeof setTimeout> | undefined;
+let ignoreNativeDisconnect = false;
 
 chrome.runtime.onInstalled.addListener(() => {
   void boot();
@@ -15,19 +23,37 @@ chrome.runtime.onStartup.addListener(() => {
 void boot();
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === ALARM)
-    void ensureOffscreen();
+  if (alarm.name !== ALARM)
+    return;
+  void ensureOffscreen();
+  connectNative();
+});
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== 'keepalive')
+    return;
+  port.onMessage.addListener(() => {
+    try {
+      port.postMessage({ t: Date.now() });
+    }
+    catch {
+      // SW going down
+    }
+  });
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'ws-status') {
+    if (nativePort)
+      return false;
     connected = Boolean(message.connected);
     detail = String(message.detail || '');
+    transport = 'offscreen';
     void setBadge(connected);
     return false;
   }
   if (message?.type === 'get-status') {
-    sendResponse({ connected, detail });
+    sendResponse({ connected, detail, transport });
     return true;
   }
   if (message?.type === 'reconnect') {
@@ -35,8 +61,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         await ensureOffscreen();
         await waitOffscreen();
-        await chrome.runtime.sendMessage({ type: 'reconnect' });
-        sendResponse({ ok: true, detail: 'reconnect sent' });
+        restartNative();
+        await chrome.runtime.sendMessage({ type: 'reconnect' }).catch(() => {});
+        sendResponse({ ok: true, detail: nativePort ? 'native reconnect' : 'offscreen reconnect sent' });
       }
       catch (error) {
         const text = error instanceof Error ? error.message : String(error);
@@ -52,31 +79,141 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
-  if (message?.type === 'console-log' && sender.tab?.id != null) {
+  if (message?.type === 'console-log' && sender.tab?.id != null)
     return false;
-  }
   return false;
 });
 
 async function boot(): Promise<void> {
   await chrome.alarms.create(ALARM, { periodInMinutes: 0.5 });
   await ensureOffscreen();
+  await waitOffscreen().catch(() => {});
+  connectNative();
   await setBadge(connected);
+}
+
+function restartNative(): void {
+  if (nativeRetry) {
+    clearTimeout(nativeRetry);
+    nativeRetry = undefined;
+  }
+  ignoreNativeDisconnect = true;
+  try {
+    nativePort?.disconnect();
+  }
+  catch {
+    // already gone
+  }
+  ignoreNativeDisconnect = false;
+  nativePort = null;
+  connectNative();
+}
+
+function connectNative(): void {
+  if (nativePort)
+    return;
+  try {
+    nativePort = chrome.runtime.connectNative(NATIVE_HOST_NAME);
+  }
+  catch (error) {
+    nativePort = null;
+    const text = error instanceof Error ? error.message : String(error);
+    void enableWsFallback(text);
+    return;
+  }
+
+  nativePort.onMessage.addListener((message) => {
+    void onNativeMessage(message);
+  });
+  nativePort.onDisconnect.addListener(() => {
+    const err = chrome.runtime.lastError?.message || 'native host disconnected';
+    nativePort = null;
+    if (ignoreNativeDisconnect)
+      return;
+    if (transport === 'native') {
+      connected = false;
+      detail = err;
+      void setBadge(false);
+    }
+    if (HOST_MISSING.test(err)) {
+      void enableWsFallback(err);
+      return;
+    }
+    nativeRetry = setTimeout(() => {
+      nativeRetry = undefined;
+      connectNative();
+    }, 1000);
+  });
+}
+
+async function onNativeMessage(message: unknown): Promise<void> {
+  if (!message || typeof message !== 'object')
+    return;
+  const rec = message as Record<string, unknown>;
+  if (rec.type === 'ws-status') {
+    connected = Boolean(rec.connected);
+    detail = String(rec.detail || '');
+    transport = 'native';
+    void setBadge(connected);
+    void disableWsFallback();
+    return;
+  }
+  if (typeof rec.id !== 'string' || typeof rec.method !== 'string')
+    return;
+  const request = rec as unknown as WsRequest;
+  try {
+    const result = await runCommand(request.method, request.params || {});
+    postNative({ id: request.id, ok: true, result });
+  }
+  catch (error) {
+    postNative({
+      id: request.id,
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function postNative(message: WsResponse): void {
+  if (!nativePort)
+    return;
+  const json = JSON.stringify(message);
+  if (json.length <= NATIVE_CHUNK_BYTES) {
+    nativePort.postMessage(message);
+    return;
+  }
+  const total = Math.ceil(json.length / NATIVE_CHUNK_BYTES);
+  nativePort.postMessage({ type: 'chunk-start', id: message.id, total });
+  for (let i = 0; i < total; i++) {
+    nativePort.postMessage({
+      type: 'chunk',
+      id: message.id,
+      i,
+      data: json.slice(i * NATIVE_CHUNK_BYTES, (i + 1) * NATIVE_CHUNK_BYTES),
+    });
+  }
+}
+
+async function disableWsFallback(): Promise<void> {
+  await chrome.runtime.sendMessage({ type: 'set-ws', enabled: false }).catch(() => {});
+}
+
+async function enableWsFallback(reason: string): Promise<void> {
+  transport = 'offscreen';
+  if (!connected)
+    detail = HOST_MISSING.test(reason) ? 'запусти pnpm install-host' : reason;
+  await chrome.runtime.sendMessage({ type: 'set-ws', enabled: true }).catch(() => {});
 }
 
 async function ensureOffscreen(): Promise<void> {
   const hasDocument = await chrome.offscreen.hasDocument?.() ?? false;
-  if (hasDocument) {
-    const ping = await chrome.runtime.sendMessage({ type: 'ping-offscreen' }).catch(() => null) as { connected?: boolean } | null;
-    if (ping)
-      connected = Boolean(ping.connected);
+  if (hasDocument)
     return;
-  }
   try {
     await chrome.offscreen.createDocument({
       url: 'offscreen.html',
       reasons: ['BLOBS'],
-      justification: 'Keep WebSocket to the local Cursor MCP server',
+      justification: 'Keepalive port and optional WebSocket to the local Cursor MCP server',
     });
   }
   catch (error) {

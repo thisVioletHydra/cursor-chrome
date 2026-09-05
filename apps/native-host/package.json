@@ -1,0 +1,20 @@
+{
+  "name": "@cursor-chrome/native-host",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsdown",
+    "install-host": "pnpm build && node scripts/install.mjs"
+  },
+  "dependencies": {
+    "@cursor-chrome/protocol": "workspace:*",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/ws": "^8.18.1",
+    "tsdown": "^0.16.8",
+    "typescript": "^5.9.3"
+  }
+}

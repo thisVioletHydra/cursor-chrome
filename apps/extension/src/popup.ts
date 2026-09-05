@@ -35,10 +35,22 @@ async function refresh(): Promise<void> {
     const state = await chrome.runtime.sendMessage({ type: 'get-status' }) as {
       connected?: boolean;
       detail?: string;
+      transport?: 'native' | 'offscreen' | 'none';
     };
     const on = Boolean(state?.connected);
-    statusEl.textContent = on ? 'ON' : 'OFF';
-    statusEl.className = on ? 'on' : 'off';
+    const transport = state?.transport || 'none';
+    if (on && transport === 'native') {
+      statusEl.textContent = 'NATIVE';
+      statusEl.className = 'native';
+    }
+    else if (on) {
+      statusEl.textContent = 'OFFSCREEN';
+      statusEl.className = 'on';
+    }
+    else {
+      statusEl.textContent = 'OFF';
+      statusEl.className = 'off';
+    }
     detailEl.textContent = state?.detail || (on ? 'ws://127.0.0.1:18765' : 'MCP not listening on :18765');
   }
   catch (error) {

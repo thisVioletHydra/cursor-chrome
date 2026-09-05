@@ -4,16 +4,57 @@ import type { CommandName, WsRequest, WsResponse } from '@cursor-chrome/protocol
 const CONNECT_BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
 
 let socket: WebSocket | null = null;
+let keepPort: chrome.runtime.Port | null = null;
 let attempt = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-let stopped = false;
+let wsEnabled = false;
+
+keepAlive();
+
+function keepAlive(): void {
+  try {
+    keepPort?.disconnect();
+  }
+  catch {
+    // already gone
+  }
+  keepPort = chrome.runtime.connect({ name: 'keepalive' });
+  keepPort.onDisconnect.addListener(() => {
+    keepPort = null;
+    setTimeout(keepAlive, 1000);
+  });
+}
+
+setInterval(() => {
+  try {
+    keepPort?.postMessage({ t: Date.now() });
+  }
+  catch {
+    keepAlive();
+  }
+}, 20_000);
 
 function status(connected: boolean, detail = ''): void {
   void chrome.runtime.sendMessage({ type: 'ws-status', connected, detail }).catch(() => {});
 }
 
+function setWsEnabled(enabled: boolean): void {
+  wsEnabled = enabled;
+  if (!enabled) {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = undefined;
+    }
+    socket?.close();
+    socket = null;
+    return;
+  }
+  attempt = 0;
+  connect();
+}
+
 function scheduleReconnect(): void {
-  if (stopped || reconnectTimer)
+  if (!wsEnabled || reconnectTimer)
     return;
   const delay = CONNECT_BACKOFF_MS[Math.min(attempt, CONNECT_BACKOFF_MS.length - 1)];
   attempt += 1;
@@ -24,7 +65,7 @@ function scheduleReconnect(): void {
 }
 
 function connect(): void {
-  if (stopped)
+  if (!wsEnabled)
     return;
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING))
     return;
@@ -58,12 +99,15 @@ function connect(): void {
 
   socket.addEventListener('close', () => {
     socket = null;
+    if (!wsEnabled)
+      return;
     status(false, 'socket closed — MCP down or replaced');
     scheduleReconnect();
   });
 
   socket.addEventListener('error', () => {
-    status(false, 'no MCP on ws://127.0.0.1:18765');
+    if (wsEnabled)
+      status(false, 'no MCP on ws://127.0.0.1:18765');
   });
 }
 
@@ -88,11 +132,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({
       ok: true,
       connected: socket?.readyState === WebSocket.OPEN,
+      wsEnabled,
     });
     return true;
   }
+  if (message?.type === 'set-ws') {
+    setWsEnabled(Boolean(message.enabled));
+    sendResponse({ ok: true, enabled: wsEnabled });
+    return true;
+  }
   if (message?.type === 'reconnect') {
-    stopped = false;
+    if (!wsEnabled) {
+      sendResponse({ ok: true, skipped: true });
+      return true;
+    }
     attempt = 0;
     socket?.close();
     socket = null;
@@ -102,13 +155,3 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   return false;
 });
-
-setInterval(() => {
-  void chrome.runtime.sendMessage({
-    type: 'ws-status',
-    connected: socket?.readyState === WebSocket.OPEN,
-    detail: WS_URL,
-  }).catch(() => {});
-}, 20_000);
-
-connect();

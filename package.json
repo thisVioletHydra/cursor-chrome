@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r build",
-    "dev": "pnpm --filter @cursor-chrome/mcp start"
+    "dev": "pnpm --filter @cursor-chrome/mcp start",
+    "install-host": "pnpm --filter @cursor-chrome/native-host run install-host"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^7.6.0",
