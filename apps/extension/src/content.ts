@@ -6,7 +6,7 @@ hookConsole();
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'ping') {
-    sendResponse({ ok: true });
+    sendResponse({ ok: true, href: location.href, title: document.title });
     return true;
   }
   if (message?.type === 'command') {
@@ -49,13 +49,13 @@ async function handle(method: string, params: Record<string, unknown>): Promise<
   if (method === 'browser_snapshot')
     return snapshot();
   if (method === 'browser_click')
-    return click(String(params.ref || ''));
+    return click(targetOf(params));
   if (method === 'browser_hover')
-    return hover(String(params.ref || ''));
+    return hover(targetOf(params));
   if (method === 'browser_type')
-    return typeInto(String(params.ref || ''), String(params.text || ''), Boolean(params.submit));
+    return typeInto(targetOf(params), String(params.text || ''), Boolean(params.submit));
   if (method === 'browser_select_option')
-    return selectOption(String(params.ref || ''), asStringArray(params.values));
+    return selectOption(targetOf(params), asStringArray(params.values));
   if (method === 'browser_press_key')
     return pressKey(String(params.key || ''));
   if (method === 'browser_get_console_logs')
@@ -67,8 +67,18 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map(item => String(item)) : [];
 }
 
+function targetOf(params: Record<string, unknown>): HTMLElement {
+  const ref = String(params.ref || '');
+  const selector = String(params.selector || '');
+  if (ref && selector)
+    throw new Error('Pass either ref or selector, not both');
+  if (selector)
+    return bySelector(selector);
+  return byRef(ref);
+}
+
 function snapshot(): string {
-  document.querySelectorAll(`[${REF_ATTR}]`).forEach(el => el.removeAttribute(REF_ATTR));
+  clearRefs(document);
   let next = 1;
   const lines: string[] = [
     `- page url=${location.href}`,
@@ -76,12 +86,12 @@ function snapshot(): string {
   ];
 
   const walk = (node: Element, depth: number) => {
-    if (!isShown(node))
+    if (!isPainted(node))
       return;
     const role = roleOf(node);
     const name = nameOf(node);
     const interesting = Boolean(role && (name || INTERACTIVE.has(role) || HEADINGS.has(role)));
-    if (interesting) {
+    if (interesting && isShown(node)) {
       const ref = `e${next++}`;
       node.setAttribute(REF_ATTR, ref);
       const bits = [`${'  '.repeat(depth)}- ${role}`];
@@ -97,12 +107,18 @@ function snapshot(): string {
         bits.push('[disabled]');
       lines.push(bits.join(' '));
     }
-    const childDepth = interesting ? depth + 1 : depth;
+    const childDepth = interesting && isShown(node) ? depth + 1 : depth;
     for (const child of Array.from(node.children))
       walk(child, childDepth);
+    const root = shadowRootOf(node);
+    if (root) {
+      for (const child of Array.from(root.children))
+        walk(child, childDepth);
+    }
   };
 
-  walk(document.body, 0);
+  if (document.body)
+    walk(document.body, 0);
   return lines.join('\n');
 }
 
@@ -169,41 +185,114 @@ function collapse(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
 
-function isShown(el: Element): boolean {
+function isFormControl(el: Element): boolean {
+  const tag = el.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON')
+    return true;
+  if ((el as HTMLElement).isContentEditable)
+    return true;
+  return INTERACTIVE.has(roleOf(el));
+}
+
+function isPainted(el: Element): boolean {
   if (!(el instanceof HTMLElement))
     return false;
+  const style = getComputedStyle(el);
+  return style.display !== 'none' && style.visibility !== 'hidden';
+}
+
+function isShown(el: Element): boolean {
+  if (!isPainted(el))
+    return false;
+  if (isFormControl(el))
+    return true;
   if (el.closest('[aria-hidden="true"]'))
     return false;
-  const style = getComputedStyle(el);
-  if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')
+  if (getComputedStyle(el).opacity === '0')
     return false;
   const rect = el.getBoundingClientRect();
   return rect.width > 0 || rect.height > 0 || el.tagName === 'OPTION';
 }
 
+function shadowRootOf(el: Element): ShadowRoot | null {
+  try {
+    const opened = chrome.dom?.openOrClosedShadowRoot?.(el);
+    if (opened)
+      return opened;
+  }
+  catch {
+    // API missing or node not an element host
+  }
+  return el.shadowRoot;
+}
+
+function clearRefs(root: ParentNode): void {
+  if (root instanceof Element && root.hasAttribute(REF_ATTR))
+    root.removeAttribute(REF_ATTR);
+  for (const el of Array.from(root.querySelectorAll(`[${REF_ATTR}]`)))
+    el.removeAttribute(REF_ATTR);
+  for (const el of Array.from(root.querySelectorAll('*'))) {
+    const sr = shadowRootOf(el);
+    if (sr)
+      clearRefs(sr);
+  }
+}
+
+function deepQuery(selector: string): HTMLElement | null {
+  const search = (root: ParentNode): HTMLElement | null => {
+    try {
+      const hit = root.querySelector(selector);
+      if (hit instanceof HTMLElement)
+        return hit;
+    }
+    catch {
+      throw new Error(`Invalid CSS selector: ${selector}`);
+    }
+    for (const el of Array.from(root.querySelectorAll('*'))) {
+      const sr = shadowRootOf(el);
+      if (!sr)
+        continue;
+      const nested = search(sr);
+      if (nested)
+        return nested;
+    }
+    return null;
+  };
+  return search(document);
+}
+
 function byRef(ref: string): HTMLElement {
   if (!ref)
-    throw new Error('ref is required; take a snapshot first');
-  const el = document.querySelector(`[${REF_ATTR}="${CSS.escape(ref)}"]`);
+    throw new Error('ref or selector is required');
+  const el = deepQuery(`[${REF_ATTR}="${CSS.escape(ref)}"]`);
   if (!(el instanceof HTMLElement))
     throw new Error(`ref ${ref} not found; take a new snapshot`);
   el.scrollIntoView({ block: 'center', inline: 'nearest' });
   return el;
 }
 
-function click(ref: string): { ok: true } {
-  const el = byRef(ref);
+function bySelector(selector: string): HTMLElement {
+  if (!selector)
+    throw new Error('selector is required');
+  const el = deepQuery(selector);
+  if (!(el instanceof HTMLElement))
+    throw new Error(`selector not found: ${selector}`);
+  el.scrollIntoView({ block: 'center', inline: 'nearest' });
+  return el;
+}
+
+function click(el: HTMLElement): { ok: true } {
   el.focus();
   el.click();
   return { ok: true };
 }
 
-function hover(ref: string): { ok: true } {
-  const el = byRef(ref);
+function hover(el: HTMLElement): { ok: true } {
   const rect = el.getBoundingClientRect();
   const opts: MouseEventInit = {
     bubbles: true,
     cancelable: true,
+    composed: true,
     clientX: rect.left + rect.width / 2,
     clientY: rect.top + rect.height / 2,
   };
@@ -213,8 +302,7 @@ function hover(ref: string): { ok: true } {
   return { ok: true };
 }
 
-function typeInto(ref: string, text: string, submit: boolean): { ok: true } {
-  const el = byRef(ref);
+function typeInto(el: HTMLElement, text: string, submit: boolean): { ok: true } {
   el.focus();
   if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
     const proto = el instanceof HTMLTextAreaElement
@@ -222,12 +310,11 @@ function typeInto(ref: string, text: string, submit: boolean): { ok: true } {
       : HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
     setter?.call(el, text);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
+    fireInput(el, text);
   }
   else if (el.isContentEditable) {
     el.textContent = text;
-    el.dispatchEvent(new InputEvent('input', { bubbles: true, data: text }));
+    fireInput(el, text);
   }
   else {
     throw new Error('Element is not editable');
@@ -237,14 +324,23 @@ function typeInto(ref: string, text: string, submit: boolean): { ok: true } {
   return { ok: true };
 }
 
-function selectOption(ref: string, values: string[]): { ok: true } {
-  const el = byRef(ref);
+function fireInput(el: HTMLElement, text: string): void {
+  el.dispatchEvent(new InputEvent('input', {
+    bubbles: true,
+    composed: true,
+    inputType: 'insertFromPaste',
+    data: text,
+  }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function selectOption(el: HTMLElement, values: string[]): { ok: true } {
   if (!(el instanceof HTMLSelectElement))
     throw new Error('Element is not a select');
   const wanted = new Set(values);
   for (const option of Array.from(el.options))
     option.selected = wanted.has(option.value) || wanted.has(option.label) || wanted.has(option.text);
-  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
   el.dispatchEvent(new Event('change', { bubbles: true }));
   return { ok: true };
 }
@@ -261,6 +357,7 @@ function pressOn(el: HTMLElement, key: string): void {
     code: key.length === 1 ? `Key${key.toUpperCase()}` : key,
     bubbles: true,
     cancelable: true,
+    composed: true,
   };
   el.dispatchEvent(new KeyboardEvent('keydown', eventInit));
   el.dispatchEvent(new KeyboardEvent('keypress', eventInit));

@@ -48,17 +48,18 @@ export interface NavigateParams {
   url: string;
 }
 
-export interface RefParams {
+export interface LocatorParams {
   element: string;
-  ref: string;
+  ref?: string;
+  selector?: string;
 }
 
-export interface TypeParams extends RefParams {
+export interface TypeParams extends LocatorParams {
   text: string;
   submit: boolean;
 }
 
-export interface SelectParams extends RefParams {
+export interface SelectParams extends LocatorParams {
   values: string[];
 }
 

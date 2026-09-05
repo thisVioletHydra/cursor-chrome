@@ -12,6 +12,19 @@ function errorResult(error: unknown) {
   return { content: [{ type: 'text' as const, text }], isError: true };
 }
 
+function locatorFields() {
+  return {
+    element: z.string().describe('Human-readable element description used to obtain permission to interact with the element'),
+    ref: z.string().optional().describe('Snapshot ref like e12 or f3e12. Pass this or selector, not both.'),
+    selector: z.string().optional().describe('CSS selector if you already know it (e.g. textarea[data-qa="text-input"]). Pass this or ref, not both.'),
+  };
+}
+
+function assertLocator(ref?: string, selector?: string): void {
+  if (Boolean(ref) === Boolean(selector))
+    throw new Error('Pass exactly one of ref or selector');
+}
+
 export function registerTools(server: McpServer, bridge: ExtensionBridge): void {
   server.registerTool(
     'browser_navigate',
@@ -76,7 +89,7 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'browser_snapshot',
     {
-      description: 'Capture accessibility snapshot of the current page. Use this for getting references to elements to interact with.',
+      description: 'Capture accessibility snapshot of the current page, including iframes. Use refs from this snapshot, or pass a CSS selector to click/type.',
       inputSchema: {},
     },
     async () => {
@@ -92,15 +105,13 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'browser_click',
     {
-      description: 'Perform click on a web page',
-      inputSchema: {
-        element: z.string().describe('Human-readable element description used to obtain permission to interact with the element'),
-        ref: z.string().describe('Exact target element reference from the page snapshot'),
-      },
+      description: 'Click an element. Use selector if you know the CSS; otherwise snapshot and pass ref.',
+      inputSchema: locatorFields(),
     },
-    async ({ element, ref }) => {
+    async ({ element, ref, selector }) => {
       try {
-        return textResult(await bridge.send('browser_click', { element, ref }));
+        assertLocator(ref, selector);
+        return textResult(await bridge.send('browser_click', { element, ref, selector }));
       }
       catch (error) {
         return errorResult(error);
@@ -111,15 +122,13 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'browser_hover',
     {
-      description: 'Hover over element on page',
-      inputSchema: {
-        element: z.string().describe('Human-readable element description used to obtain permission to interact with the element'),
-        ref: z.string().describe('Exact target element reference from the page snapshot'),
-      },
+      description: 'Hover over an element. Use selector if you know the CSS; otherwise snapshot and pass ref.',
+      inputSchema: locatorFields(),
     },
-    async ({ element, ref }) => {
+    async ({ element, ref, selector }) => {
       try {
-        return textResult(await bridge.send('browser_hover', { element, ref }));
+        assertLocator(ref, selector);
+        return textResult(await bridge.send('browser_hover', { element, ref, selector }));
       }
       catch (error) {
         return errorResult(error);
@@ -130,17 +139,17 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'browser_type',
     {
-      description: 'Type text into editable element',
+      description: 'Type into an editable element. Use selector if you know the CSS; otherwise snapshot and pass ref. Set submit true only if you want Enter after typing.',
       inputSchema: {
-        element: z.string().describe('Human-readable element description used to obtain permission to interact with the element'),
-        ref: z.string().describe('Exact target element reference from the page snapshot'),
+        ...locatorFields(),
         text: z.string().describe('Text to type into the element'),
         submit: z.boolean().describe('Whether to submit entered text (press Enter after)'),
       },
     },
-    async ({ element, ref, text, submit }) => {
+    async ({ element, ref, selector, text, submit }) => {
       try {
-        return textResult(await bridge.send('browser_type', { element, ref, text, submit }));
+        assertLocator(ref, selector);
+        return textResult(await bridge.send('browser_type', { element, ref, selector, text, submit }));
       }
       catch (error) {
         return errorResult(error);
@@ -151,16 +160,16 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'browser_select_option',
     {
-      description: 'Select an option in a dropdown',
+      description: 'Select an option in a dropdown. Use selector if you know the CSS; otherwise snapshot and pass ref.',
       inputSchema: {
-        element: z.string().describe('Human-readable element description used to obtain permission to interact with the element'),
-        ref: z.string().describe('Exact target element reference from the page snapshot'),
+        ...locatorFields(),
         values: z.array(z.string()).describe('Array of values to select in the dropdown. This can be a single value or multiple values.'),
       },
     },
-    async ({ element, ref, values }) => {
+    async ({ element, ref, selector, values }) => {
       try {
-        return textResult(await bridge.send('browser_select_option', { element, ref, values }));
+        assertLocator(ref, selector);
+        return textResult(await bridge.send('browser_select_option', { element, ref, selector, values }));
       }
       catch (error) {
         return errorResult(error);

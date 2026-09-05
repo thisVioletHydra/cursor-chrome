@@ -6,11 +6,13 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <h1>Cursor Chrome</h1>
+    <h1>Cursor Chrome <span id="ver"></span></h1>
     <p id="status">checking…</p>
+    <p id="tab" class="tab" title="клик — скопировать url"></p>
+    <p id="frames" class="meta"></p>
     <p id="detail"></p>
     <button id="reconnect" type="button">Reconnect</button>
-    <p class="hint">NATIVE = штатный канал. OFFSCREEN = fallback. «запусти pnpm install-host» = хост не зарегистрирован. MCP тоже должен быть поднят.</p>
+    <p class="hint">NATIVE = connectNative. OFFSCREEN = WS fallback. Хост: pnpm install-host.</p>
     <script src="popup.js"></script>
   </body>
 </html>

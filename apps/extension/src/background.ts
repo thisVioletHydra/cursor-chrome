@@ -53,7 +53,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
   if (message?.type === 'get-status') {
-    sendResponse({ connected, detail, transport });
+    sendResponse({ connected, detail, transport, version: chrome.runtime.getManifest().version });
+    return true;
+  }
+  if (message?.type === 'get-page') {
+    void pageInfo().then(sendResponse).catch((error) => {
+      sendResponse({ error: error instanceof Error ? error.message : String(error) });
+    });
     return true;
   }
   if (message?.type === 'reconnect') {
@@ -238,6 +244,13 @@ async function setBadge(on: boolean): Promise<void> {
   await chrome.action.setBadgeBackgroundColor({ color: on ? '#0a0' : '#c00' });
 }
 
+const LOCATOR_METHODS = new Set<CommandName>([
+  'browser_click',
+  'browser_hover',
+  'browser_type',
+  'browser_select_option',
+]);
+
 async function runCommand(method: CommandName, params: Record<string, unknown>): Promise<unknown> {
   if (method === 'ping')
     return { ok: true, connected };
@@ -256,7 +269,13 @@ async function runCommand(method: CommandName, params: Record<string, unknown>):
     return screenshot(tab);
 
   await ensureContent(tab);
-  return tabMessage(tab.id!, method, params);
+  if (method === 'browser_snapshot')
+    return snapshotAll(tab.id!);
+  if (method === 'browser_get_console_logs')
+    return consoleLogsAll(tab.id!);
+  if (LOCATOR_METHODS.has(method))
+    return dispatchLocator(tab.id!, method, params);
+  return frameMessage(tab.id!, 0, method, params);
 }
 
 async function activeTab(): Promise<chrome.tabs.Tab> {
@@ -267,6 +286,12 @@ async function activeTab(): Promise<chrome.tabs.Tab> {
   if (anyTab?.id != null)
     return anyTab;
   throw new Error('No Chrome tab available');
+}
+
+async function pageInfo(): Promise<{ url: string; frames: number }> {
+  const tab = await activeTab();
+  const frames = tab.id != null ? (await listFrameIds(tab.id)).length : 0;
+  return { url: tab.url || tab.pendingUrl || '', frames };
 }
 
 async function newTab(url: string): Promise<unknown> {
@@ -319,19 +344,116 @@ async function ensureContent(tab: chrome.tabs.Tab): Promise<void> {
     throw new Error('Tab has no id');
   if (RESTRICTED.test(tab.url || ''))
     throw new Error(`Cannot inject into restricted URL: ${tab.url}`);
-  try {
-    await chrome.tabs.sendMessage(tab.id, { type: 'ping' });
-  }
-  catch {
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ['content.js'],
-    });
+  const frameIds = await listFrameIds(tab.id);
+  for (const frameId of frameIds) {
+    try {
+      await chrome.tabs.sendMessage(tab.id, { type: 'ping' }, { frameId });
+    }
+    catch {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id, frameIds: [frameId] },
+        files: ['content.js'],
+      }).catch(() => {});
+    }
   }
 }
 
-async function tabMessage(tabId: number, method: CommandName, params: Record<string, unknown>): Promise<unknown> {
-  const result = await chrome.tabs.sendMessage(tabId, { type: 'command', method, params });
+async function listFrameIds(tabId: number): Promise<number[]> {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      func: () => true,
+    });
+    const ids = results
+      .map(item => item.frameId)
+      .filter((id): id is number => id != null);
+    ids.sort((a, b) => a - b);
+    return ids.length ? ids : [0];
+  }
+  catch {
+    return [0];
+  }
+}
+
+function parseRef(ref: string): { frameId: number; localRef: string } {
+  const nested = ref.match(/^f(\d+)(e\d+)$/);
+  if (nested)
+    return { frameId: Number(nested[1]), localRef: nested[2] };
+  return { frameId: 0, localRef: ref };
+}
+
+async function snapshotAll(tabId: number): Promise<string> {
+  const frameIds = await listFrameIds(tabId);
+  const chunks: string[] = [];
+  for (const frameId of frameIds) {
+    try {
+      const text = await frameMessage(tabId, frameId, 'browser_snapshot', {});
+      if (typeof text !== 'string' || !text)
+        continue;
+      if (frameId === 0) {
+        chunks.push(text);
+        continue;
+      }
+      const rewritten = text.replace(/\[ref=(e\d+)\]/g, `[ref=f${frameId}$1]`);
+      const lines = rewritten.split('\n');
+      const url = lines[0]?.replace(/^- page url=/, '') || '';
+      chunks.push(`- iframe url=${url} [frame=${frameId}]`);
+      for (const line of lines.slice(2)) {
+        if (line)
+          chunks.push(`  ${line}`);
+      }
+    }
+    catch {
+      // cross-origin or dead frame
+    }
+  }
+  return chunks.join('\n');
+}
+
+async function consoleLogsAll(tabId: number): Promise<unknown> {
+  const frameIds = await listFrameIds(tabId);
+  const all: unknown[] = [];
+  for (const frameId of frameIds) {
+    try {
+      const logs = await frameMessage(tabId, frameId, 'browser_get_console_logs', {});
+      if (Array.isArray(logs))
+        all.push(...logs);
+    }
+    catch {
+      // skip
+    }
+  }
+  return all;
+}
+
+async function dispatchLocator(tabId: number, method: CommandName, params: Record<string, unknown>): Promise<unknown> {
+  const ref = String(params.ref || '');
+  const selector = String(params.selector || '');
+  if (ref && selector)
+    throw new Error('Pass either ref or selector, not both');
+  if (!ref && !selector)
+    throw new Error('Pass exactly one of ref or selector');
+
+  if (ref) {
+    const { frameId, localRef } = parseRef(ref);
+    return frameMessage(tabId, frameId, method, { ...params, ref: localRef, selector: '' });
+  }
+
+  const frameIds = await listFrameIds(tabId);
+  const misses: string[] = [];
+  for (const frameId of frameIds) {
+    try {
+      return await frameMessage(tabId, frameId, method, params);
+    }
+    catch (error) {
+      misses.push(`frame ${frameId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  throw new Error(`selector not found: ${selector}${misses.length ? ` (${misses.join('; ')})` : ''}`);
+}
+
+async function frameMessage(tabId: number, frameId: number, method: CommandName, params: Record<string, unknown>): Promise<unknown> {
+  const result = await chrome.tabs.sendMessage(tabId, { type: 'command', method, params }, { frameId });
   if (result && typeof result === 'object' && 'error' in result)
     throw new Error(String((result as { error: unknown }).error));
   return result;

@@ -16,6 +16,13 @@ h1 {
   font-size: 14px;
 }
 
+#ver {
+  margin-left: 4px;
+  color: #777;
+  font-weight: 500;
+  font-size: 12px;
+}
+
 #status {
   margin: 0 0 4px;
   font-weight: 600;
@@ -29,6 +36,26 @@ h1 {
   margin: 0 0 10px;
   color: #aaa;
   font-size: 12px;
+}
+
+.tab {
+  margin: 0 0 2px;
+  color: #93c5fd;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+  cursor: pointer;
+}
+
+.tab.copied {
+  color: #5eead4;
+}
+
+.meta {
+  margin: 0 0 8px;
+  color: #777;
+  font-size: 11px;
+  min-height: 1em;
 }
 
 button {
