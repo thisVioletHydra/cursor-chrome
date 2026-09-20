@@ -14,7 +14,7 @@ async function main(): Promise<void> {
 
   const server = new McpServer({
     name: 'cursor-chrome',
-    version: '0.3.0',
+    version: '0.3.1',
   });
   registerTools(server, bridge);
 
