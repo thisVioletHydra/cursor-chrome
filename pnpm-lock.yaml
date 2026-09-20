@@ -4,6 +4,24 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@types/node':
+      specifier: ^24.10.1
+      version: 24.13.3
+    '@types/ws':
+      specifier: ^8.18.1
+      version: 8.18.1
+    tsdown:
+      specifier: ^0.16.8
+      version: 0.16.8
+    typescript:
+      specifier: ^5.9.3
+      version: 5.9.3
+    ws:
+      specifier: ^8.18.3
+      version: 8.21.3
+
 importers:
 
   .:
@@ -21,7 +39,7 @@ importers:
         specifier: ^2.4.1
         version: 2.4.2
       typescript:
-        specifier: ^5.9.3
+        specifier: 'catalog:'
         version: 5.9.3
       yaml-eslint-parser:
         specifier: ^1.3.0
@@ -37,10 +55,10 @@ importers:
         specifier: ^0.1.24
         version: 0.1.43
       tsdown:
-        specifier: ^0.16.8
+        specifier: 'catalog:'
         version: 0.16.8(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(synckit@0.11.13)(typescript@5.9.3)
       typescript:
-        specifier: ^5.9.3
+        specifier: 'catalog:'
         version: 5.9.3
 
   apps/mcp:
@@ -52,23 +70,23 @@ importers:
         specifier: ^1.25.3
         version: 1.30.0(zod@4.5.4)
       ws:
-        specifier: ^8.18.3
+        specifier: 'catalog:'
         version: 8.21.3
       zod:
         specifier: ^4.1.12
         version: 4.5.4
     devDependencies:
       '@types/node':
-        specifier: ^24.10.1
+        specifier: 'catalog:'
         version: 24.13.3
       '@types/ws':
-        specifier: ^8.18.1
+        specifier: 'catalog:'
         version: 8.18.1
       tsdown:
-        specifier: ^0.16.8
+        specifier: 'catalog:'
         version: 0.16.8(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(synckit@0.11.13)(typescript@5.9.3)
       typescript:
-        specifier: ^5.9.3
+        specifier: 'catalog:'
         version: 5.9.3
 
   apps/native-host:
@@ -77,20 +95,20 @@ importers:
         specifier: workspace:*
         version: link:../../packages/protocol
       ws:
-        specifier: ^8.18.3
+        specifier: 'catalog:'
         version: 8.21.3
     devDependencies:
       '@types/node':
-        specifier: ^24.10.1
+        specifier: 'catalog:'
         version: 24.13.3
       '@types/ws':
-        specifier: ^8.18.1
+        specifier: 'catalog:'
         version: 8.18.1
       tsdown:
-        specifier: ^0.16.8
+        specifier: 'catalog:'
         version: 0.16.8(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(synckit@0.11.13)(typescript@5.9.3)
       typescript:
-        specifier: ^5.9.3
+        specifier: 'catalog:'
         version: 5.9.3
 
   packages/protocol: {}

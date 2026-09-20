@@ -1,7 +1,6 @@
 {
   "manifest_version": 3,
   "name": "Cursor Chrome",
-  "version": "0.3.1",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7/2MA21bIOLMj7cryRDyDilLWO8ZMc7w5EhgPNTo95REVlrEjrXFnl7gf5jx3/pzzVH2VfdYPIHtNSKnIUXj6c33c3VogfO/SJJ8bWWhR0QyOG6I5GCw8ezwRst6y/1H6Sihgz5mVTfqYSjYlS5YJU9eO/o2sBXmy6EuzTA2GsEi9pVzWfptVc4JDVqwF1UrOK0T3dwnHwqc4knbqhAdqO4aYbQPsoU76GOvS/JMe4SNy1j/7UXLI+2bHUpbuuiOsswnPF3S9czGD/mLqDjc9DByEavRYdlCizWFPWmV5Ka3H5Zt56s9/qzxqJhrPqSZPACPOS+TK02txn7FYmyENQIDAQAB",
   "description": "Lets the Cursor agent control this Chrome via a local WebSocket.",
   "action": {
