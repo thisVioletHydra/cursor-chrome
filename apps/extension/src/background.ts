@@ -141,10 +141,9 @@ function connectNative(): void {
       detail = err;
       void setBadge(false);
     }
-    if (HOST_MISSING.test(err)) {
-      void enableWsFallback(err);
+    void enableWsFallback(err);
+    if (HOST_MISSING.test(err))
       return;
-    }
     nativeRetry = setTimeout(() => {
       nativeRetry = undefined;
       connectNative();

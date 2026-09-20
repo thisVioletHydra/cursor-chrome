@@ -304,33 +304,67 @@ function hover(el: HTMLElement): { ok: true } {
 
 function typeInto(el: HTMLElement, text: string, submit: boolean): { ok: true } {
   el.focus();
-  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-    const proto = el instanceof HTMLTextAreaElement
-      ? HTMLTextAreaElement.prototype
-      : HTMLInputElement.prototype;
-    const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-    setter?.call(el, text);
-    fireInput(el, text);
-  }
-  else if (el.isContentEditable) {
-    el.textContent = text;
-    fireInput(el, text);
-  }
-  else {
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)
+    fillControl(el, text);
+  else if (el.isContentEditable)
+    fillEditable(el, text);
+  else
     throw new Error('Element is not editable');
-  }
   if (submit)
     pressOn(el, 'Enter');
   return { ok: true };
 }
 
+function fillControl(el: HTMLInputElement | HTMLTextAreaElement, text: string): void {
+  try {
+    el.select();
+  }
+  catch {
+    el.setSelectionRange?.(0, el.value.length);
+  }
+  if (document.execCommand('insertText', false, text) && el.value === text) {
+    fireChange(el);
+    return;
+  }
+  const proto = el instanceof HTMLTextAreaElement
+    ? HTMLTextAreaElement.prototype
+    : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, 'value')?.set?.call(el, text);
+  fireInput(el, text);
+}
+
+function fillEditable(el: HTMLElement, text: string): void {
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  if (document.execCommand('insertText', false, text)) {
+    fireChange(el);
+    return;
+  }
+  el.textContent = text;
+  fireInput(el, text);
+}
+
 function fireInput(el: HTMLElement, text: string): void {
+  el.dispatchEvent(new InputEvent('beforeinput', {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    inputType: 'insertText',
+    data: text,
+  }));
   el.dispatchEvent(new InputEvent('input', {
     bubbles: true,
     composed: true,
-    inputType: 'insertFromPaste',
+    inputType: 'insertText',
     data: text,
   }));
+  fireChange(el);
+}
+
+function fireChange(el: HTMLElement): void {
   el.dispatchEvent(new Event('change', { bubbles: true }));
 }
 

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { accessSync, chmodSync, constants, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,7 @@ const id = extensionId(key);
 const hostName = 'com.cursor.chrome';
 const hostPath = join(root, 'run-host.sh');
 chmodSync(hostPath, 0o755);
-writeFileSync(join(root, 'node.path'), `${process.execPath}\n`);
+writeFileSync(join(root, 'node.path'), `${stableNode()}\n`);
 
 const hostManifest = {
   name: hostName,
@@ -40,6 +40,25 @@ for (const dir of dirs) {
 
 console.error(`extension id ${id}`);
 console.error('reload unpacked apps/extension/dist in Edge after this');
+
+function stableNode() {
+  const home = homedir();
+  const candidates = [
+    join(home, 'Library/pnpm/bin/node'),
+    '/opt/homebrew/bin/node',
+    '/usr/local/bin/node',
+  ];
+  for (const candidate of candidates) {
+    try {
+      accessSync(candidate, constants.X_OK);
+      return candidate;
+    }
+    catch {
+      // hashed store / volta / nvm paths rot; skip
+    }
+  }
+  return process.execPath;
+}
 
 function extensionId(publicKey) {
   const der = Buffer.from(publicKey, 'base64');
