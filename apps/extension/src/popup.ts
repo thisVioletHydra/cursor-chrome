@@ -14,8 +14,9 @@ btn?.addEventListener('click', () => {
 
 tabEl?.addEventListener('click', () => {
   const url = tabEl.dataset.url;
-  if (!url)
+  if (url === null || url === undefined)
     return;
+
   void navigator.clipboard.writeText(url).then(() => {
     tabEl.classList.add('copied');
     setTimeout(() => tabEl.classList.remove('copied'), 800);
@@ -25,6 +26,7 @@ tabEl?.addEventListener('click', () => {
 async function reconnect(): Promise<void> {
   if (!btn || !detailEl)
     return;
+
   btn.disabled = true;
   btn.textContent = 'Connecting…';
   detailEl.textContent = 'sending reconnect';
@@ -39,6 +41,7 @@ async function reconnect(): Promise<void> {
   catch (error) {
     detailEl.textContent = error instanceof Error ? error.message : String(error);
   }
+
   btn.disabled = false;
   btn.textContent = 'Reconnect';
   await refresh();
@@ -48,6 +51,7 @@ async function reconnect(): Promise<void> {
 async function refresh(): Promise<void> {
   if (!statusEl || !detailEl)
     return;
+
   try {
     const state = await chrome.runtime.sendMessage({ type: 'get-status' }) as {
       connected?: boolean;
@@ -68,6 +72,7 @@ async function refresh(): Promise<void> {
       statusEl.textContent = 'OFF';
       statusEl.className = 'off';
     }
+
     detailEl.textContent = state?.detail || (on ? 'ws://127.0.0.1:18765' : 'MCP not listening on :18765');
   }
   catch (error) {
@@ -80,6 +85,7 @@ async function refresh(): Promise<void> {
 async function refreshPage(): Promise<void> {
   if (!tabEl || !framesEl)
     return;
+
   try {
     const page = await chrome.runtime.sendMessage({ type: 'get-page' }) as {
       url?: string;
@@ -103,6 +109,7 @@ function shortUrl(url: string): string {
     const parsed = new URL(url);
     const path = `${parsed.pathname}${parsed.search}`.replace(/\/$/, '');
     const text = `${parsed.host}${path}`;
+
     return text.length > 48 ? `${text.slice(0, 45)}…` : text;
   }
   catch {

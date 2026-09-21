@@ -1,6 +1,8 @@
-import { Buffer } from 'node:buffer';
 import { WS_URL } from '@cursor-chrome/protocol';
 import { WebSocket } from 'ws';
+
+import buffer from 'node:buffer';
+import process from 'node:process';
 
 const CONNECT_BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
 const MAX_NATIVE_BYTES = 1024 * 1024;
@@ -8,20 +10,22 @@ const MAX_NATIVE_BYTES = 1024 * 1024;
 let socket: WebSocket | null = null;
 let attempt = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-let buf = Buffer.alloc(0);
+let buf = buffer.Buffer.alloc(0);
 const outbox: unknown[] = [];
 const chunks = new Map<string, { total: number; parts: Array<string | undefined>; got: number }>();
 
-process.stdin.on('data', (chunk: Buffer) => {
-  buf = Buffer.concat([buf, chunk]);
+process.stdin.on('data', (chunk: buffer.Buffer) => {
+  buf = buffer.Buffer.concat([buf, chunk]);
   while (buf.length >= 4) {
     const len = buf.readUInt32LE(0);
     if (len > MAX_NATIVE_BYTES) {
       log('native message too large', len);
       process.exit(1);
     }
+
     if (buf.length < 4 + len)
       return;
+
     const json = buf.subarray(4, 4 + len).toString('utf8');
     buf = buf.subarray(4 + len);
     try {
@@ -47,6 +51,7 @@ function connect(): void {
   catch (error) {
     sendNative({ type: 'ws-status', connected: false, detail: error instanceof Error ? error.message : String(error) });
     scheduleReconnect();
+
     return;
   }
 
@@ -64,7 +69,6 @@ function connect(): void {
       sendNative(JSON.parse(String(raw)));
     }
     catch {
-      // ignore non-json
     }
   });
 
@@ -82,6 +86,7 @@ function connect(): void {
 function scheduleReconnect(): void {
   if (reconnectTimer)
     return;
+
   const delay = CONNECT_BACKOFF_MS[Math.min(attempt, CONNECT_BACKOFF_MS.length - 1)];
   attempt += 1;
   reconnectTimer = setTimeout(() => {
@@ -93,43 +98,60 @@ function scheduleReconnect(): void {
 function onChrome(message: unknown): void {
   if (!message || typeof message !== 'object')
     return;
+
   const rec = message as Record<string, unknown>;
-  if (rec.type === 'chunk-start' && typeof rec.id === 'string' && typeof rec.total === 'number') {
+  if (isChunkStart(rec)) {
     chunks.set(rec.id, {
       total: rec.total,
       parts: Array.from({ length: rec.total }),
       got: 0,
     });
+
     return;
   }
-  if (rec.type === 'chunk' && typeof rec.id === 'string' && typeof rec.i === 'number' && typeof rec.data === 'string') {
+
+  if (isChunkPart(rec)) {
     const slot = chunks.get(rec.id);
-    if (!slot)
+    if (slot === undefined)
       return;
+
     if (slot.parts[rec.i] === undefined) {
       slot.parts[rec.i] = rec.data;
       slot.got += 1;
     }
+
     if (slot.got === slot.total) {
       chunks.delete(rec.id);
       toMcp(JSON.parse(slot.parts.join('')));
     }
+
     return;
   }
+
   toMcp(message);
+}
+
+function isChunkStart(rec: Record<string, unknown>): rec is { type: 'chunk-start'; id: string; total: number } {
+  return rec.type === 'chunk-start' && typeof rec.id === 'string' && typeof rec.total === 'number';
+}
+
+function isChunkPart(rec: Record<string, unknown>): rec is { type: 'chunk'; id: string; i: number; data: string } {
+  return rec.type === 'chunk' && typeof rec.id === 'string' && typeof rec.i === 'number' && typeof rec.data === 'string';
 }
 
 function toMcp(message: unknown): void {
   if (socket?.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(message));
+
     return;
   }
+
   outbox.push(message);
 }
 
 function sendNative(message: unknown): void {
-  const json = Buffer.from(JSON.stringify(message), 'utf8');
-  const header = Buffer.alloc(4);
+  const json = buffer.Buffer.from(JSON.stringify(message), 'utf8');
+  const header = buffer.Buffer.alloc(4);
   header.writeUInt32LE(json.length, 0);
   process.stdout.write(Buffer.concat([header, json]));
 }

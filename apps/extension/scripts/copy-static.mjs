@@ -1,24 +1,29 @@
-import { copyFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import fsPromises from 'node:fs/promises';
+import path from 'node:path';
+import url from 'node:url';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const repo = join(root, '../..');
-const dist = join(root, 'dist');
-const src = join(root, 'src');
-const version = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8')).version;
+const root = path.join(path.dirname(url.fileURLToPath(import.meta.url)), '..');
+const repo = path.join(root, '../..');
+const dist = path.join(root, 'dist');
+const src = path.join(root, 'src');
 
-mkdirSync(join(dist, 'icons'), { recursive: true });
+await main();
 
-const manifest = JSON.parse(readFileSync(join(src, 'manifest.json'), 'utf8'));
-manifest.version = version;
-writeFileSync(join(dist, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+async function main() {
+  const version = JSON.parse(await fsPromises.readFile(path.join(repo, 'package.json'), 'utf8')).version;
+  await fsPromises.mkdir(path.join(dist, 'icons'), { recursive: true });
 
-for (const file of ['offscreen.html', 'popup.html', 'popup.css'])
-  copyFileSync(join(src, file), join(dist, file));
+  const manifest = JSON.parse(await fsPromises.readFile(path.join(src, 'manifest.json'), 'utf8'));
+  manifest.version = version;
+  await fsPromises.writeFile(path.join(dist, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 
-for (const file of readdirSync(join(src, 'icons'))) {
-  if (!file.endsWith('.png'))
-    continue;
-  copyFileSync(join(src, 'icons', file), join(dist, 'icons', file));
+  for (const file of ['offscreen.html', 'popup.html', 'popup.css'])
+    await fsPromises.copyFile(path.join(src, file), path.join(dist, file));
+
+  for (const file of await fsPromises.readdir(path.join(src, 'icons'))) {
+    if (file.endsWith('.png') === false)
+      continue;
+
+    await fsPromises.copyFile(path.join(src, 'icons', file), path.join(dist, 'icons', file));
+  }
 }

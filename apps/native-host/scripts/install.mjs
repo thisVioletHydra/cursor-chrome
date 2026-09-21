@@ -1,67 +1,82 @@
-import { createHash } from 'node:crypto';
-import { accessSync, chmodSync, constants, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import buffer from 'node:buffer';
+import crypto from 'node:crypto';
+import fsPromises from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import process from 'node:process';
+import url from 'node:url';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const repo = join(root, '../..');
-const manifest = JSON.parse(readFileSync(join(repo, 'apps/extension/src/manifest.json'), 'utf8'));
-const key = manifest.key;
-if (!key || typeof key !== 'string')
-  throw new Error('apps/extension/src/manifest.json is missing key');
+const root = path.join(path.dirname(url.fileURLToPath(import.meta.url)), '..');
+const repo = path.join(root, '../..');
 
-const id = extensionId(key);
-const hostName = 'com.cursor.chrome';
-const hostPath = join(root, 'run-host.sh');
-chmodSync(hostPath, 0o755);
-writeFileSync(join(root, 'node.path'), `${stableNode()}\n`);
+await main();
 
-const hostManifest = {
-  name: hostName,
-  description: 'Cursor Chrome native messaging host',
-  path: hostPath,
-  type: 'stdio',
-  allowed_origins: [`chrome-extension://${id}/`],
-};
-const body = `${JSON.stringify(hostManifest, null, 2)}\n`;
+async function main() {
+  const manifest = JSON.parse(await fsPromises.readFile(path.join(repo, 'apps/extension/src/manifest.json'), 'utf8'));
+  const key = manifest.key;
+  if (typeof key !== 'string' || key.length === 0)
+    throw new Error('apps/extension/src/manifest.json is missing key');
 
-const dirs = [
-  join(homedir(), 'Library/Application Support/Microsoft Edge/NativeMessagingHosts'),
-  join(homedir(), 'Library/Application Support/Google/Chrome/NativeMessagingHosts'),
-];
+  const id = extensionId(key);
+  const hostName = 'com.cursor.chrome';
+  const hostPath = path.join(root, 'run-host.sh');
+  await fsPromises.chmod(hostPath, 0o755);
+  await fsPromises.writeFile(path.join(root, 'node.path'), `${await stableNode()}\n`);
 
-for (const dir of dirs) {
-  mkdirSync(dir, { recursive: true });
-  const dest = join(dir, `${hostName}.json`);
-  writeFileSync(dest, body);
-  console.error(`wrote ${dest}`);
+  const hostManifest = {
+    name: hostName,
+    description: 'Cursor Chrome native messaging host',
+    path: hostPath,
+    type: 'stdio',
+    allowed_origins: [`chrome-extension://${id}/`],
+  };
+  const body = `${JSON.stringify(hostManifest, null, 2)}\n`;
+
+  const dirs = [
+    path.join(os.homedir(), 'Library/Application Support/Microsoft Edge/NativeMessagingHosts'),
+    path.join(os.homedir(), 'Library/Application Support/Google/Chrome/NativeMessagingHosts'),
+  ];
+
+  for (const dir of dirs) {
+    await fsPromises.mkdir(dir, { recursive: true });
+    const dest = path.join(dir, `${hostName}.json`);
+    await fsPromises.writeFile(dest, body);
+    console.error(`wrote ${dest}`);
+  }
+
+  console.error(`extension id ${id}`);
+  console.error('reload unpacked apps/extension/dist in Edge after this');
 }
 
-console.error(`extension id ${id}`);
-console.error('reload unpacked apps/extension/dist in Edge after this');
-
-function stableNode() {
-  const home = homedir();
+async function stableNode() {
+  const home = os.homedir();
   const candidates = [
-    join(home, 'Library/pnpm/bin/node'),
+    path.join(home, 'Library/pnpm/bin/node'),
     '/opt/homebrew/bin/node',
     '/usr/local/bin/node',
   ];
   for (const candidate of candidates) {
-    try {
-      accessSync(candidate, constants.X_OK);
+    if (await existsExecutable(candidate))
       return candidate;
-    }
-    catch {
-      // hashed store / volta / nvm paths rot; skip
-    }
   }
+
   return process.execPath;
 }
 
+async function existsExecutable(candidate) {
+  try {
+    await fsPromises.access(candidate, fsPromises.constants.X_OK);
+
+    return true;
+  }
+  catch {
+    return false;
+  }
+}
+
 function extensionId(publicKey) {
-  const der = Buffer.from(publicKey, 'base64');
-  const hex = createHash('sha256').update(der).digest('hex').slice(0, 32);
-  return [...hex].map(c => String.fromCharCode(97 + Number.parseInt(c, 16))).join('');
+  const der = buffer.Buffer.from(publicKey, 'base64');
+  const hex = crypto.createHash('sha256').update(der).digest('hex').slice(0, 32);
+
+  return [...hex].map(char => String.fromCharCode(97 + Number.parseInt(char, 16))).join('');
 }

@@ -3,6 +3,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ExtensionBridge } from './bridge';
 import { registerTools } from './tools';
 
+import process from 'node:process';
+
 const log = (...args: unknown[]) => {
   console.error('[cursor-chrome]', ...args);
 };
@@ -26,6 +28,7 @@ async function main(): Promise<void> {
   const shutdown = () => {
     if (shuttingDown)
       return;
+
     shuttingDown = true;
     bridge.close();
     process.exit(0);

@@ -1,6 +1,8 @@
 import type { CommandName, WsRequest, WsResponse } from '@cursor-chrome/protocol';
+import type { WebSocket } from 'ws';
+
 import { WS_HOST, WS_PORT } from '@cursor-chrome/protocol';
-import { WebSocketServer, type WebSocket } from 'ws';
+import { WebSocketServer } from 'ws';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const CONNECT_WAIT_MS = 8_000;
@@ -24,6 +26,7 @@ export class ExtensionBridge {
         this.socket.close(1000, 'replaced');
         this.socket = undefined;
       }
+
       this.attach(socket);
     });
     this.startHeartbeat();
@@ -47,9 +50,11 @@ export class ExtensionBridge {
           throw busy
             ? new Error(`Port ${WS_PORT} busy. Close the other MCP or kill whatever holds 127.0.0.1:${WS_PORT}.`)
             : error;
+
         await new Promise(resolve => setTimeout(resolve, 200));
       }
     }
+
     throw new Error(`Port ${WS_PORT} busy`);
   }
 
@@ -84,6 +89,7 @@ export class ExtensionBridge {
       item.reject(new Error('Bridge closed'));
       this.pending.delete(id);
     }
+
     this.socket?.close();
     this.wss?.close();
   }
@@ -98,9 +104,11 @@ export class ExtensionBridge {
       catch {
         return;
       }
+
       const pending = this.pending.get(message.id);
       if (!pending)
         return;
+
       clearTimeout(pending.timer);
       this.pending.delete(message.id);
       if (message.ok)
@@ -121,22 +129,23 @@ export class ExtensionBridge {
   private startHeartbeat(): void {
     this.stopHeartbeat();
     this.heartbeat = setInterval(() => {
-      if (!this.connected)
+      if (this.connected === null || this.connected === undefined)
         return;
+
       void this.send('ping', {}, PING_TIMEOUT_MS).catch(() => {
         try {
           this.socket?.close();
         }
         catch {
-          // already gone
         }
       });
     }, HEARTBEAT_MS);
   }
 
   private stopHeartbeat(): void {
-    if (!this.heartbeat)
+    if (this.heartbeat === null || this.heartbeat === undefined)
       return;
+
     clearInterval(this.heartbeat);
     this.heartbeat = undefined;
   }
@@ -144,10 +153,12 @@ export class ExtensionBridge {
   private async waitForSocket(): Promise<void> {
     if (this.connected)
       return;
+
     const started = Date.now();
     while (Date.now() - started < CONNECT_WAIT_MS) {
       if (this.connected)
         return;
+
       await new Promise(resolve => setTimeout(resolve, 150));
     }
   }

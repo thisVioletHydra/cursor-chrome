@@ -1,10 +1,14 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'tsdown';
 
+import fsPromises from 'node:fs/promises';
+import path from 'node:path';
+import url from 'node:url';
+
 const version = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../package.json'), 'utf8'),
+  await fsPromises.readFile(
+    path.join(path.dirname(url.fileURLToPath(import.meta.url)), '../../package.json'),
+    'utf8',
+  ),
 ).version as string;
 
 export default defineConfig({

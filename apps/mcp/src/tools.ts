@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { z } from 'zod';
 import type { ExtensionBridge } from './bridge';
+
+import { z } from 'zod';
 
 function textResult(value: unknown) {
   const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
@@ -111,6 +112,7 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
     async ({ element, ref, selector }) => {
       try {
         assertLocator(ref, selector);
+
         return textResult(await bridge.send('browser_click', { element, ref, selector }));
       }
       catch (error) {
@@ -128,6 +130,7 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
     async ({ element, ref, selector }) => {
       try {
         assertLocator(ref, selector);
+
         return textResult(await bridge.send('browser_hover', { element, ref, selector }));
       }
       catch (error) {
@@ -149,6 +152,7 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
     async ({ element, ref, selector, text, submit }) => {
       try {
         assertLocator(ref, selector);
+
         return textResult(await bridge.send('browser_type', { element, ref, selector, text, submit }));
       }
       catch (error) {
@@ -169,6 +173,7 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
     async ({ element, ref, selector, values }) => {
       try {
         assertLocator(ref, selector);
+
         return textResult(await bridge.send('browser_select_option', { element, ref, selector, values }));
       }
       catch (error) {
@@ -219,6 +224,7 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
     async () => {
       try {
         const result = await bridge.send('browser_screenshot') as { data: string; mimeType: string };
+
         return {
           content: [{
             type: 'image' as const,

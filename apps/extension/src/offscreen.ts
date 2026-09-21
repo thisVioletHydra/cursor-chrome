@@ -1,5 +1,6 @@
-import { WS_URL } from '@cursor-chrome/protocol';
 import type { CommandName, WsRequest, WsResponse } from '@cursor-chrome/protocol';
+
+import { WS_URL } from '@cursor-chrome/protocol';
 
 const CONNECT_BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
 
@@ -16,8 +17,8 @@ function keepAlive(): void {
     keepPort?.disconnect();
   }
   catch {
-    // already gone
   }
+
   keepPort = chrome.runtime.connect({ name: 'keepalive' });
   keepPort.onDisconnect.addListener(() => {
     keepPort = null;
@@ -45,10 +46,12 @@ function setWsEnabled(enabled: boolean): void {
       clearTimeout(reconnectTimer);
       reconnectTimer = undefined;
     }
+
     socket?.close();
     socket = null;
     return;
   }
+
   attempt = 0;
   connect();
 }
@@ -56,6 +59,7 @@ function setWsEnabled(enabled: boolean): void {
 function scheduleReconnect(): void {
   if (!wsEnabled || reconnectTimer)
     return;
+
   const delay = CONNECT_BACKOFF_MS[Math.min(attempt, CONNECT_BACKOFF_MS.length - 1)];
   attempt += 1;
   reconnectTimer = setTimeout(() => {
@@ -65,8 +69,9 @@ function scheduleReconnect(): void {
 }
 
 function connect(): void {
-  if (!wsEnabled)
+  if (wsEnabled === null || wsEnabled === undefined)
     return;
+
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING))
     return;
 
@@ -76,6 +81,7 @@ function connect(): void {
   catch (error) {
     status(false, error instanceof Error ? error.message : String(error));
     scheduleReconnect();
+
     return;
   }
 
@@ -92,6 +98,7 @@ function connect(): void {
     catch {
       return;
     }
+
     const response = await dispatch(request);
     if (socket?.readyState === WebSocket.OPEN)
       socket.send(JSON.stringify(response));
@@ -99,8 +106,9 @@ function connect(): void {
 
   socket.addEventListener('close', () => {
     socket = null;
-    if (!wsEnabled)
+    if (wsEnabled === null || wsEnabled === undefined)
       return;
+
     status(false, 'socket closed — MCP down or replaced');
     scheduleReconnect();
   });
@@ -120,6 +128,7 @@ async function dispatch(request: WsRequest): Promise<WsResponse> {
     });
     if (result && typeof result === 'object' && 'error' in result)
       return { id: request.id, ok: false, error: String((result as { error: unknown }).error) };
+
     return { id: request.id, ok: true, result };
   }
   catch (error) {
@@ -134,24 +143,32 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       connected: socket?.readyState === WebSocket.OPEN,
       wsEnabled,
     });
+
     return true;
   }
+
   if (message?.type === 'set-ws') {
     setWsEnabled(Boolean(message.enabled));
     sendResponse({ ok: true, enabled: wsEnabled });
+
     return true;
   }
+
   if (message?.type === 'reconnect') {
-    if (!wsEnabled) {
+    if (wsEnabled === null || wsEnabled === undefined) {
       sendResponse({ ok: true, skipped: true });
+
       return true;
     }
+
     attempt = 0;
     socket?.close();
     socket = null;
     connect();
     sendResponse({ ok: true });
+
     return true;
   }
+
   return false;
 });
