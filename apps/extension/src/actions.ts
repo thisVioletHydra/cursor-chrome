@@ -1,4 +1,8 @@
 export function click(element: HTMLElement): { ok: true } {
+  const link = element instanceof HTMLAnchorElement ? element : element.closest('a');
+  if (link)
+    link.target = '_self';
+
   element.focus();
   element.click();
 

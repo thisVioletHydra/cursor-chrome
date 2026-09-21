@@ -1,27 +1,43 @@
 import { click, hover, pressKey, selectOption, typeInto } from './actions';
+import { startHhJob } from './hh-job';
 import { byRef, bySelector, snapshot } from './snapshot';
+
+startHhJob();
 
 const logs: Array<{ type: string; text: string; time: number }> = [];
 const MAX_LOGS = 200;
 
 hookConsole();
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === 'ping') {
-    sendResponse({ ok: true, href: location.href, title: document.title });
+type PageIncoming = {
+  type?: string;
+  method?: string;
+  params?: Record<string, unknown>;
+};
+
+type Reply = (value?: unknown) => void;
+
+const onPageMessage: Record<string, (message: PageIncoming, reply: Reply) => boolean> = {
+  ping: (_message, reply) => {
+    reply({ ok: true, href: location.href, title: document.title });
 
     return true;
-  }
-
-  if (message?.type === 'command') {
-    void handle(message.method, message.params || {}).then(sendResponse).catch((error) => {
-      sendResponse({ error: error instanceof Error ? error.message : String(error) });
+  },
+  command: (message, reply) => {
+    void handle(String(message.method || ''), message.params || {}).then(reply).catch((error) => {
+      reply({ error: error instanceof Error ? error.message : String(error) });
     });
 
     return true;
-  }
+  },
+};
 
-  return false;
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  const type = message?.type;
+  if (typeof type !== 'string')
+    return false;
+
+  return onPageMessage[type]?.(message, sendResponse) ?? false;
 });
 
 function hookConsole(): void {
@@ -53,29 +69,22 @@ function stringify(value: unknown): string {
   }
 }
 
+const pageCommands: Record<string, (params: Record<string, unknown>) => unknown> = {
+  browser_snapshot: () => snapshot(),
+  browser_click: params => click(targetOf(params)),
+  browser_hover: params => hover(targetOf(params)),
+  browser_type: params => typeInto(targetOf(params), String(params.text || ''), Boolean(params.submit)),
+  browser_select_option: params => selectOption(targetOf(params), asStringArray(params.values)),
+  browser_press_key: params => pressKey(String(params.key || '')),
+  browser_get_console_logs: () => logs.slice(),
+};
+
 async function handle(method: string, params: Record<string, unknown>): Promise<unknown> {
-  if (method === 'browser_snapshot')
-    return snapshot();
+  const run = pageCommands[method];
+  if (run === undefined)
+    throw new Error(`Unknown command ${method}`);
 
-  if (method === 'browser_click')
-    return click(targetOf(params));
-
-  if (method === 'browser_hover')
-    return hover(targetOf(params));
-
-  if (method === 'browser_type')
-    return typeInto(targetOf(params), String(params.text || ''), Boolean(params.submit));
-
-  if (method === 'browser_select_option')
-    return selectOption(targetOf(params), asStringArray(params.values));
-
-  if (method === 'browser_press_key')
-    return pressKey(String(params.key || ''));
-
-  if (method === 'browser_get_console_logs')
-    return logs.slice();
-
-  throw new Error(`Unknown command ${method}`);
+  return run(params);
 }
 
 function asStringArray(value: unknown): string[] {

@@ -1,56 +1,74 @@
 import type { CommandName } from '@cursor-chrome/protocol';
 
+import { getFlags } from './flags';
+import { withStayPut } from './focus-lock';
+import { checkWorker, isHhUrl, pinWorker, requireWorkerTab } from './worker-tab';
+
 const RESTRICTED = /^(chrome|chrome-extension|edge|about|devtools|chrome-search):/i;
-const LOCATOR_METHODS = new Set<CommandName>([
-  'browser_click',
-  'browser_hover',
-  'browser_type',
-  'browser_select_option',
-]);
+
+type CommandCtx = {
+  method: CommandName;
+  params: Record<string, unknown>;
+  connected: boolean;
+};
+
+async function injected(run: (tabId: number) => Promise<unknown>): Promise<unknown> {
+  const tab = await requireWorkerTab();
+  await ensureContent(tab);
+
+  return run(requireTabId(tab));
+}
+
+function locator({ method, params }: CommandCtx): Promise<unknown> {
+  return injected(tabId => dispatchLocator(tabId, method, params));
+}
+
+function pageCmd({ method, params }: CommandCtx): Promise<unknown> {
+  return injected(tabId => frameMessage(tabId, 0, method, params));
+}
+
+const commands: Record<CommandName, (ctx: CommandCtx) => Promise<unknown>> = {
+  ping: async ({ connected }) => ({ ok: true, connected, ...(await getFlags()) }),
+  browser_new_tab: async ({ params }) => newTab(String(params.url || ''), params.background !== false),
+  browser_navigate: async ({ params }) => navigate(await requireWorkerTab(), String(params.url || '')),
+  browser_go_back: async () => historyNav(await requireWorkerTab(), -1),
+  browser_go_forward: async () => historyNav(await requireWorkerTab(), 1),
+  browser_screenshot: async () => screenshot(await requireWorkerTab()),
+  browser_snapshot: async () => injected(snapshotAll),
+  browser_get_console_logs: async () => injected(consoleLogsAll),
+  browser_click: locator,
+  browser_hover: locator,
+  browser_type: locator,
+  browser_select_option: locator,
+  browser_press_key: pageCmd,
+  browser_wait: pageCmd,
+};
 
 export async function runCommand(
   method: CommandName,
   params: Record<string, unknown>,
   connected: boolean,
 ): Promise<unknown> {
-  if (method === 'ping')
-    return { ok: true, connected };
+  const ctx: CommandCtx = { method, params, connected };
+  if (method === 'browser_new_tab' && params.background === false)
+    return commands[method](ctx);
 
-  if (method === 'browser_new_tab')
-    return newTab(String(params.url || ''));
-
-  const tab = await activeTab();
-  if (method === 'browser_navigate')
-    return navigate(tab, String(params.url || ''));
-
-  if (method === 'browser_go_back')
-    return historyNav(tab, -1);
-
-  if (method === 'browser_go_forward')
-    return historyNav(tab, 1);
-
-  if (method === 'browser_screenshot')
-    return screenshot(tab);
-
-  await ensureContent(tab);
-  const tabId = requireTabId(tab);
-  if (method === 'browser_snapshot')
-    return snapshotAll(tabId);
-
-  if (method === 'browser_get_console_logs')
-    return consoleLogsAll(tabId);
-
-  if (LOCATOR_METHODS.has(method))
-    return dispatchLocator(tabId, method, params);
-
-  return frameMessage(tabId, 0, method, params);
+  return withStayPut(
+    () => commands[method](ctx),
+    { keepSpawned: method === 'browser_new_tab' },
+  );
 }
 
-export async function pageInfo(): Promise<{ url: string; frames: number }> {
-  const tab = await activeTab();
+export async function pageInfo(): Promise<{ url: string; frames: number; hideJunk: boolean }> {
+  const flags = await getFlags();
+  const check = await checkWorker();
+  if (check.ok === false || typeof check.tabId !== 'number')
+    return { url: '', frames: 0, hideJunk: flags.hideJunk };
+
+  const tab = await chrome.tabs.get(check.tabId);
   const frames = hasTabId(tab) ? (await listFrameIds(tab.id)).length : 0;
 
-  return { url: tab.url || tab.pendingUrl || '', frames };
+  return { url: tab.url || tab.pendingUrl || '', frames, hideJunk: flags.hideJunk };
 }
 
 function hasTabId(tab: chrome.tabs.Tab | undefined): tab is chrome.tabs.Tab & { id: number } {
@@ -64,27 +82,20 @@ function requireTabId(tab: chrome.tabs.Tab): number {
   return tab.id;
 }
 
-async function activeTab(): Promise<chrome.tabs.Tab> {
-  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (hasTabId(tab))
-    return tab;
-
-  const [anyTab] = await chrome.tabs.query({ lastFocusedWindow: true });
-  if (hasTabId(anyTab))
-    return anyTab;
-
-  throw new Error('No Chrome tab available');
-}
-
-async function newTab(url: string): Promise<unknown> {
+async function newTab(url: string, background: boolean): Promise<unknown> {
   if (url && RESTRICTED.test(url))
     throw new Error(`Cannot open restricted URL: ${url}`);
 
-  const created = await chrome.tabs.create(url ? { url, active: true } : { active: true });
+  const created = await chrome.tabs.create({
+    ...(url ? { url } : {}),
+    active: background === false,
+  });
   if (hasTabId(created) && url)
     await waitComplete(created.id, 15_000);
 
   const fresh = hasTabId(created) ? await chrome.tabs.get(created.id) : created;
+  if (background && hasTabId(fresh) && isHhUrl(fresh.url || url))
+    await pinWorker(fresh.id);
 
   return { id: fresh.id, url: fresh.url || url || '' };
 }
@@ -98,7 +109,7 @@ async function navigate(tab: chrome.tabs.Tab, url: string): Promise<unknown> {
 
   const tabId = requireTabId(tab);
   const wait = waitComplete(tabId, 15_000);
-  await chrome.tabs.update(tabId, { url });
+  await chrome.tabs.update(tabId, { url, active: false });
   await wait;
   const fresh = await chrome.tabs.get(tabId);
 
@@ -125,6 +136,11 @@ async function historyNav(tab: chrome.tabs.Tab, delta: number): Promise<unknown>
 async function screenshot(tab: chrome.tabs.Tab): Promise<{ data: string; mimeType: string }> {
   if (RESTRICTED.test(tab.url || ''))
     throw new Error(`Cannot screenshot restricted URL: ${tab.url}`);
+
+  const windowInfo = await chrome.windows.get(tab.windowId, { populate: true });
+  const shown = windowInfo.tabs?.find(item => item.active);
+  if (shown?.id !== tab.id)
+    throw new Error('Worker tab is in the background; use snapshot instead of screenshot');
 
   const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
   const prefix = 'data:image/png;base64,';

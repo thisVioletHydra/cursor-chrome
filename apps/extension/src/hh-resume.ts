@@ -1,0 +1,93 @@
+const FULLSTACK = /fullstack/i;
+
+let pickAt = 0;
+
+export function pickFullstack(): void {
+  if (hasApplyChrome() === false)
+    return;
+
+  if (Date.now() - pickAt < 800)
+    return;
+
+  if (selectNativeFullstack()) {
+    pickAt = Date.now();
+
+    return;
+  }
+
+  if (currentIsFullstack())
+    return;
+
+  const option = findFullstackOption();
+  if (option) {
+    pickAt = Date.now();
+    option.click();
+
+    return;
+  }
+
+  if (document.querySelector('[role="listbox"]'))
+    return;
+
+  const trigger = findResumeTrigger();
+  if (trigger && FULLSTACK.test(trigger.textContent || '') === false) {
+    pickAt = Date.now();
+    trigger.click();
+  }
+}
+
+function selectNativeFullstack(): boolean {
+  const selects = Array.from(document.querySelectorAll('select'));
+  for (const select of selects) {
+    const hit = Array.from(select.options).find(item => FULLSTACK.test(item.text));
+    if (hit === undefined || select.value === hit.value)
+      continue;
+
+    select.value = hit.value;
+    select.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+
+    return true;
+  }
+
+  return false;
+}
+
+function hasApplyChrome(): boolean {
+  return Boolean(document.querySelector([
+    '[data-qa*="vacancy-response"]',
+    '[data-qa*="response-popup"]',
+    '[data-qa="vacancy-response-popup"]',
+    'form[action*="response"]',
+  ].join(',')));
+}
+
+function currentIsFullstack(): boolean {
+  const trigger = findResumeTrigger();
+
+  return FULLSTACK.test(trigger?.textContent || '');
+}
+
+function findResumeTrigger(): HTMLElement | null {
+  const nodes = Array.from(document.querySelectorAll<HTMLElement>([
+    '[data-qa="resume-select"] button',
+    '[data-qa="resume"] button',
+    '[data-qa="cell"]',
+    'button[class*="select"]',
+    'select',
+  ].join(',')));
+
+  return nodes.find(element => /разработчик|frontend|fullstack|resume/i.test(element.textContent || element.getAttribute('data-qa') || ''))
+    || null;
+}
+
+function findFullstackOption(): HTMLElement | null {
+  const nodes = Array.from(document.querySelectorAll<HTMLElement>([
+    '[data-qa="resume-title"]',
+    '[role="option"]',
+    '[data-qa*="resume"] [role="listbox"] *',
+    'select option',
+  ].join(',')));
+
+  return nodes.find(element => FULLSTACK.test(element.textContent || '')) || null;
+}

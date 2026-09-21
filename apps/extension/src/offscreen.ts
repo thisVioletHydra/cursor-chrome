@@ -136,27 +136,25 @@ async function dispatch(request: WsRequest): Promise<WsResponse> {
   }
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === 'ping-offscreen') {
-    sendResponse({
+const onOffscreenMessage: Record<string, (message: { enabled?: unknown }, reply: (value?: unknown) => void) => boolean> = {
+  'ping-offscreen': (_message, reply) => {
+    reply({
       ok: true,
       connected: socket?.readyState === WebSocket.OPEN,
       wsEnabled,
     });
 
     return true;
-  }
-
-  if (message?.type === 'set-ws') {
+  },
+  'set-ws': (message, reply) => {
     setWsEnabled(Boolean(message.enabled));
-    sendResponse({ ok: true, enabled: wsEnabled });
+    reply({ ok: true, enabled: wsEnabled });
 
     return true;
-  }
-
-  if (message?.type === 'reconnect') {
-    if (wsEnabled === null || wsEnabled === undefined) {
-      sendResponse({ ok: true, skipped: true });
+  },
+  reconnect: (_message, reply) => {
+    if (wsEnabled === false) {
+      reply({ ok: true, skipped: true });
 
       return true;
     }
@@ -165,10 +163,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     socket?.close();
     socket = null;
     connect();
-    sendResponse({ ok: true });
+    reply({ ok: true });
 
     return true;
-  }
+  },
+};
 
-  return false;
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  const type = message?.type;
+  if (typeof type !== 'string')
+    return false;
+
+  return onOffscreenMessage[type]?.(message, sendResponse) ?? false;
 });

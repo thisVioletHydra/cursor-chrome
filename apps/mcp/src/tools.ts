@@ -30,7 +30,7 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'browser_navigate',
     {
-      description: 'Navigate the current tab to a URL. Destroys that tab\'s page. Prefer browser_new_tab if the user wants to keep the current tab.',
+      description: 'Navigate the pinned HH worker tab. Never activates it, so YouTube stays put. Pin the tab in the Cursor Chrome popup first.',
       inputSchema: { url: z.string() },
     },
     async ({ url }) => {
@@ -46,14 +46,19 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'browser_new_tab',
     {
-      description: 'Open a new browser tab. Use this instead of browser_navigate when the current tab should stay put. Later click/type/snapshot go to the new tab.',
+      description: 'Open a tab without stealing focus (background defaults true). HH URLs get pinned as the worker tab. Clicks still go only to the pinned worker, not this new tab unless it becomes the worker.',
       inputSchema: {
         url: z.string().optional().describe('URL to open. Omit for a blank tab.'),
+        background: z.boolean().optional().describe('Default true: do not activate. Pass false only if you must steal focus.'),
       },
     },
-    async ({ url }) => {
+    async ({ url, background }) => {
       try {
-        return textResult(await bridge.send('browser_new_tab', url ? { url } : {}));
+        const params: Record<string, unknown> = { background: background !== false };
+        if (url)
+          params.url = url;
+
+        return textResult(await bridge.send('browser_new_tab', params));
       }
       catch (error) {
         return errorResult(error);
@@ -90,7 +95,7 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'browser_snapshot',
     {
-      description: 'Capture accessibility snapshot of the current page, including iframes. Use refs from this snapshot, or pass a CSS selector to click/type.',
+      description: 'Accessibility snapshot of the pinned HH worker tab, including iframes. Use this for apply flows — screenshot captures the visible tab (YouTube) instead.',
       inputSchema: {},
     },
     async () => {
@@ -106,7 +111,7 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'browser_click',
     {
-      description: 'Click an element. Use selector if you know the CSS; otherwise snapshot and pass ref.',
+      description: 'Click in the pinned HH worker tab only. Never the active YouTube tab. Use selector if you know the CSS; otherwise snapshot and pass ref.',
       inputSchema: locatorFields(),
     },
     async ({ element, ref, selector }) => {
@@ -218,7 +223,7 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'browser_screenshot',
     {
-      description: 'Take a screenshot of the current page',
+      description: 'Screenshot the worker tab only if it is the visible tab in its window. Background HH will fail — use browser_snapshot for applies.',
       inputSchema: {},
     },
     async () => {
