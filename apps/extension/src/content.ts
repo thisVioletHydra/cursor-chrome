@@ -1,6 +1,6 @@
-import { click, hover, pressKey, selectOption, typeInto } from './actions';
-import { startHhJob } from './hh-job';
-import { byRef, bySelector, snapshot } from './snapshot';
+import { startHhJob } from './hh/job';
+import { click, hover, pressKey, selectOption, typeInto } from './page/actions';
+import { byRef, bySelector, snapshot } from './page/snapshot';
 
 startHhJob();
 

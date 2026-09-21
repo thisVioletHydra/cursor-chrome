@@ -1,12 +1,13 @@
 import type { CommandName, WsRequest } from '@cursor-chrome/protocol';
 
 import { NATIVE_HOST_NAME } from '@cursor-chrome/protocol';
-import { pageInfo, runCommand } from './commands';
-import { installFocusLock } from './focus-lock';
-import { runMakeGood } from './make-good';
-import { postNative as sendNative } from './native-post';
-import { ensureOffscreen, setBadge, waitOffscreen } from './offscreen-ctl';
-import { rpc } from './rpc';
+import { pageInfo, runCommand } from './chrome/commands';
+import { installFocusLock } from './chrome/focus-lock';
+import { runMakeGood } from './chrome/make-good';
+import { postNative as sendNative } from './chrome/native-post';
+import { ensureOffscreen, setBadge, waitOffscreen } from './chrome/offscreen-ctl';
+import { rpc } from './chrome/rpc';
+import { closePinnedHh } from './chrome/worker-tab';
 
 const ALARM = 'cc-keepalive';
 const HOST_MISSING = /native messaging host not found|forbidden|does not exist/i;
@@ -156,6 +157,7 @@ async function hangUp(): Promise<{ ok: true }> {
   detail = 'отключено';
   await disableWsFallback();
   await setBadge(false);
+  await closePinnedHh();
 
   return { ok: true };
 }

@@ -1,14 +1,17 @@
-import type { ApplyPayload } from './hh-bridge';
+import type { ApplyPayload } from './bridge';
 
-import { ask } from './hh-bridge';
-import { refreshOverlay } from './hh-overlay';
+import { ancestors, ask } from './bridge';
+import { refreshOverlay } from './overlay';
 
 const SUCCESS = /резюме доставлено|вы откликнулись|отклик отправлен/i;
 
 const seenChat = new WeakSet<Element>();
+const seenAtStart = new WeakSet<Element>();
 let chatsPrimed = false;
+let pendingApply: ApplyPayload | null = null;
 
 export function watchToasts(): void {
+  document.addEventListener('click', rememberApplyClick, true);
   const obs = new MutationObserver((records) => {
     for (const rec of records) {
       for (const node of rec.addedNodes) {
@@ -24,9 +27,12 @@ export function scanApplied(): void {
   const buttons = chatButtons();
   if (chatsPrimed === false) {
     for (const btn of buttons) {
+      seenAtStart.add(btn);
+      if (hasFreshMark(btn) === false)
+        continue;
+
       seenChat.add(btn);
-      if (hasFreshMark(btn))
-        void sendLog(metaFrom(btn));
+      void sendLog(metaFrom(btn));
     }
 
     chatsPrimed = true;
@@ -38,9 +44,32 @@ export function scanApplied(): void {
     if (seenChat.has(btn))
       continue;
 
+    if (seenAtStart.has(btn) && hasFreshMark(btn) === false)
+      continue;
+
     seenChat.add(btn);
     void sendLog(metaFrom(btn));
   }
+}
+
+function rememberApplyClick(event: Event): void {
+  const hit = event.composedPath().find((node): node is HTMLElement =>
+    node instanceof HTMLElement && isApplyTrigger(node));
+  if (hit === undefined)
+    return;
+
+  const meta = metaFrom(hit);
+  if (meta.vacancyId.length > 0)
+    pendingApply = meta;
+}
+
+function isApplyTrigger(node: HTMLElement): boolean {
+  if (node.matches('button, a, [role="button"]') === false)
+    return false;
+
+  const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
+
+  return text.toLowerCase().startsWith('откликнуться');
 }
 
 function toastHit(root: Element): boolean {
@@ -71,25 +100,34 @@ function chatButtons(): HTMLElement[] {
 }
 
 function hasFreshMark(start: HTMLElement): boolean {
-  let node: HTMLElement | null = start;
-  for (let index = 0; index < 10 && node; index++) {
-    const text = node.innerText || '';
-    if (text.length > 2000)
-      return false;
+  const card = cardFrom(start);
+  if (card === null)
+    return false;
+
+  for (const element of card.querySelectorAll('*')) {
+    const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
+    if (text.length === 0 || text.length > 48)
+      continue;
 
     if (/ваша активность/i.test(text))
       return true;
-
-    node = node.parentElement;
   }
 
   return false;
 }
 
 async function logSuccess(origin?: Element): Promise<void> {
-  const fromToast = origin instanceof HTMLElement ? metaFrom(origin) : vacancyMeta();
-  const payload = fromToast.vacancyId ? fromToast : vacancyMeta();
+  const fromPending = pendingApply;
+  const fromModal = vacancyFromModal();
+  const fromToast = origin instanceof HTMLElement ? metaFrom(origin) : emptyPayload();
+  const fromPage = vacancyMeta();
+  const payload = pickPayload(fromPending, fromModal, fromToast, fromPage);
   await sendLog(payload);
+  pendingApply = null;
+}
+
+function pickPayload(...rows: Array<ApplyPayload | null>): ApplyPayload {
+  return rows.find(row => row !== null && row.vacancyId.length > 0) || emptyPayload();
 }
 
 async function sendLog(payload: ApplyPayload): Promise<void> {
@@ -100,10 +138,27 @@ async function sendLog(payload: ApplyPayload): Promise<void> {
   await refreshOverlay();
 }
 
+function vacancyFromModal(): ApplyPayload | null {
+  const modal = document.querySelector<HTMLElement>([
+    '[role="dialog"]',
+    '[data-qa="vacancy-response-popup"]',
+    '[data-qa*="response-popup"]',
+    '[data-qa*="vacancy-response"]',
+  ].join(','));
+  if (modal === null)
+    return null;
+
+  const meta = metaFrom(modal);
+  if (meta.vacancyId.length > 0)
+    return meta;
+
+  return null;
+}
+
 function vacancyMeta(): ApplyPayload {
   const url = location.href;
   const vacancyId = url.match(/\/vacancy\/(\d+)/)?.[1] || '';
-  if (vacancyId) {
+  if (vacancyId.length > 0) {
     return {
       title: textOf(['[data-qa="vacancy-title"]', 'h1[data-qa="title"]', 'h1']),
       company: textOf(['[data-qa="vacancy-company-name"]', '[data-qa="vacancy-company-name"] a', '[data-qa="employer"]']),
@@ -112,29 +167,21 @@ function vacancyMeta(): ApplyPayload {
     };
   }
 
-  const chats = chatButtons();
-  const fresh = [...chats].reverse().find(hasFreshMark) || chats.at(-1);
-
-  return fresh ? metaFrom(fresh) : { title: '', company: '', url, vacancyId: '' };
+  return emptyPayload();
 }
 
-function metaFrom(start: HTMLElement): ApplyPayload {
-  let node: HTMLElement | null = start;
-  let card: HTMLElement | null = null;
-  for (let index = 0; index < 12 && node; index++) {
-    const links = vacancyTitleLinks(node);
-    if (links.length > 1)
-      break;
+function emptyPayload(): ApplyPayload {
+  return { title: '', company: '', url: location.href, vacancyId: '' };
+}
 
-    if (links.length === 1)
-      card = node;
+export function metaFrom(start: HTMLElement): ApplyPayload {
+  const card = cardFrom(start);
+  if (card === null)
+    return emptyPayload();
 
-    node = node.parentElement;
-  }
-
-  const link = card === null ? undefined : vacancyTitleLinks(card)[0];
-  if (link === undefined || card === null)
-    return { title: '', company: '', url: location.href, vacancyId: '' };
+  const link = vacancyTitleLinks(card)[0];
+  if (link === undefined)
+    return emptyPayload();
 
   const vacancyId = link.href.match(/\/vacancy\/(\d+)/)?.[1] || '';
   const title = (link.textContent || '').trim();
@@ -144,6 +191,20 @@ function metaFrom(start: HTMLElement): ApplyPayload {
     || '';
 
   return { title, company, url: link.href.split('?')[0], vacancyId };
+}
+
+function cardFrom(start: HTMLElement): HTMLElement | null {
+  let card: HTMLElement | null = null;
+  for (const node of ancestors(start, 12)) {
+    const links = vacancyTitleLinks(node);
+    if (links.length > 1)
+      break;
+
+    if (links.length === 1)
+      card = node;
+  }
+
+  return card;
 }
 
 function vacancyTitleLinks(root: HTMLElement): HTMLAnchorElement[] {

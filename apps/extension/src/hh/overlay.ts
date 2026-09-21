@@ -1,6 +1,7 @@
-import type { ApplyPayload } from './hh-bridge';
+import type { ApplyPayload } from './bridge';
 
-import { ask, localDay } from './hh-bridge';
+import { ask, localDay } from './bridge';
+import { pullRemoteNegotiations } from './negotiations';
 
 type Overlay = {
   host: HTMLElement;
@@ -8,20 +9,38 @@ type Overlay = {
 };
 
 let overlay: Overlay | null = null;
+let guarded = false;
 
 export function mountOverlay(): void {
-  if (document.getElementById('cc-hh-overlay'))
+  paintOverlayCss();
+  const existing = document.getElementById('cc-hh-overlay');
+  if (existing) {
+    if (overlay === null) {
+      overlay = {
+        host: existing,
+        shadow: existing.shadowRoot || existing.attachShadow({ mode: 'open' }),
+      };
+    }
+
+    existing.setAttribute('popover', 'manual');
+
+    raiseOverlay(existing);
+    guardPage();
+    void refreshOverlay();
+
     return;
+  }
 
   const host = document.createElement('div');
   host.id = 'cc-hh-overlay';
-  host.style.cssText = 'all:initial;position:fixed;right:12px;bottom:12px;z-index:2147483647;pointer-events:auto;';
+  host.setAttribute('popover', 'manual');
+  host.style.cssText = 'position:fixed;inset:auto 12px 12px auto;margin:0;padding:0;border:0;background:transparent;width:220px;overflow:visible;';
   const shadow = host.attachShadow({ mode: 'open' });
   shadow.innerHTML = `
     <style>
-      :host { all: initial; }
-      .cc-card { width: 220px; background: #111; border: 1px solid #333; border-radius: 10px; padding: 8px 10px; box-shadow: 0 8px 24px #0008; font: 12px/1.35 ui-sans-serif, system-ui, sans-serif; color: #eee; pointer-events: auto; }
-      button { width: 100%; margin: 0; padding: 6px 8px; border: 0; border-radius: 6px; background: #222; color: #eee; cursor: pointer; font: inherit; pointer-events: auto; }
+      :host { display: block; }
+      .cc-card { width: 220px; background: #111; border: 1px solid #333; border-radius: 10px; padding: 8px 10px; box-shadow: 0 8px 24px #0008; font: 12px/1.35 ui-sans-serif, system-ui, sans-serif; color: #eee; }
+      button { width: 100%; margin: 0; padding: 8px; border: 0; border-radius: 6px; background: #222; color: #eee; cursor: pointer; font: inherit; }
       .cc-today { margin: 0 0 4px; }
       .cc-flag { margin: 0 0 6px; color: #9ca3af; font-size: 11px; }
       .cc-list { max-height: 180px; overflow: auto; margin: 8px 0 0; }
@@ -37,17 +56,10 @@ export function mountOverlay(): void {
       <div class="cc-list" data-cc-list hidden></div>
     </div>
   `;
-  const stop = (event: Event) => event.stopPropagation();
-  host.addEventListener('pointerdown', stop, true);
-  host.addEventListener('click', stop, true);
-  shadow.addEventListener('pointerdown', stop, true);
-  shadow.querySelector('[data-cc-history]')?.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    void toggleOverlayHistory();
-  });
   document.documentElement.append(host);
+  raiseOverlay(host);
   overlay = { host, shadow };
+  guardPage();
   void refreshOverlay();
 }
 
@@ -66,13 +78,17 @@ export async function toggleOverlayHistory(): Promise<void> {
   if (btn)
     btn.textContent = list.hidden ? 'История' : 'Скрыть';
 
-  if (open)
+  if (open) {
+    await pullRemoteNegotiations();
     await refreshOverlay();
+  }
 }
 
 export async function refreshOverlay(): Promise<void> {
   if (overlay === null)
     return;
+
+  raiseOverlay(overlay.host);
 
   const root = overlay.shadow;
   const todayEl = root.querySelector('[data-cc-today]');
@@ -125,6 +141,71 @@ export async function refreshOverlay(): Promise<void> {
 
   paintGroup(list, 'Сегодня', fresh);
   paintGroup(list, 'Ранее', older);
+}
+
+function paintOverlayCss(): void {
+  if (document.getElementById('cc-hh-overlay-css'))
+    return;
+
+  const css = document.createElement('style');
+  css.id = 'cc-hh-overlay-css';
+  css.textContent = '#cc-hh-overlay,#cc-hh-overlay:popover-open{position:fixed;inset:auto 12px 12px auto;margin:0;border:0;padding:0;background:transparent;width:220px;height:fit-content;overflow:visible}#cc-hh-overlay::backdrop{display:none;pointer-events:none}';
+  document.documentElement.append(css);
+}
+
+function raiseOverlay(host: HTMLElement): void {
+  try {
+    if (host.matches(':popover-open') === false)
+      host.showPopover();
+  }
+  catch {
+  }
+}
+
+function guardPage(): void {
+  if (guarded)
+    return;
+
+  guarded = true;
+  const kinds = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click', 'touchstart'] as const;
+  for (const kind of kinds)
+    window.addEventListener(kind, onPageEvent, true);
+}
+
+function onPageEvent(event: Event): void {
+  if (ours(event) === false)
+    return;
+
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  if (event.type !== 'click')
+    return;
+
+  event.preventDefault();
+  handleOverlayClick(event);
+}
+
+function ours(event: Event): boolean {
+  if (overlay === null)
+    return false;
+
+  return event.composedPath().includes(overlay.host);
+}
+
+function handleOverlayClick(event: Event): void {
+  for (const node of event.composedPath()) {
+    if (node instanceof HTMLButtonElement && node.hasAttribute('data-cc-history')) {
+      void toggleOverlayHistory();
+
+      return;
+    }
+
+    if (node instanceof HTMLAnchorElement && node.href.length > 0) {
+      window.open(node.href, '_blank', 'noopener');
+
+      return;
+    }
+  }
 }
 
 function paintGroup(

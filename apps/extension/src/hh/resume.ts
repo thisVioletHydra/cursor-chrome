@@ -3,37 +3,43 @@ const FULLSTACK = /fullstack/i;
 let pickAt = 0;
 
 export function pickFullstack(): void {
-  if (hasApplyChrome() === false)
+  if (hasApplyChrome() === false || Date.now() - pickAt < 800)
     return;
 
-  if (Date.now() - pickAt < 800)
-    return;
+  const steps = [
+    () => {
+      if (selectNativeFullstack() === false)
+        return false;
 
-  if (selectNativeFullstack()) {
-    pickAt = Date.now();
+      pickAt = Date.now();
 
-    return;
-  }
+      return true;
+    },
+    () => currentIsFullstack(),
+    () => {
+      const option = findFullstackOption();
+      if (option === null)
+        return false;
 
-  if (currentIsFullstack())
-    return;
+      pickAt = Date.now();
+      option.click();
 
-  const option = findFullstackOption();
-  if (option) {
-    pickAt = Date.now();
-    option.click();
+      return true;
+    },
+    () => document.querySelector('[role="listbox"]') !== null,
+    () => {
+      const trigger = findResumeTrigger();
+      if (trigger === null || FULLSTACK.test(trigger.textContent || ''))
+        return false;
 
-    return;
-  }
+      pickAt = Date.now();
+      trigger.click();
 
-  if (document.querySelector('[role="listbox"]'))
-    return;
+      return true;
+    },
+  ];
 
-  const trigger = findResumeTrigger();
-  if (trigger && FULLSTACK.test(trigger.textContent || '') === false) {
-    pickAt = Date.now();
-    trigger.click();
-  }
+  steps.some(step => step());
 }
 
 function selectNativeFullstack(): boolean {

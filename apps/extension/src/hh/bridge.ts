@@ -11,6 +11,17 @@ export function localDay(ms: number): string {
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 }
 
+export function ancestors(start: HTMLElement, limit: number): HTMLElement[] {
+  const nodes: HTMLElement[] = [];
+  let node: HTMLElement | null = start;
+  while (node && nodes.length < limit) {
+    nodes.push(node);
+    node = node.parentElement;
+  }
+
+  return nodes;
+}
+
 export function ask<T>(payload: Record<string, unknown>): Promise<T | null> {
   return new Promise((resolve) => {
     try {

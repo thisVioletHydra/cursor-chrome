@@ -13,14 +13,17 @@ export function postNative(port: chrome.runtime.Port | null, message: WsResponse
     return;
   }
 
-  const total = Math.ceil(json.length / NATIVE_CHUNK_BYTES);
-  port.postMessage({ type: 'chunk-start', id: message.id, total });
-  for (let index = 0; index < total; index++) {
+  const parts = Array.from(
+    { length: Math.ceil(json.length / NATIVE_CHUNK_BYTES) },
+    (_, index) => json.slice(index * NATIVE_CHUNK_BYTES, (index + 1) * NATIVE_CHUNK_BYTES),
+  );
+  port.postMessage({ type: 'chunk-start', id: message.id, total: parts.length });
+  for (const [index, data] of parts.entries()) {
     port.postMessage({
       type: 'chunk',
       id: message.id,
       i: index,
-      data: json.slice(index * NATIVE_CHUNK_BYTES, (index + 1) * NATIVE_CHUNK_BYTES),
+      data,
     });
   }
 }

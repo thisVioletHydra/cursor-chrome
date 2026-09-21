@@ -18,7 +18,8 @@ export async function ensureOffscreen(): Promise<string | undefined> {
 }
 
 export async function waitOffscreen(): Promise<void> {
-  for (let index = 0; index < 20; index++) {
+  const until = Date.now() + 1_000;
+  while (Date.now() < until) {
     const ping = await chrome.runtime.sendMessage({ type: 'ping-offscreen' }).catch(() => null);
     if (ping)
       return;

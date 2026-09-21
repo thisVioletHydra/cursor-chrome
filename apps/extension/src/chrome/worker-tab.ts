@@ -67,6 +67,24 @@ export async function pinWorker(tabId: number): Promise<WorkerCheck> {
   return checkWorker();
 }
 
+export async function closePinnedHh(): Promise<void> {
+  const prev = await snapshotFocus();
+  const workerId = await getWorkerTabId();
+  const rows = await listJobTabs();
+  for (const row of rows) {
+    if (row.hh === false)
+      continue;
+
+    if (row.pinned === false && row.id !== workerId)
+      continue;
+
+    await chrome.tabs.remove(row.id).catch(() => {});
+  }
+
+  await chrome.storage.local.remove(WORKER_KEY);
+  await restoreFocus(prev);
+}
+
 export async function checkWorker(): Promise<WorkerCheck> {
   const tabId = await getWorkerTabId();
   if (tabId === null)

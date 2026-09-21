@@ -18,6 +18,27 @@ const INTERACTIVE = new Set([
 ]);
 const HEADINGS = new Set(['heading', 'img']);
 const FORM_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON']);
+const TAG_ROLE: Record<string, string> = {
+  button: 'button',
+  textarea: 'textbox',
+  select: 'combobox',
+  option: 'option',
+  img: 'img',
+  h1: 'heading',
+  h2: 'heading',
+  h3: 'heading',
+  h4: 'heading',
+  h5: 'heading',
+  h6: 'heading',
+};
+const INPUT_ROLE: Record<string, string> = {
+  submit: 'button',
+  button: 'button',
+  reset: 'button',
+  checkbox: 'checkbox',
+  radio: 'radio',
+  search: 'searchbox',
+};
 
 export function snapshot(): string {
   clearRefs(document);
@@ -103,50 +124,13 @@ function roleOf(element: Element): string {
     return explicit;
 
   const tag = element.tagName.toLowerCase();
-  if (tag === 'a' && element.hasAttribute('href'))
-    return 'link';
-
-  if (tag === 'button')
-    return 'button';
-
   if (tag === 'input')
-    return inputRole((element as HTMLInputElement).type || 'text');
+    return INPUT_ROLE[(element as HTMLInputElement).type] || 'textbox';
 
-  if (tag === 'textarea')
-    return 'textbox';
+  if (tag === 'a')
+    return element.hasAttribute('href') ? 'link' : '';
 
-  if (tag === 'select')
-    return 'combobox';
-
-  if (tag === 'option')
-    return 'option';
-
-  if (/^h[1-6]$/.test(tag))
-    return 'heading';
-
-  if (tag === 'img')
-    return 'img';
-
-  if ((element as HTMLElement).isContentEditable)
-    return 'textbox';
-
-  return '';
-}
-
-function inputRole(type: string): string {
-  if (type === 'submit' || type === 'button' || type === 'reset')
-    return 'button';
-
-  if (type === 'checkbox')
-    return 'checkbox';
-
-  if (type === 'radio')
-    return 'radio';
-
-  if (type === 'search')
-    return 'searchbox';
-
-  return 'textbox';
+  return TAG_ROLE[tag] || ((element as HTMLElement).isContentEditable ? 'textbox' : '');
 }
 
 function nameOf(element: Element): string {
@@ -195,13 +179,11 @@ function isShown(element: Element): boolean {
   if (isPainted(element) === false)
     return false;
 
-  if (isFormControl(element))
-    return true;
+  return isFormControl(element) || visibleBox(element);
+}
 
-  if (element.closest('[aria-hidden="true"]'))
-    return false;
-
-  if (getComputedStyle(element).opacity === '0')
+function visibleBox(element: Element): boolean {
+  if (element.closest('[aria-hidden="true"]') || getComputedStyle(element).opacity === '0')
     return false;
 
   const rect = element.getBoundingClientRect();

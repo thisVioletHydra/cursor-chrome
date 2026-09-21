@@ -96,7 +96,8 @@ export async function runMakeGood(link: Link): Promise<GoodReport> {
 }
 
 async function waitSnap(link: Link): Promise<ConnSnap> {
-  for (let index = 0; index < 15; index++) {
+  const until = Date.now() + 1_500;
+  while (Date.now() < until) {
     const snap = link.snapshot();
     if (snap.connected)
       return snap;
@@ -128,23 +129,15 @@ type FailFields = {
 };
 
 function fail(fields: FailFields): GoodReport {
+  const extra = (['url', 'transport', 'detail', 'fix'] as const)
+    .filter(key => typeof fields[key] === 'string')
+    .map(key => `${key}: ${fields[key]}`);
   const lines = [
     'Cursor Chrome: FAIL',
     `step: ${fields.step}`,
     `reason: ${fields.reason}`,
+    ...extra,
   ];
-
-  if (fields.url)
-    lines.push(`url: ${fields.url}`);
-
-  if (fields.transport)
-    lines.push(`transport: ${fields.transport}`);
-
-  if (fields.detail)
-    lines.push(`detail: ${fields.detail}`);
-
-  if (fields.fix)
-    lines.push(`fix: ${fields.fix}`);
 
   return { ok: false, report: lines.join('\n'), ...fields };
 }
