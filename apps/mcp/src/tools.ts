@@ -44,19 +44,51 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   );
 
   server.registerTool(
+    'hh_apply',
+    {
+      description: 'Apply on the pinned HH worker vacancy in the extension: click native Откликнуться, pick Fullstack-разработчик, insert the hardcoded cover letter, fill only standard screening (Бишкек / по рынку / ИП да). Do NOT click/type the form field-by-field. Navigate to the vacancy, then call this. Returns { ok, status: sent|needsHuman|skip, reason }. needsHuman = custom questions, unlabeled fields, google/typeform/test, captcha — worker leaves the form, unpinned review tab, overlay «Ждут ответа». Snapshot/click stay for debugging only.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return textResult(await bridge.send('hh_apply', {}, 45_000));
+      }
+      catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
     'browser_new_tab',
     {
-      description: 'Open a tab without stealing focus (background defaults true). HH URLs get pinned as the worker tab. Clicks still go only to the pinned worker, not this new tab unless it becomes the worker.',
+      description: 'Open a tab without stealing focus (background defaults true). HH URLs reuse the single pinned worker — never a second pin. Pass detach/review true to open an unpinned HH copy for human screening; it is logged to popup История → Ждут ответа. Default resets the worker tab; keepSession continues its history. Clicks still go only to the pinned worker. If the apply form has custom questions (not city/schedule/pay-by-market/contact/citizenship), do not invent answers — detach, log, continue other vacancies.',
       inputSchema: {
         url: z.string().optional().describe('URL to open. Omit for a blank tab.'),
         background: z.boolean().optional().describe('Default true: do not activate. Pass false only if you must steal focus.'),
+        detach: z.boolean().optional().describe('HH only: unpinned extra tab, worker unchanged. Writes needsHuman into История → Ждут ответа.'),
+        review: z.boolean().optional().describe('Alias of detach.'),
+        title: z.string().optional().describe('Vacancy title for the inbox row.'),
+        company: z.string().optional().describe('Company name for the inbox row.'),
+        vacancyId: z.string().optional().describe('HH vacancy id.'),
+        hint: z.string().optional().describe('Short reason, e.g. custom questions or google form.'),
       },
     },
-    async ({ url, background }) => {
+    async ({ url, background, detach, review, title, company, vacancyId, hint }) => {
       try {
         const params: Record<string, unknown> = { background: background !== false };
         if (url)
           params.url = url;
+        if (detach === true || review === true)
+          params.detach = true;
+        if (title)
+          params.title = title;
+        if (company)
+          params.company = company;
+        if (vacancyId)
+          params.vacancyId = vacancyId;
+        if (hint)
+          params.hint = hint;
 
         return textResult(await bridge.send('browser_new_tab', params));
       }
@@ -95,7 +127,7 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'browser_snapshot',
     {
-      description: 'Accessibility snapshot of the pinned HH worker tab, including iframes. Use this for apply flows — screenshot captures the visible tab (YouTube) instead.',
+      description: 'Accessibility snapshot of the pinned HH worker tab, including iframes. For HH apply use hh_apply, not click/type. Snapshot is for debugging and non-apply pages. Screenshot captures the visible tab (YouTube).',
       inputSchema: {},
     },
     async () => {
@@ -111,7 +143,7 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'browser_click',
     {
-      description: 'Click in the pinned HH worker tab only. Never the active YouTube tab. Use selector if you know the CSS; otherwise snapshot and pass ref.',
+      description: 'Click in the pinned HH worker tab only. Never the active YouTube tab. Do not fill HH apply forms with this — call hh_apply. Use selector if you know the CSS; otherwise snapshot and pass ref.',
       inputSchema: locatorFields(),
     },
     async ({ element, ref, selector }) => {
@@ -147,7 +179,7 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'browser_type',
     {
-      description: 'Type into an editable element. Use selector if you know the CSS; otherwise snapshot and pass ref. Set submit true only if you want Enter after typing.',
+      description: 'Type into an editable element. Do not use this for HH cover letter or screening — call hh_apply. Use selector if you know the CSS; otherwise snapshot and pass ref. Set submit true only if you want Enter after typing.',
       inputSchema: {
         ...locatorFields(),
         text: z.string().describe('Text to type into the element'),

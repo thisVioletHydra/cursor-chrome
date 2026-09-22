@@ -31,6 +31,13 @@ chrome.runtime.onStartup.addListener(() => {
 installFocusLock();
 void boot();
 
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || changes.applyLog === undefined)
+    return;
+
+  void setBadge(connected);
+});
+
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== ALARM)
     return;
@@ -103,7 +110,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
 
   return onRuntimeMessage[type]?.(message, sender, sendResponse)
-    ?? rpc[type]?.(message as Record<string, unknown>, sendResponse)
+    ?? rpc[type]?.(message as Record<string, unknown>, sendResponse, sender)
     ?? false;
 });
 

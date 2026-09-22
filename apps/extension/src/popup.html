@@ -10,6 +10,7 @@
     <div class="tabs" id="tabs">
       <span class="checked-bg" aria-hidden="true"></span>
       <button id="go-main" class="nav on" type="button">Главная</button>
+      <button id="go-history" class="nav" type="button">История</button>
       <button id="go-settings" class="nav" type="button">Настройки</button>
     </div>
 
@@ -24,6 +25,11 @@
       <pre id="report" hidden></pre>
     </section>
 
+    <section id="view-history" hidden>
+      <p class="today">Сегодня: <strong id="today">0</strong></p>
+      <div id="history" class="history"></div>
+    </section>
+
     <section id="view-settings" hidden>
       <label class="flag">
         <span>
@@ -33,9 +39,13 @@
         <input id="flag-hide-junk" type="checkbox" />
       </label>
 
-      <p class="today">Сегодня: <strong id="today">0</strong></p>
-      <button id="history-btn" class="ghost" type="button">История</button>
-      <div id="history" class="history" hidden></div>
+      <label class="flag">
+        <span>
+          <strong>Продолжать сессию HH</strong>
+          <small>выкл: один пин, вкладка переоткрывается. вкл: тот же URL и история</small>
+        </span>
+        <input id="flag-keep-session" type="checkbox" />
+      </label>
 
       <details class="sync">
         <summary>Railway POST</summary>

@@ -1,5 +1,6 @@
 import type { ApplyPayload } from './bridge';
 
+import { isJunkApply } from '../chrome/apply-log';
 import { ancestors, ask, localDay } from './bridge';
 
 const MONTH = 'января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря';
@@ -215,8 +216,11 @@ function payloadFrom(card: HTMLElement): ApplyPayload {
   const title = (link.textContent || '').trim();
   const company = Array.from(card.querySelectorAll('a'))
     .map(item => (item.textContent || '').trim())
-    .find(text => text.length > 1 && text !== title)
+    .find(text => text.length > 1 && text !== title && isJunkApply({ title: 'ok', company: text }) === false)
     || '';
+  if ((title.length > 0 && isJunkApply({ title, company: '' }))
+    || (company.length > 0 && isJunkApply({ title: 'ok', company })))
+    return { title: '', company: '', url: '', vacancyId: '' };
 
   return { title, company, url: link.href.split('?')[0], vacancyId };
 }
@@ -226,8 +230,10 @@ function vacancyLinks(root: HTMLElement): HTMLAnchorElement[] {
     .filter((item) => {
       const id = item.href.match(/\/vacancy\/(\d+)/)?.[1];
       const title = (item.textContent || '').trim();
+      if (!id || title.length <= 5)
+        return false;
 
-      return Boolean(id) && title.length > 5;
+      return isJunkApply({ title, company: '' }) === false;
     });
 }
 

@@ -1,4 +1,5 @@
 import { startHhJob } from './hh/job';
+import { runApply } from './hh/apply-run';
 import { click, hover, pressKey, selectOption, typeInto } from './page/actions';
 import { byRef, bySelector, snapshot } from './page/snapshot';
 
@@ -13,6 +14,7 @@ type PageIncoming = {
   type?: string;
   method?: string;
   params?: Record<string, unknown>;
+  resume?: unknown;
 };
 
 type Reply = (value?: unknown) => void;
@@ -20,6 +22,20 @@ type Reply = (value?: unknown) => void;
 const onPageMessage: Record<string, (message: PageIncoming, reply: Reply) => boolean> = {
   ping: (_message, reply) => {
     reply({ ok: true, href: location.href, title: document.title });
+
+    return true;
+  },
+  'run-apply': (message, reply) => {
+    if (window !== window.top)
+      return false;
+
+    void runApply(message.resume === true).then(reply).catch((error) => {
+      reply({
+        ok: false,
+        status: 'skip',
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    });
 
     return true;
   },

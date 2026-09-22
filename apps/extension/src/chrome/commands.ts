@@ -2,9 +2,10 @@ import type { CommandName } from '@cursor-chrome/protocol';
 
 import { getFlags } from './flags';
 import { withStayPut } from './focus-lock';
-import { checkWorker, isHhUrl, pinWorker, requireWorkerTab } from './worker-tab';
-
-const RESTRICTED = /^(chrome|chrome-extension|edge|about|devtools|chrome-search):/i;
+import { runHhApply } from './hh-apply-cmd';
+import { detachAndLog } from './human-review';
+import { ensureContent, frameMessage, hasTabId, listFrameIds, RESTRICTED, requireTabId } from './inject';
+import { adoptHhWorker, checkWorker, isHhUrl, requireWorkerTab, waitTab } from './worker-tab';
 
 type CommandCtx = {
   method: CommandName;
@@ -29,7 +30,7 @@ function pageCmd({ method, params }: CommandCtx): Promise<unknown> {
 
 const commands: Record<CommandName, (ctx: CommandCtx) => Promise<unknown>> = {
   ping: async ({ connected }) => ({ ok: true, connected, ...(await getFlags()) }),
-  browser_new_tab: async ({ params }) => newTab(String(params.url || ''), params.background !== false),
+  browser_new_tab: async ({ params }) => newTab(params),
   browser_navigate: async ({ params }) => navigate(await requireWorkerTab(), String(params.url || '')),
   browser_go_back: async () => historyNav(await requireWorkerTab(), -1),
   browser_go_forward: async () => historyNav(await requireWorkerTab(), 1),
@@ -42,6 +43,7 @@ const commands: Record<CommandName, (ctx: CommandCtx) => Promise<unknown>> = {
   browser_select_option: locator,
   browser_press_key: pageCmd,
   browser_wait: pageCmd,
+  hh_apply: async () => runHhApply(),
 };
 
 export async function runCommand(
@@ -71,31 +73,35 @@ export async function pageInfo(): Promise<{ url: string; frames: number; hideJun
   return { url: tab.url || tab.pendingUrl || '', frames, hideJunk: flags.hideJunk };
 }
 
-function hasTabId(tab: chrome.tabs.Tab | undefined): tab is chrome.tabs.Tab & { id: number } {
-  return typeof tab?.id === 'number';
-}
-
-function requireTabId(tab: chrome.tabs.Tab): number {
-  if (hasTabId(tab) === false)
-    throw new Error('Tab has no id');
-
-  return tab.id;
-}
-
-async function newTab(url: string, background: boolean): Promise<unknown> {
+async function newTab(params: Record<string, unknown>): Promise<unknown> {
+  const url = String(params.url || '');
+  const detach = params.detach === true || params.review === true;
   if (url && RESTRICTED.test(url))
     throw new Error(`Cannot open restricted URL: ${url}`);
 
+  const kind = url && isHhUrl(url) ? (detach ? 'detach' : 'worker') : 'plain';
+  const openers = {
+    detach: () => detachAndLog(url, params),
+    worker: async () => {
+      const worker = await adoptHhWorker(url);
+
+      return { id: worker.tabId, url: worker.url || url };
+    },
+    plain: () => openPlainTab(url, params.background !== false),
+  };
+
+  return openers[kind]();
+}
+
+async function openPlainTab(url: string, background: boolean): Promise<unknown> {
   const created = await chrome.tabs.create({
     ...(url ? { url } : {}),
     active: background === false,
   });
   if (hasTabId(created) && url)
-    await waitComplete(created.id, 15_000);
+    await waitTab(created.id, 15_000);
 
   const fresh = hasTabId(created) ? await chrome.tabs.get(created.id) : created;
-  if (background && hasTabId(fresh) && isHhUrl(fresh.url || url))
-    await pinWorker(fresh.id);
 
   return { id: fresh.id, url: fresh.url || url || '' };
 }
@@ -108,7 +114,7 @@ async function navigate(tab: chrome.tabs.Tab, url: string): Promise<unknown> {
     throw new Error(`Cannot open restricted URL: ${url}`);
 
   const tabId = requireTabId(tab);
-  const wait = waitComplete(tabId, 15_000);
+  const wait = waitTab(tabId, 15_000);
   await chrome.tabs.update(tabId, { url, active: false });
   await wait;
   const fresh = await chrome.tabs.get(tabId);
@@ -121,7 +127,7 @@ async function historyNav(tab: chrome.tabs.Tab, delta: number): Promise<unknown>
     throw new Error(`Cannot control restricted URL: ${tab.url}`);
 
   const tabId = requireTabId(tab);
-  const wait = waitComplete(tabId, 2_000);
+  const wait = waitTab(tabId, 2_000);
   await chrome.scripting.executeScript({
     target: { tabId },
     func: (step: number) => history.go(step),
@@ -147,43 +153,6 @@ async function screenshot(tab: chrome.tabs.Tab): Promise<{ data: string; mimeTyp
   const data = dataUrl.startsWith(prefix) ? dataUrl.slice(prefix.length) : dataUrl;
 
   return { data, mimeType: 'image/png' };
-}
-
-async function ensureContent(tab: chrome.tabs.Tab): Promise<void> {
-  const tabId = requireTabId(tab);
-  if (RESTRICTED.test(tab.url || ''))
-    throw new Error(`Cannot inject into restricted URL: ${tab.url}`);
-
-  const frameIds = await listFrameIds(tabId);
-  for (const frameId of frameIds) {
-    try {
-      await chrome.tabs.sendMessage(tabId, { type: 'ping' }, { frameId });
-    }
-    catch {
-      await chrome.scripting.executeScript({
-        target: { tabId, frameIds: [frameId] },
-        files: ['content.js'],
-      }).catch(() => {});
-    }
-  }
-}
-
-async function listFrameIds(tabId: number): Promise<number[]> {
-  try {
-    const results = await chrome.scripting.executeScript({
-      target: { tabId, allFrames: true },
-      func: () => true,
-    });
-    const ids = results
-      .map(item => item.frameId)
-      .filter((frameId): frameId is number => typeof frameId === 'number');
-    ids.sort((left, right) => left - right);
-
-    return ids.length ? ids : [0];
-  }
-  catch {
-    return [0];
-  }
 }
 
 function parseRef(ref: string): { frameId: number; localRef: string } {
@@ -267,31 +236,4 @@ async function dispatchLocator(tabId: number, method: CommandName, params: Recor
   }
 
   throw new Error(`selector not found: ${selector}${misses.length ? ` (${misses.join('; ')})` : ''}`);
-}
-
-async function frameMessage(tabId: number, frameId: number, method: CommandName, params: Record<string, unknown>): Promise<unknown> {
-  const result = await chrome.tabs.sendMessage(tabId, { type: 'command', method, params }, { frameId });
-  if (result && typeof result === 'object' && 'error' in result)
-    throw new Error(String((result as { error: unknown }).error));
-
-  return result;
-}
-
-async function waitComplete(tabId: number, timeoutMs: number): Promise<void> {
-  await new Promise<void>((resolve) => {
-    const timer = setTimeout(finish, timeoutMs);
-    const onUpdated = (id: number, info: chrome.tabs.TabChangeInfo) => {
-      if (id !== tabId || info.status !== 'complete')
-        return;
-
-      finish();
-    };
-    function finish(): void {
-      clearTimeout(timer);
-      chrome.tabs.onUpdated.removeListener(onUpdated);
-      resolve();
-    }
-
-    chrome.tabs.onUpdated.addListener(onUpdated);
-  });
 }

@@ -1,9 +1,13 @@
+import { labeledApplies, paintApplyGroup } from './hh/history-list';
+
 type ApplyRecord = {
   title: string;
   company: string;
   url: string;
   vacancyId: string;
   sentAt: number;
+  status?: string;
+  hints?: string[];
 };
 
 type GoodResult = {
@@ -12,19 +16,34 @@ type GoodResult = {
   error?: string;
 };
 
+type ViewName = 'main' | 'history' | 'settings';
+
 const verEl = document.getElementById('ver');
 const mainBtn = document.getElementById('make-good') as HTMLButtonElement | null;
 const mainLabel = mainBtn?.querySelector('.cta-label');
 const pillEl = document.getElementById('pill');
 const reportEl = document.getElementById('report');
 const viewMain = document.getElementById('view-main');
+const viewHistory = document.getElementById('view-history');
 const viewSettings = document.getElementById('view-settings');
 const goMain = document.getElementById('go-main');
+const goHistory = document.getElementById('go-history');
 const goSettings = document.getElementById('go-settings');
 const todayEl = document.getElementById('today');
 const historyEl = document.getElementById('history');
+const panes: Record<ViewName, HTMLElement | null> = {
+  main: viewMain,
+  history: viewHistory,
+  settings: viewSettings,
+};
+const navs: Record<ViewName, HTMLElement | null> = {
+  main: goMain,
+  history: goHistory,
+  settings: goSettings,
+};
 const syncEl = document.getElementById('sync-url') as HTMLInputElement | null;
 const hideJunkEl = document.getElementById('flag-hide-junk') as HTMLInputElement | null;
+const keepSessionEl = document.getElementById('flag-keep-session') as HTMLInputElement | null;
 
 if (verEl)
   verEl.textContent = chrome.runtime.getManifest().version;
@@ -34,8 +53,8 @@ let linked = false;
 const clicks: Record<string, () => void> = {
   'make-good': () => void (linked ? hangUp() : makeGood()),
   'go-main': () => show('main'),
+  'go-history': () => show('history'),
   'go-settings': () => show('settings'),
-  'history-btn': () => void toggleHistory(),
   'save-sync': () => void saveSync(),
 };
 
@@ -71,17 +90,22 @@ hideJunkEl?.addEventListener('change', () => {
   void chrome.runtime.sendMessage({ type: 'set-flags', hideJunk: hideJunkEl.checked === true });
 });
 
-function show(name: 'main' | 'settings'): void {
-  const settings = name === 'settings';
-  if (viewMain)
-    viewMain.hidden = settings;
+keepSessionEl?.addEventListener('change', () => {
+  void chrome.runtime.sendMessage({ type: 'set-flags', keepSession: keepSessionEl.checked === true });
+});
 
-  if (viewSettings)
-    viewSettings.hidden = settings === false;
+function show(name: ViewName): void {
+  for (const key of Object.keys(panes) as ViewName[]) {
+    const pane = panes[key];
+    if (pane)
+      pane.hidden = key !== name;
 
-  goMain?.classList.toggle('on', settings === false);
-  goSettings?.classList.toggle('on', settings);
+    navs[key]?.classList.toggle('on', key === name);
+  }
+
   syncTabChip();
+  if (name === 'history')
+    void renderHistory();
 }
 
 function syncTabChip(): void {
@@ -172,50 +196,26 @@ async function makeGood(): Promise<void> {
   mainBtn.disabled = false;
 }
 
-async function toggleHistory(): Promise<void> {
-  if (historyEl === null)
-    return;
-
-  const open = historyEl.hidden;
-  historyEl.hidden = open === false;
-  if (open)
-    await renderHistory();
-}
-
 async function renderHistory(): Promise<void> {
-  if (!historyEl || !todayEl)
+  if (historyEl === null || todayEl === null)
     return;
 
   const data = await chrome.runtime.sendMessage({ type: 'apply-history' }) as {
     log?: ApplyRecord[];
     today?: number;
+    waiting?: ApplyRecord[];
   };
   todayEl.textContent = String(data?.today ?? 0);
-  const log = data?.log || [];
-  const todayKey = localDay(Date.now());
-  const fresh = log.filter(item => localDay(item.sentAt) === todayKey);
-  const older = log.filter(item => localDay(item.sentAt) !== todayKey);
   historyEl.replaceChildren();
-  appendGroup(historyEl, 'Сегодня', fresh);
-  appendGroup(historyEl, 'Ранее', older);
-}
-
-function appendGroup(root: HTMLElement, label: string, items: ApplyRecord[]): void {
-  if (items.length === 0)
-    return;
-
-  const heading = document.createElement('h3');
-  heading.textContent = label;
-  root.append(heading);
-  for (const item of items) {
-    const link = document.createElement('a');
-    link.href = item.url;
-    link.target = '_blank';
-    link.rel = 'noreferrer';
-    const who = item.company ? ` — ${item.company}` : '';
-    link.textContent = `${item.title || item.vacancyId}${who}`;
-    root.append(link);
-  }
+  const waiting = labeledApplies(data?.waiting || []);
+  const log = labeledApplies((data?.log || []).filter(item => item.status !== 'needsHuman'));
+  const todayKey = localDay(Date.now());
+  let n = paintApplyGroup(historyEl, 'Ждут ответа', waiting, 1, {
+    kind: 'wait',
+    empty: 'пока нет мутных — охота сама шлёт стандарт',
+  });
+  n = paintApplyGroup(historyEl, 'Сегодня', log.filter(item => localDay(item.sentAt) === todayKey), n);
+  paintApplyGroup(historyEl, 'Ранее', log.filter(item => localDay(item.sentAt) !== todayKey), n);
 }
 
 async function saveSync(): Promise<void> {
@@ -223,9 +223,18 @@ async function saveSync(): Promise<void> {
 }
 
 async function bootSettings(): Promise<void> {
-  const flags = await chrome.runtime.sendMessage({ type: 'get-flags' }) as { hideJunk?: boolean };
-  if (hideJunkEl)
-    hideJunkEl.checked = flags?.hideJunk === true;
+  const flags = await chrome.runtime.sendMessage({ type: 'get-flags' }) as {
+    hideJunk?: boolean;
+    keepSession?: boolean;
+  };
+  const boxes: Array<[HTMLInputElement | null, boolean]> = [
+    [hideJunkEl, flags?.hideJunk === true],
+    [keepSessionEl, flags?.keepSession === true],
+  ];
+  for (const [el, on] of boxes) {
+    if (el)
+      el.checked = on;
+  }
 
   const sync = await chrome.runtime.sendMessage({ type: 'get-sync-url' }) as { url?: string };
   if (syncEl)

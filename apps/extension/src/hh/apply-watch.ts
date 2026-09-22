@@ -1,5 +1,6 @@
 import type { ApplyPayload } from './bridge';
 
+import { isJunkApply } from '../chrome/apply-log';
 import { ancestors, ask } from './bridge';
 import { refreshOverlay } from './overlay';
 
@@ -130,7 +131,31 @@ function pickPayload(...rows: Array<ApplyPayload | null>): ApplyPayload {
   return rows.find(row => row !== null && row.vacancyId.length > 0) || emptyPayload();
 }
 
+export function applySucceeded(): boolean {
+  const nodes = document.querySelectorAll('[role="alert"], [role="status"], [role="dialog"], [data-qa*="notification"], [class*="snackbar"]');
+
+  return [...nodes].some((element) => {
+    const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
+
+    return SUCCESS.test(text) && text.length < 80;
+  });
+}
+
+export function applyMeta(): ApplyPayload {
+  return pickPayload(pendingApply, vacancyFromModal(), vacancyMeta());
+}
+
 async function sendLog(payload: ApplyPayload): Promise<void> {
+  if (payload.title.length === 0 && payload.company.length === 0 && payload.vacancyId.length === 0)
+    return;
+
+  if ((payload.title.length > 0 || payload.company.length > 0)
+    && isJunkApply({
+      title: payload.title.length > 0 ? payload.title : 'ok',
+      company: payload.company,
+    }))
+    return;
+
   if (payload.vacancyId.length === 0 && /\/vacancy\/\d+/.test(payload.url) === false)
     return;
 
@@ -156,18 +181,38 @@ function vacancyFromModal(): ApplyPayload | null {
 }
 
 function vacancyMeta(): ApplyPayload {
-  const url = location.href;
-  const vacancyId = url.match(/\/vacancy\/(\d+)/)?.[1] || '';
-  if (vacancyId.length > 0) {
-    return {
-      title: textOf(['[data-qa="vacancy-title"]', 'h1[data-qa="title"]', 'h1']),
-      company: textOf(['[data-qa="vacancy-company-name"]', '[data-qa="vacancy-company-name"] a', '[data-qa="employer"]']),
-      url: url.split('?')[0],
-      vacancyId,
-    };
+  const parsed = new URL(location.href);
+  const vacancyId = parsed.pathname.match(/\/vacancy\/(\d+)/)?.[1]
+    || parsed.searchParams.get('vacancyId')
+    || '';
+  if (vacancyId.length === 0)
+    return emptyPayload();
+
+  const onResponse = /vacancy_response/i.test(parsed.pathname);
+  const title = pickVacancyTitle();
+  const company = textOf([
+    '[data-qa="vacancy-company-name"]',
+    '[data-qa="vacancy-company-name"] a',
+    '[data-qa="employer"]',
+  ]);
+  const url = onResponse ? location.href : `${parsed.origin}/vacancy/${vacancyId}`;
+  if ((title.length > 0 && isJunkApply({ title, company: '' }))
+    || (company.length > 0 && isJunkApply({ title: 'ok', company })))
+    return { title: '', company: '', url, vacancyId };
+
+  return { title, company, url, vacancyId };
+}
+
+function pickVacancyTitle(): string {
+  for (const selector of ['[data-qa="vacancy-title"]', 'h1[data-qa="title"]', 'h1']) {
+    const hit = document.querySelector(selector)?.textContent?.trim() || '';
+    if (hit.length === 0 || isJunkApply({ title: hit, company: '' }))
+      continue;
+
+    return hit;
   }
 
-  return emptyPayload();
+  return '';
 }
 
 function emptyPayload(): ApplyPayload {
@@ -187,10 +232,14 @@ export function metaFrom(start: HTMLElement): ApplyPayload {
   const title = (link.textContent || '').trim();
   const company = Array.from(card.querySelectorAll('a'))
     .map(item => (item.textContent || '').trim())
-    .find(text => text.length > 1 && text !== title)
+    .find(text => text.length > 1 && text !== title && isJunkApply({ title: 'ok', company: text }) === false)
     || '';
+  const url = link.href.split('?')[0];
+  if ((title.length > 0 && isJunkApply({ title, company: '' }))
+    || (company.length > 0 && isJunkApply({ title: 'ok', company })))
+    return { title: '', company: '', url, vacancyId };
 
-  return { title, company, url: link.href.split('?')[0], vacancyId };
+  return { title, company, url, vacancyId };
 }
 
 function cardFrom(start: HTMLElement): HTMLElement | null {
@@ -212,8 +261,10 @@ function vacancyTitleLinks(root: HTMLElement): HTMLAnchorElement[] {
     .filter((item) => {
       const id = item.href.match(/\/vacancy\/(\d+)/)?.[1];
       const title = (item.textContent || '').trim();
+      if (!id || title.length <= 5)
+        return false;
 
-      return Boolean(id) && title.length > 5;
+      return isJunkApply({ title, company: '' }) === false;
     });
 }
 

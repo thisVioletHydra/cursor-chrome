@@ -1,6 +1,7 @@
 import type { ApplyPayload } from './bridge';
 
 import { ask, localDay } from './bridge';
+import { labeledApplies, paintApplyGroup } from './history-list';
 import { pullRemoteNegotiations } from './negotiations';
 
 type Overlay = {
@@ -13,6 +14,12 @@ let guarded = false;
 
 export function mountOverlay(): void {
   paintOverlayCss();
+  const stale = document.getElementById('cc-hh-overlay');
+  if (stale && stale.shadowRoot?.querySelector('[data-cc-wait-n]') === null) {
+    stale.remove();
+    overlay = null;
+  }
+
   const existing = document.getElementById('cc-hh-overlay');
   if (existing) {
     if (overlay === null) {
@@ -40,19 +47,29 @@ export function mountOverlay(): void {
     <style>
       :host { display: block; }
       .cc-card { width: 220px; background: #111; border: 1px solid #333; border-radius: 10px; padding: 8px 10px; box-shadow: 0 8px 24px #0008; font: 12px/1.35 ui-sans-serif, system-ui, sans-serif; color: #eee; }
-      button { width: 100%; margin: 0; padding: 8px; border: 0; border-radius: 6px; background: #222; color: #eee; cursor: pointer; font: inherit; }
+      button { width: 100%; margin: 0 0 6px; padding: 8px; border: 0; border-radius: 6px; background: #222; color: #eee; cursor: pointer; font: inherit; }
       .cc-today { margin: 0 0 4px; }
       .cc-flag { margin: 0 0 6px; color: #9ca3af; font-size: 11px; }
       .cc-list { max-height: 180px; overflow: auto; margin: 8px 0 0; }
       .cc-list[hidden] { display: none; }
       .cc-empty { margin: 0; color: #9ca3af; }
-      a { display: block; color: #93c5fd; text-decoration: none; margin: 0 0 4px; }
-      h4 { margin: 6px 0 4px; font-size: 11px; color: #9ca3af; }
+      a { color: #93c5fd; text-decoration: none; overflow-wrap: anywhere; }
+      h4 { margin: 10px 0 4px; font-size: 11px; color: #9ca3af; letter-spacing: 0.03em; text-transform: uppercase; }
+      ol { margin: 0 0 4px; padding: 0; list-style: none; }
+      li { display: flex; gap: 0.4em; margin: 0 0 6px; color: #9ca3af; }
+      li::before { content: counter(apply) "."; counter-increment: apply; flex: 0 0 2.25ch; text-align: right; font-variant-numeric: tabular-nums; }
+      .cc-wait { margin: 6px 0 8px; padding: 6px 0 0; border-top: 1px solid #333; max-height: 140px; overflow: auto; }
+      .cc-wait[hidden] { display: none; }
+      .cc-wait h4 { color: #fbbf24; margin-top: 0; }
+      .cc-wait a { color: #fde68a; }
+      .cc-list h4:first-child { margin-top: 0; }
+      [data-cc-wait-n] { color: #fbbf24; }
     </style>
     <div class="cc-card">
-      <p class="cc-today">Сегодня: <strong data-cc-today>0</strong></p>
-      <p class="cc-flag" data-cc-junk>мусор: выкл</p>
+      <p class="cc-today">Сегодня: <strong data-cc-today>0</strong> · Ждут: <strong data-cc-wait-n>0</strong></p>
       <button type="button" data-cc-history>История</button>
+      <p class="cc-flag" data-cc-junk>мусор: выкл</p>
+      <div class="cc-wait" data-cc-wait hidden></div>
       <div class="cc-list" data-cc-list hidden></div>
     </div>
   `;
@@ -84,6 +101,8 @@ export async function toggleOverlayHistory(): Promise<void> {
   }
 }
 
+type HistoryRow = ApplyPayload & { sentAt: number; status?: string; hints?: string[] };
+
 export async function refreshOverlay(): Promise<void> {
   if (overlay === null)
     return;
@@ -92,18 +111,25 @@ export async function refreshOverlay(): Promise<void> {
 
   const root = overlay.shadow;
   const todayEl = root.querySelector('[data-cc-today]');
+  const waitN = root.querySelector('[data-cc-wait-n]');
   const junkEl = root.querySelector('[data-cc-junk]');
+  const waitEl = root.querySelector<HTMLElement>('[data-cc-wait]');
   const list = root.querySelector<HTMLElement>('[data-cc-list]');
   if (todayEl === null)
     return;
 
-  const data = await ask<{ today?: number; log?: Array<ApplyPayload & { sentAt: number }> }>({ type: 'apply-history' });
+  const data = await ask<{ today?: number; log?: HistoryRow[]; waiting?: HistoryRow[] }>({ type: 'apply-history' });
   const flags = await ask<{ hideJunk?: boolean }>({ type: 'get-flags' });
   if (data === null) {
     todayEl.textContent = '?';
+    if (waitN)
+      waitN.textContent = '?';
 
     if (junkEl)
       junkEl.textContent = 'обнови вкладку HH';
+
+    if (waitEl)
+      waitEl.hidden = true;
 
     if (list !== null && list.hidden === false) {
       list.replaceChildren();
@@ -116,31 +142,38 @@ export async function refreshOverlay(): Promise<void> {
     return;
   }
 
+  const waiting = labeledApplies(data.waiting || []);
   todayEl.textContent = String(data.today ?? 0);
+  if (waitN)
+    waitN.textContent = String(waiting.length);
 
   if (junkEl)
     junkEl.textContent = flags?.hideJunk === true ? 'мусор: вкл' : 'мусор: выкл';
 
+  if (waitEl) {
+    waitEl.replaceChildren();
+    waitEl.hidden = waiting.length === 0;
+    paintApplyGroup(waitEl, 'Ждут ответа', waiting, 1, { heading: 'h4' });
+  }
+
   if (list === null || list.hidden)
     return;
 
-  const log = data.log || [];
+  const log = labeledApplies((data.log || []).filter(item => item.status !== 'needsHuman'));
   const key = localDay(Date.now());
   const fresh = log.filter(item => localDay(item.sentAt) === key);
   const older = log.filter(item => localDay(item.sentAt) !== key);
   list.replaceChildren();
-
-  if (fresh.length === 0 && older.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'cc-empty';
-    empty.textContent = 'пока пусто';
-    list.append(empty);
-
+  let n = waiting.length + 1;
+  n = paintApplyGroup(list, 'Сегодня', fresh, n, { heading: 'h4' });
+  n = paintApplyGroup(list, 'Ранее', older, n, { heading: 'h4' });
+  if (n > waiting.length + 1)
     return;
-  }
 
-  paintGroup(list, 'Сегодня', fresh);
-  paintGroup(list, 'Ранее', older);
+  const empty = document.createElement('p');
+  empty.className = 'cc-empty';
+  empty.textContent = 'пока пусто';
+  list.append(empty);
 }
 
 function paintOverlayCss(): void {
@@ -208,24 +241,3 @@ function handleOverlayClick(event: Event): void {
   }
 }
 
-function paintGroup(
-  root: HTMLElement,
-  label: string,
-  items: Array<{ title: string; company: string; url: string; vacancyId: string }>,
-): void {
-  if (items.length === 0)
-    return;
-
-  const heading = document.createElement('h4');
-  heading.textContent = label;
-  root.append(heading);
-  for (const item of items) {
-    const link = document.createElement('a');
-    link.href = item.url;
-    link.target = '_blank';
-    link.rel = 'noreferrer';
-    const who = item.company ? ` — ${item.company}` : '';
-    link.textContent = `${item.title || item.vacancyId}${who}`;
-    root.append(link);
-  }
-}

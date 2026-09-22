@@ -1,6 +1,9 @@
+import { getFlags } from './flags';
 import { restoreFocus, snapshotFocus, withStayPut } from './focus-lock';
 
 const WORKER_KEY = 'workerTabId';
+const HH_HOME = 'https://hh.ru';
+const HH_SEARCH = 'https://hh.ru/search/vacancy';
 
 export type TabRow = {
   id: number;
@@ -19,10 +22,18 @@ export type WorkerCheck = {
 };
 
 export function isHhUrl(url: string): boolean {
+  return hostIs(url, 'hh.ru');
+}
+
+function isWorkerUrl(url: string): boolean {
+  return isHhUrl(url) || hostIs(url, 'linkedin.com');
+}
+
+function hostIs(url: string, root: string): boolean {
   try {
     const host = new URL(url).hostname.toLowerCase();
 
-    return host === 'hh.ru' || host.endsWith('.hh.ru');
+    return host === root || host.endsWith(`.${root}`);
   }
   catch {
     return false;
@@ -62,6 +73,7 @@ export async function pinWorker(tabId: number): Promise<WorkerCheck> {
   const prev = await snapshotFocus();
   await chrome.tabs.update(tabId, { pinned: true, active: false });
   await chrome.storage.local.set({ [WORKER_KEY]: tabId });
+  await dropExtraHhPins(tabId);
   await restoreFocus(prev);
 
   return checkWorker();
@@ -99,7 +111,7 @@ export async function checkWorker(): Promise<WorkerCheck> {
   }
 
   const url = tab.url || tab.pendingUrl || '';
-  if (isHhUrl(url) === false)
+  if (isWorkerUrl(url) === false)
     return { ok: false, reason: 'не HH', url, tabId, pinned: tab.pinned === true };
 
   if (tab.pinned !== true)
@@ -117,22 +129,139 @@ export async function requireWorkerTab(): Promise<chrome.tabs.Tab> {
 }
 
 export async function openHhBackground(): Promise<WorkerCheck> {
-  return withStayPut(() => createHhTab(), { keepSpawned: true });
+  return adoptHhWorker();
 }
 
-async function createHhTab(): Promise<WorkerCheck> {
-  const created = await chrome.tabs.create({ url: 'https://hh.ru', active: false });
+export async function ensureHhWorker(): Promise<WorkerCheck> {
+  return adoptHhWorker();
+}
+
+export async function openHhDetached(url: string): Promise<{ id?: number; url: string; detached: true }> {
+  if (isHhUrl(url) === false)
+    throw new Error('detach only for HH');
+
+  return withStayPut(() => createUnpinned(url), { keepSpawned: true });
+}
+
+export async function handoffWorkerToHuman(url: string): Promise<{ id?: number; url: string; detached: true }> {
+  return withStayPut(async () => {
+    const opened = await createUnpinned(url);
+    const workerId = await getWorkerTabId();
+    if (typeof workerId === 'number')
+      await chrome.tabs.update(workerId, { url: HH_SEARCH, active: false });
+
+    return opened;
+  }, { keepSpawned: true });
+}
+
+async function createUnpinned(url: string): Promise<{ id?: number; url: string; detached: true }> {
+  const vacancyId = vacancyIdOf(url);
+  const workerId = await getWorkerTabId();
+  const hh = isHhUrl(url);
+  const existing = (await listJobTabs()).find((row) => {
+    if (row.pinned === true || row.id === workerId)
+      return false;
+
+    if (hh && row.hh === false)
+      return false;
+
+    return sameVacancy(row.url, url, vacancyId);
+  });
+  if (existing)
+    return { id: existing.id, url: existing.url, detached: true };
+
+  const created = await chrome.tabs.create({ url, active: false, pinned: false });
   if (typeof created.id !== 'number')
-    throw new Error('не удалось открыть HH');
+    throw new Error('не удалось открыть вкладку');
 
-  await waitTab(created.id);
+  await waitTab(created.id, 15_000);
+  const fresh = await chrome.tabs.get(created.id);
+  const unpin = fresh.pinned === true
+    ? chrome.tabs.update(created.id, { pinned: false, active: false })
+    : Promise.resolve();
+  await unpin;
 
-  return pinWorker(created.id);
+  return { id: created.id, url: fresh.url || url, detached: true };
 }
 
-async function waitTab(tabId: number): Promise<void> {
+function vacancyIdOf(url: string): string {
+  try {
+    const parsed = new URL(url);
+
+    return parsed.pathname.match(/\/vacancy\/(\d+)/)?.[1]
+      || parsed.searchParams.get('vacancyId')
+      || '';
+  }
+  catch {
+    return '';
+  }
+}
+
+function sameVacancy(left: string, right: string, vacancyId: string): boolean {
+  if (vacancyId.length > 0 && vacancyIdOf(left) === vacancyId)
+    return true;
+
+  return left.split('?')[0] === right.split('?')[0];
+}
+
+export async function adoptHhWorker(url?: string): Promise<WorkerCheck> {
+  const target = url && isHhUrl(url) ? url : undefined;
+  const flags = await getFlags();
+  const existing = pickHhTab(await listJobTabs(), await getWorkerTabId());
+
+  if (flags.keepSession && existing)
+    return resumeHh(existing.id, target);
+
+  return replaceHh(target || HH_HOME, existing?.id);
+}
+
+async function resumeHh(tabId: number, url?: string): Promise<WorkerCheck> {
+  const pinned = await pinWorker(tabId);
+  if (url === undefined)
+    return pinned;
+
+  await chrome.tabs.update(tabId, { url, active: false });
+  await waitTab(tabId);
+
+  return checkWorker();
+}
+
+async function replaceHh(url: string, oldId?: number): Promise<WorkerCheck> {
+  return withStayPut(async () => {
+    const created = await chrome.tabs.create({ url, active: false });
+    if (typeof created.id !== 'number')
+      throw new Error('не удалось открыть HH');
+
+    await waitTab(created.id);
+    const pinned = await pinWorker(created.id);
+    if (typeof oldId === 'number' && oldId !== created.id)
+      await chrome.tabs.remove(oldId).catch(() => {});
+
+    return pinned;
+  }, { keepSpawned: true });
+}
+
+async function dropExtraHhPins(keepId: number): Promise<void> {
+  const rows = await listJobTabs();
+  for (const row of rows) {
+    if (row.id === keepId || row.hh === false || row.pinned === false)
+      continue;
+
+    await chrome.tabs.remove(row.id).catch(() => {});
+  }
+}
+
+function pickHhTab(rows: TabRow[], workerId: number | null): TabRow | undefined {
+  const hh = rows.filter(row => row.hh);
+  const stored = hh.find(row => row.id === workerId);
+  const pinned = hh.find(row => row.pinned);
+
+  return stored || pinned || hh[0];
+}
+
+export async function waitTab(tabId: number, timeoutMs = 10_000): Promise<void> {
   await new Promise<void>((resolve) => {
-    const timer = setTimeout(finish, 10_000);
+    const timer = setTimeout(finish, timeoutMs);
     const onUpdated = (id: number, info: chrome.tabs.TabChangeInfo) => {
       if (id !== tabId || info.status !== 'complete')
         return;
@@ -147,20 +276,4 @@ async function waitTab(tabId: number): Promise<void> {
 
     chrome.tabs.onUpdated.addListener(onUpdated);
   });
-}
-
-export async function ensureHhWorker(): Promise<WorkerCheck> {
-  const current = await checkWorker();
-  if (current.ok)
-    return current;
-
-  return withStayPut(async () => {
-    const rows = await listJobTabs();
-    const known = rows.find(row => row.hh && row.id === current.tabId);
-    const hh = known || rows.find(row => row.hh);
-    if (hh)
-      return pinWorker(hh.id);
-
-    return createHhTab();
-  }, { keepSpawned: true });
 }

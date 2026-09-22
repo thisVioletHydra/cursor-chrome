@@ -1,6 +1,21 @@
+import { sleep } from './dom';
+
 const FULLSTACK = /fullstack/i;
 
 let pickAt = 0;
+
+export async function ensureFullstack(ms = 6000): Promise<boolean> {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    pickFullstack();
+    if (currentIsFullstack())
+      return true;
+
+    await sleep(200);
+  }
+
+  return currentIsFullstack();
+}
 
 export function pickFullstack(): void {
   if (hasApplyChrome() === false || Date.now() - pickAt < 800)
@@ -70,8 +85,10 @@ function hasApplyChrome(): boolean {
 
 function currentIsFullstack(): boolean {
   const trigger = findResumeTrigger();
+  if (FULLSTACK.test(trigger?.textContent || ''))
+    return true;
 
-  return FULLSTACK.test(trigger?.textContent || '');
+  return [...document.querySelectorAll('select')].some(select => FULLSTACK.test(select.selectedOptions[0]?.text || ''));
 }
 
 function findResumeTrigger(): HTMLElement | null {

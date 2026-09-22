@@ -41,7 +41,7 @@ body {
 .tabs {
   display: flex;
   position: relative;
-  width: fit-content;
+  width: 100%;
   margin: 0 0 18px;
   padding: 3px;
   height: 44px;
@@ -74,17 +74,18 @@ body {
 .nav {
   position: relative;
   z-index: 1;
+  flex: 1;
   margin: 0;
-  padding: 0 14px;
+  padding: 0 8px;
   height: 38px;
   border: 0;
   border-radius: 9999999px;
   background: transparent;
   color: #766d8f;
   font: inherit;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
   text-transform: uppercase;
   cursor: pointer;
 }
@@ -251,24 +252,59 @@ body {
 }
 
 .history {
-  max-height: 160px;
+  max-height: 280px;
   overflow: auto;
-  margin: 0 0 12px;
+  margin: 0;
 }
 
 .history h3 {
-  margin: 8px 0 4px;
+  margin: 14px 0 6px;
   font-size: 11px;
   font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--fog);
 }
 
+.history h3:first-child {
+  margin-top: 0;
+}
+
+.history h3.wait {
+  color: #fbbf24;
+}
+
+.history ol {
+  margin: 0 0 2px;
+  padding: 0;
+  list-style: none;
+}
+
+.history li {
+  display: flex;
+  gap: 0.45em;
+  margin: 0 0 8px;
+  color: var(--fog);
+}
+
+.history li::before {
+  content: counter(apply) ".";
+  counter-increment: apply;
+  flex: 0 0 2.25ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .history a {
-  display: block;
-  margin: 0 0 4px;
   color: var(--pink);
   text-decoration: none;
   font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.history .empty {
+  margin: 4px 0 0;
+  color: var(--fog);
 }
 
 .sync {

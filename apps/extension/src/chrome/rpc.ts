@@ -1,8 +1,10 @@
-import { appendApply, getSyncUrl, listApplies, setSyncUrl, todayCount } from './apply-log';
+import { appendApply, getSyncUrl, listApplies, setSyncUrl, todayCount, waitingHuman } from './apply-log';
 import { getFlags, setFlags } from './flags';
+import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from './human-review';
 import { checkWorker, listJobTabs, openHhBackground, pinWorker } from './worker-tab';
 
 type Reply = (value?: unknown) => void;
+type Sender = chrome.runtime.MessageSender;
 
 function replyJob(reply: Reply, job: Promise<unknown>): void {
   void job.then(reply).catch((error) => {
@@ -23,9 +25,10 @@ async function applyLog(message: Record<string, unknown>): Promise<unknown> {
 }
 
 async function applyHistory(): Promise<unknown> {
-  const [log, today] = await Promise.all([listApplies(), todayCount()]);
+  await backfillUnpinnedReviews();
+  const log = await listApplies();
 
-  return { log, today };
+  return { log, today: await todayCount(), waiting: waitingHuman(log) };
 }
 
 async function readSyncUrl(): Promise<unknown> {
@@ -40,7 +43,7 @@ async function writeSyncUrl(url: string): Promise<unknown> {
   return { ok: true };
 }
 
-export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply) => boolean> = {
+export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply, sender?: Sender) => boolean> = {
   'list-tabs': (_message, reply) => {
     replyJob(reply, listJobTabs());
 
@@ -73,6 +76,16 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
 
     return true;
   },
+  'apply-needs-human': (message, reply, sender) => {
+    replyJob(reply, handleNeedsHuman(message, sender?.tab?.id));
+
+    return true;
+  },
+  'is-hh-worker': (_message, reply, sender) => {
+    replyJob(reply, isHhWorkerTab(sender?.tab?.id));
+
+    return true;
+  },
   'apply-history': (_message, reply) => {
     replyJob(reply, applyHistory());
 
@@ -94,7 +107,14 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
     return true;
   },
   'set-flags': (message, reply) => {
-    replyJob(reply, setFlags({ hideJunk: message.hideJunk === true }));
+    const patch: { hideJunk?: boolean; keepSession?: boolean } = {};
+    if ('hideJunk' in message)
+      patch.hideJunk = message.hideJunk === true;
+
+    if ('keepSession' in message)
+      patch.keepSession = message.keepSession === true;
+
+    replyJob(reply, setFlags(patch));
 
     return true;
   },

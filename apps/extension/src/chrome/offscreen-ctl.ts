@@ -1,3 +1,5 @@
+import { todayCount } from './apply-log';
+
 export async function ensureOffscreen(): Promise<string | undefined> {
   const hasDocument = await chrome.offscreen.hasDocument?.() ?? false;
   if (hasDocument)
@@ -31,6 +33,15 @@ export async function waitOffscreen(): Promise<void> {
 }
 
 export async function setBadge(on: boolean): Promise<void> {
-  await chrome.action.setBadgeText({ text: on ? 'ON' : 'OFF' });
-  await chrome.action.setBadgeBackgroundColor({ color: on ? '#0a0' : '#c00' });
+  if (on === false) {
+    await chrome.action.setBadgeText({ text: 'OFF' });
+    await chrome.action.setBadgeBackgroundColor({ color: '#c00' });
+    await chrome.action.setBadgeTextColor({ color: '#fff' });
+
+    return;
+  }
+
+  await chrome.action.setBadgeText({ text: String(await todayCount()) });
+  await chrome.action.setBadgeBackgroundColor({ color: '#111' });
+  await chrome.action.setBadgeTextColor({ color: '#fff' });
 }

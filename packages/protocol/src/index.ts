@@ -19,6 +19,7 @@ export const COMMANDS = [
   'browser_wait',
   'browser_screenshot',
   'browser_get_console_logs',
+  'hh_apply',
   'ping',
 ] as const;
 

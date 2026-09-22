@@ -2,6 +2,7 @@ import { scanApplied, watchToasts } from './apply-watch';
 import { pullRemoteNegotiations, scanNegotiations } from './negotiations';
 import { mountOverlay, refreshOverlay } from './overlay';
 import { pickFullstack } from './resume';
+import { scanScreenQuestions, watchScreenQuestions } from './screen-questions';
 
 const HOST_OK = /(?:^|\.)hh\.ru$/i;
 
@@ -14,6 +15,7 @@ export function startHhJob(): void {
 
   mountOverlay();
   watchToasts();
+  watchScreenQuestions();
   void bootHistory();
   setInterval(() => {
     if (document.getElementById('cc-hh-overlay') === null)
@@ -21,6 +23,7 @@ export function startHhJob(): void {
 
     pickFullstack();
     scanApplied();
+    scanScreenQuestions();
     scanNegotiations();
     void refreshOverlay();
   }, 500);
