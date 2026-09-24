@@ -2,8 +2,8 @@ export function compact(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-export function visible(el: HTMLElement): boolean {
-  return el.getClientRects().length > 0;
+export function visible(element: HTMLElement): boolean {
+  return element.getClientRects().length > 0;
 }
 
 export function sleep(ms: number): Promise<void> {

@@ -1,5 +1,7 @@
+import type { ApplyBlock } from './apply-detect';
+
 import { typeInto } from '../page/actions';
-import { applyBlocker, type ApplyBlock } from './apply-detect';
+import { applyBlocker } from './apply-detect';
 import { compact, sleep, until, visible } from './dom';
 import { COVER_LETTER } from './letter';
 import { ensureFullstack } from './resume';
@@ -98,7 +100,7 @@ function letterField(): HTMLElement | null {
     return named;
 
   return [...document.querySelectorAll<HTMLElement>('textarea, [contenteditable="true"]')]
-    .find(el => visible(el) && isCoverLetter(el)) ?? null;
+    .find(element => visible(element) && isCoverLetter(element)) ?? null;
 }
 
 function letterToggle(): HTMLElement | null {
@@ -111,7 +113,7 @@ function letterToggle(): HTMLElement | null {
     return null;
 
   return [...root.querySelectorAll<HTMLElement>('button, a, [role="button"]')]
-    .find(el => /добавить сопроводительн|сопроводительное письмо/i.test(compact(el.textContent || ''))) ?? null;
+    .find(element => /добавить сопроводительн|сопроводительное письмо/i.test(compact(element.textContent || ''))) ?? null;
 }
 
 function fieldHasLetter(field: HTMLElement): boolean {
@@ -131,8 +133,8 @@ async function typeOrClick(block: HTMLElement, text: string, re: RegExp): Promis
 
 function clickChoice(block: HTMLElement, re: RegExp): boolean {
   const nodes = [...block.querySelectorAll<HTMLElement>('label, [role="radio"], [role="option"], button, li')];
-  const hit = nodes.find((el) => {
-    const text = compact(el.textContent || '');
+  const hit = nodes.find((element) => {
+    const text = compact(element.textContent || '');
 
     return text.length > 0 && text.length < 80 && re.test(text);
   });
@@ -166,7 +168,7 @@ async function typeFirst(block: HTMLElement, text: string, re: RegExp): Promise<
   typeInto(field, text, false);
   await sleep(400);
   const opt = [...document.querySelectorAll<HTMLElement>('[role="option"], [data-qa*="suggest"]')]
-    .find(el => re.test(el.textContent || ''));
+    .find(element => re.test(element.textContent || ''));
   opt?.click();
 
   return true;

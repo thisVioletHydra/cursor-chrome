@@ -1,3 +1,5 @@
+import { browser } from '../browser-host';
+
 export type ApplyPayload = {
   title: string;
   company: string;
@@ -25,8 +27,8 @@ export function ancestors(start: HTMLElement, limit: number): HTMLElement[] {
 export function ask<T>(payload: Record<string, unknown>): Promise<T | null> {
   return new Promise((resolve) => {
     try {
-      chrome.runtime.sendMessage(payload, (data: T) => {
-        if (chrome.runtime.lastError)
+      browser.runtime.sendMessage(payload, (data: T) => {
+        if (browser.runtime.lastError)
           resolve(null);
         else
           resolve(data ?? null);

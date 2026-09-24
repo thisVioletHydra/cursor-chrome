@@ -180,6 +180,13 @@ function vacancyFromModal(): ApplyPayload | null {
   return null;
 }
 
+function halfJunk(title: string, company: string): boolean {
+  const titleJunk = title.length > 0 && isJunkApply({ title, company: '' });
+  const companyJunk = company.length > 0 && isJunkApply({ title: 'ok', company });
+
+  return titleJunk || companyJunk;
+}
+
 function vacancyMeta(): ApplyPayload {
   const parsed = new URL(location.href);
   const vacancyId = parsed.pathname.match(/\/vacancy\/(\d+)/)?.[1]
@@ -196,8 +203,7 @@ function vacancyMeta(): ApplyPayload {
     '[data-qa="employer"]',
   ]);
   const url = onResponse ? location.href : `${parsed.origin}/vacancy/${vacancyId}`;
-  if ((title.length > 0 && isJunkApply({ title, company: '' }))
-    || (company.length > 0 && isJunkApply({ title: 'ok', company })))
+  if (halfJunk(title, company))
     return { title: '', company: '', url, vacancyId };
 
   return { title, company, url, vacancyId };
@@ -235,8 +241,7 @@ export function metaFrom(start: HTMLElement): ApplyPayload {
     .find(text => text.length > 1 && text !== title && isJunkApply({ title: 'ok', company: text }) === false)
     || '';
   const url = link.href.split('?')[0];
-  if ((title.length > 0 && isJunkApply({ title, company: '' }))
-    || (company.length > 0 && isJunkApply({ title: 'ok', company })))
+  if (halfJunk(title, company))
     return { title: '', company: '', url, vacancyId };
 
   return { title, company, url, vacancyId };

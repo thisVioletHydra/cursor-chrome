@@ -1,3 +1,5 @@
+import { browser } from '../browser-host';
+
 export const REF_ATTR = 'data-cc-ref';
 
 const INTERACTIVE = new Set([
@@ -193,7 +195,7 @@ function visibleBox(element: Element): boolean {
 
 function shadowRootOf(element: Element): ShadowRoot | null {
   try {
-    const opened = chrome.dom?.openOrClosedShadowRoot?.(element);
+    const opened = browser.dom?.openOrClosedShadowRoot?.(element);
     if (opened)
       return opened;
   }

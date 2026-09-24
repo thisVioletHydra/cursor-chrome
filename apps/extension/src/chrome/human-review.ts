@@ -1,4 +1,7 @@
-import { appendApply, isJunkApply, listApplies, todayCount, waitingHuman, type ApplyRecord } from './apply-log';
+import type { ApplyRecord } from './apply-log';
+
+import { browser } from '../browser-host';
+import { appendApply, isJunkApply, listApplies, todayCount, waitingHuman } from './apply-log';
 import { getWorkerTabId, handoffWorkerToHuman, isHhUrl, openHhDetached } from './worker-tab';
 
 export async function isHhWorkerTab(tabId?: number): Promise<{ worker: boolean }> {
@@ -37,7 +40,7 @@ export async function detachAndLog(
 ): Promise<{ id?: number; url: string; detached: true }> {
   const opened = await openHhDetached(url);
   const tab = typeof opened.id === 'number'
-    ? await chrome.tabs.get(opened.id).catch(() => null)
+    ? await browser.tabs.get(opened.id).catch(() => null)
     : null;
   await logDetachedReview({
     url: opened.url || url,
@@ -53,7 +56,7 @@ export async function detachAndLog(
 
 export async function backfillUnpinnedReviews(): Promise<void> {
   const workerId = await getWorkerTabId();
-  const tabs = await chrome.tabs.query({});
+  const tabs = await browser.tabs.query({});
   for (const tab of tabs) {
     if (typeof tab.id !== 'number' || tab.pinned === true || tab.id === workerId)
       continue;
@@ -70,14 +73,7 @@ export async function backfillUnpinnedReviews(): Promise<void> {
   }
 }
 
-export async function logDetachedReview(meta: {
-  url: string;
-  title?: string;
-  company?: string;
-  vacancyId?: string;
-  hints?: unknown;
-  tabTitle?: string;
-}): Promise<ApplyRecord[]> {
+export async function logDetachedReview(meta: { url: string; title?: string; company?: string; vacancyId?: string; hints?: unknown; tabTitle?: string; }): Promise<ApplyRecord[]> {
   const vacancyId = String(meta.vacancyId || '') || vacancyIdOf(meta.url);
   const parsed = parseTabTitle(meta.tabTitle || '', String(meta.title || ''), String(meta.company || ''));
   const hints = asHints(meta.hints);
@@ -114,14 +110,20 @@ function vacancyIdOf(url: string): string {
   }
 }
 
+function bothNamed(title: string, company: string): boolean {
+  const filled = title.length > 0 && company.length > 0;
+  const titleOk = isJunkApply({ title, company: '' }) === false;
+  const companyOk = isJunkApply({ title: 'ok', company }) === false;
+
+  return filled && titleOk && companyOk;
+}
+
 function parseTabTitle(tabTitle: string, title: string, company: string): { title: string; company: string } {
   const given = {
     title: title.trim(),
     company: company.trim(),
   };
-  if (given.title.length > 0 && given.company.length > 0
-    && isJunkApply({ title: given.title, company: '' }) === false
-    && isJunkApply({ title: 'ok', company: given.company }) === false)
+  if (bothNamed(given.title, given.company))
     return given;
 
   if (given.title.length > 0 && isJunkApply({ title: given.title, company: '' }) === false) {

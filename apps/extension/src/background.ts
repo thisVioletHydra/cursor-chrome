@@ -8,6 +8,7 @@ import { postNative as sendNative } from './chrome/native-post';
 import { ensureOffscreen, setBadge, waitOffscreen } from './chrome/offscreen-ctl';
 import { rpc } from './chrome/rpc';
 import { closePinnedHh } from './chrome/worker-tab';
+import { browser } from './browser-host';
 
 const ALARM = 'cc-keepalive';
 const HOST_MISSING = /native messaging host not found|forbidden|does not exist/i;
@@ -22,23 +23,23 @@ let nativeRetry: ReturnType<typeof setTimeout> | undefined;
 let ignoreNativeDisconnect = false;
 let heldOff = false;
 
-chrome.runtime.onInstalled.addListener(() => {
+browser.runtime.onInstalled.addListener(() => {
   void boot();
 });
-chrome.runtime.onStartup.addListener(() => {
+browser.runtime.onStartup.addListener(() => {
   void boot();
 });
 installFocusLock();
 void boot();
 
-chrome.storage.onChanged.addListener((changes, area) => {
+browser.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || changes.applyLog === undefined)
     return;
 
   void setBadge(connected);
 });
 
-chrome.alarms.onAlarm.addListener((alarm) => {
+browser.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== ALARM)
     return;
 
@@ -52,7 +53,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   connectNative();
 });
 
-chrome.runtime.onConnect.addListener((port) => {
+browser.runtime.onConnect.addListener((port) => {
   if (port.name !== 'keepalive')
     return;
 
@@ -88,7 +89,7 @@ const onRuntimeMessage: Record<string, (message: Incoming, sender: chrome.runtim
     return false;
   },
   'get-status': (_message, _sender, reply) => {
-    reply({ connected, detail, transport, version: chrome.runtime.getManifest().version });
+    reply({ connected, detail, transport, version: browser.runtime.getManifest().version });
 
     return true;
   },
@@ -104,7 +105,7 @@ const onRuntimeMessage: Record<string, (message: Incoming, sender: chrome.runtim
   'console-log': () => false,
 };
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const type = message?.type;
   if (typeof type !== 'string')
     return false;
@@ -131,7 +132,7 @@ async function reconnect(): Promise<{ ok: boolean; detail?: string; error?: stri
 
     await waitOffscreen();
     restartNative();
-    await chrome.runtime.sendMessage({ type: 'reconnect' }).catch(() => {});
+    await browser.runtime.sendMessage({ type: 'reconnect' }).catch(() => {});
 
     return { ok: true, detail: nativePort ? 'native reconnect' : 'offscreen reconnect sent' };
   }
@@ -170,7 +171,7 @@ async function hangUp(): Promise<{ ok: true }> {
 }
 
 async function boot(): Promise<void> {
-  await chrome.alarms.create(ALARM, { periodInMinutes: 0.5 });
+  await browser.alarms.create(ALARM, { periodInMinutes: 0.5 });
   const offscreenFail = await ensureOffscreen();
   if (offscreenFail)
     detail = offscreenFail;
@@ -203,7 +204,7 @@ function connectNative(): void {
     return;
 
   try {
-    nativePort = chrome.runtime.connectNative(NATIVE_HOST_NAME);
+    nativePort = browser.runtime.connectNative(NATIVE_HOST_NAME);
   }
   catch (error) {
     nativePort = null;
@@ -217,7 +218,7 @@ function connectNative(): void {
     void onNativeMessage(message);
   });
   nativePort.onDisconnect.addListener(() => {
-    const err = chrome.runtime.lastError?.message || 'native host disconnected';
+    const err = browser.runtime.lastError?.message || 'native host disconnected';
     nativePort = null;
     if (ignoreNativeDisconnect || heldOff)
       return;
@@ -279,7 +280,7 @@ async function onNativeMessage(message: unknown): Promise<void> {
 }
 
 async function disableWsFallback(): Promise<void> {
-  await chrome.runtime.sendMessage({ type: 'set-ws', enabled: false }).catch(() => {});
+  await browser.runtime.sendMessage({ type: 'set-ws', enabled: false }).catch(() => {});
 }
 
 async function enableWsFallback(reason: string): Promise<void> {
@@ -290,5 +291,5 @@ async function enableWsFallback(reason: string): Promise<void> {
   if (connected === false)
     detail = HOST_MISSING.test(reason) ? 'запусти pnpm install-host' : reason;
 
-  await chrome.runtime.sendMessage({ type: 'set-ws', enabled: true }).catch(() => {});
+  await browser.runtime.sendMessage({ type: 'set-ws', enabled: true }).catch(() => {});
 }

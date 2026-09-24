@@ -1,5 +1,6 @@
 import { getFlags } from './flags';
 import { restoreFocus, snapshotFocus, withStayPut } from './focus-lock';
+import { browser } from '../browser-host';
 
 const WORKER_KEY = 'workerTabId';
 const HH_HOME = 'https://hh.ru';
@@ -16,6 +17,7 @@ export type TabRow = {
 export type WorkerCheck = {
   ok: boolean;
   reason?: string;
+  status?: string;
   url?: string;
   pinned?: boolean;
   tabId?: number;
@@ -26,7 +28,14 @@ export function isHhUrl(url: string): boolean {
 }
 
 function isWorkerUrl(url: string): boolean {
-  return isHhUrl(url) || hostIs(url, 'linkedin.com');
+  try {
+    const protocol = new URL(url).protocol;
+
+    return protocol === 'http:' || protocol === 'https:';
+  }
+  catch {
+    return false;
+  }
 }
 
 function hostIs(url: string, root: string): boolean {
@@ -41,14 +50,14 @@ function hostIs(url: string, root: string): boolean {
 }
 
 export async function getWorkerTabId(): Promise<number | null> {
-  const stored = await chrome.storage.local.get(WORKER_KEY);
+  const stored = await browser.storage.local.get(WORKER_KEY);
   const id = stored[WORKER_KEY];
 
   return typeof id === 'number' ? id : null;
 }
 
 export async function listJobTabs(): Promise<TabRow[]> {
-  const tabs = await chrome.tabs.query({});
+  const tabs = await browser.tabs.query({});
   const rows: TabRow[] = [];
   for (const tab of tabs) {
     if (typeof tab.id !== 'number')
@@ -71,8 +80,8 @@ export async function listJobTabs(): Promise<TabRow[]> {
 
 export async function pinWorker(tabId: number): Promise<WorkerCheck> {
   const prev = await snapshotFocus();
-  await chrome.tabs.update(tabId, { pinned: true, active: false });
-  await chrome.storage.local.set({ [WORKER_KEY]: tabId });
+  await browser.tabs.update(tabId, { pinned: true, active: false });
+  await browser.storage.local.set({ [WORKER_KEY]: tabId });
   await dropExtraHhPins(tabId);
   await restoreFocus(prev);
 
@@ -90,10 +99,10 @@ export async function closePinnedHh(): Promise<void> {
     if (row.pinned === false && row.id !== workerId)
       continue;
 
-    await chrome.tabs.remove(row.id).catch(() => {});
+    await browser.tabs.remove(row.id).catch(() => {});
   }
 
-  await chrome.storage.local.remove(WORKER_KEY);
+  await browser.storage.local.remove(WORKER_KEY);
   await restoreFocus(prev);
 }
 
@@ -104,7 +113,7 @@ export async function checkWorker(): Promise<WorkerCheck> {
 
   let tab: chrome.tabs.Tab;
   try {
-    tab = await chrome.tabs.get(tabId);
+    tab = await browser.tabs.get(tabId);
   }
   catch {
     return { ok: false, reason: 'вкладка закрыта', tabId };
@@ -112,7 +121,7 @@ export async function checkWorker(): Promise<WorkerCheck> {
 
   const url = tab.url || tab.pendingUrl || '';
   if (isWorkerUrl(url) === false)
-    return { ok: false, reason: 'не HH', url, tabId, pinned: tab.pinned === true };
+    return { ok: false, reason: 'не http(s)', url, tabId, pinned: tab.pinned === true };
 
   if (tab.pinned !== true)
     return { ok: false, reason: 'пин снят', url, tabId, pinned: false };
@@ -125,7 +134,7 @@ export async function requireWorkerTab(): Promise<chrome.tabs.Tab> {
   if (check.ok === false || typeof check.tabId !== 'number')
     throw new Error(`HH tab not ready: ${check.reason || 'unknown'}. Pin it in the Cursor Chrome popup.`);
 
-  return chrome.tabs.get(check.tabId);
+  return browser.tabs.get(check.tabId);
 }
 
 export async function openHhBackground(): Promise<WorkerCheck> {
@@ -148,7 +157,7 @@ export async function handoffWorkerToHuman(url: string): Promise<{ id?: number; 
     const opened = await createUnpinned(url);
     const workerId = await getWorkerTabId();
     if (typeof workerId === 'number')
-      await chrome.tabs.update(workerId, { url: HH_SEARCH, active: false });
+      await browser.tabs.update(workerId, { url: HH_SEARCH, active: false });
 
     return opened;
   }, { keepSpawned: true });
@@ -170,14 +179,14 @@ async function createUnpinned(url: string): Promise<{ id?: number; url: string; 
   if (existing)
     return { id: existing.id, url: existing.url, detached: true };
 
-  const created = await chrome.tabs.create({ url, active: false, pinned: false });
+  const created = await browser.tabs.create({ url, active: false, pinned: false });
   if (typeof created.id !== 'number')
     throw new Error('не удалось открыть вкладку');
 
   await waitTab(created.id, 15_000);
-  const fresh = await chrome.tabs.get(created.id);
+  const fresh = await browser.tabs.get(created.id);
   const unpin = fresh.pinned === true
-    ? chrome.tabs.update(created.id, { pinned: false, active: false })
+    ? browser.tabs.update(created.id, { pinned: false, active: false })
     : Promise.resolve();
   await unpin;
 
@@ -220,7 +229,7 @@ async function resumeHh(tabId: number, url?: string): Promise<WorkerCheck> {
   if (url === undefined)
     return pinned;
 
-  await chrome.tabs.update(tabId, { url, active: false });
+  await browser.tabs.update(tabId, { url, active: false });
   await waitTab(tabId);
 
   return checkWorker();
@@ -228,14 +237,14 @@ async function resumeHh(tabId: number, url?: string): Promise<WorkerCheck> {
 
 async function replaceHh(url: string, oldId?: number): Promise<WorkerCheck> {
   return withStayPut(async () => {
-    const created = await chrome.tabs.create({ url, active: false });
+    const created = await browser.tabs.create({ url, active: false });
     if (typeof created.id !== 'number')
       throw new Error('не удалось открыть HH');
 
     await waitTab(created.id);
     const pinned = await pinWorker(created.id);
     if (typeof oldId === 'number' && oldId !== created.id)
-      await chrome.tabs.remove(oldId).catch(() => {});
+      await browser.tabs.remove(oldId).catch(() => {});
 
     return pinned;
   }, { keepSpawned: true });
@@ -247,7 +256,7 @@ async function dropExtraHhPins(keepId: number): Promise<void> {
     if (row.id === keepId || row.hh === false || row.pinned === false)
       continue;
 
-    await chrome.tabs.remove(row.id).catch(() => {});
+    await browser.tabs.remove(row.id).catch(() => {});
   }
 }
 
@@ -270,10 +279,10 @@ export async function waitTab(tabId: number, timeoutMs = 10_000): Promise<void> 
     };
     function finish(): void {
       clearTimeout(timer);
-      chrome.tabs.onUpdated.removeListener(onUpdated);
+      browser.tabs.onUpdated.removeListener(onUpdated);
       resolve();
     }
 
-    chrome.tabs.onUpdated.addListener(onUpdated);
+    browser.tabs.onUpdated.addListener(onUpdated);
   });
 }

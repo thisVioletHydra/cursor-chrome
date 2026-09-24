@@ -2,6 +2,7 @@ import { startHhJob } from './hh/job';
 import { runApply } from './hh/apply-run';
 import { click, hover, pressKey, selectOption, typeInto } from './page/actions';
 import { byRef, bySelector, snapshot } from './page/snapshot';
+import { browser } from './browser-host';
 
 startHhJob();
 
@@ -48,7 +49,7 @@ const onPageMessage: Record<string, (message: PageIncoming, reply: Reply) => boo
   },
 };
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const type = message?.type;
   if (typeof type !== 'string')
     return false;

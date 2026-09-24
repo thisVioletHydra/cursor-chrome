@@ -2,6 +2,7 @@ import { appendApply, getSyncUrl, listApplies, setSyncUrl, todayCount, waitingHu
 import { getFlags, setFlags } from './flags';
 import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from './human-review';
 import { checkWorker, listJobTabs, openHhBackground, pinWorker } from './worker-tab';
+import { openPinnedWorker } from './worker-open';
 
 type Reply = (value?: unknown) => void;
 type Sender = chrome.runtime.MessageSender;
@@ -68,6 +69,11 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
   },
   'open-hh': (_message, reply) => {
     replyJob(reply, openHhBackground());
+
+    return true;
+  },
+  'open-worker-url': (message, reply) => {
+    replyJob(reply, openPinnedWorker(String(message.url || '')));
 
     return true;
   },

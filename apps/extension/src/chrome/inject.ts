@@ -1,6 +1,7 @@
 import type { CommandName } from '@cursor-chrome/protocol';
 
 import { requireWorkerTab } from './worker-tab';
+import { browser } from '../browser-host';
 
 export const RESTRICTED = /^(chrome|chrome-extension|edge|about|devtools|chrome-search):/i;
 
@@ -23,10 +24,10 @@ export async function ensureContent(tab: chrome.tabs.Tab): Promise<void> {
   const frameIds = await listFrameIds(tabId);
   for (const frameId of frameIds) {
     try {
-      await chrome.tabs.sendMessage(tabId, { type: 'ping' }, { frameId });
+      await browser.tabs.sendMessage(tabId, { type: 'ping' }, { frameId });
     }
     catch {
-      await chrome.scripting.executeScript({
+      await browser.scripting.executeScript({
         target: { tabId, frameIds: [frameId] },
         files: ['content.js'],
       }).catch(() => {});
@@ -36,7 +37,7 @@ export async function ensureContent(tab: chrome.tabs.Tab): Promise<void> {
 
 export async function listFrameIds(tabId: number): Promise<number[]> {
   try {
-    const results = await chrome.scripting.executeScript({
+    const results = await browser.scripting.executeScript({
       target: { tabId, allFrames: true },
       func: () => true,
     });
@@ -58,7 +59,7 @@ export async function frameMessage(
   method: CommandName,
   params: Record<string, unknown>,
 ): Promise<unknown> {
-  const result = await chrome.tabs.sendMessage(tabId, { type: 'command', method, params }, { frameId });
+  const result = await browser.tabs.sendMessage(tabId, { type: 'command', method, params }, { frameId });
   if (result && typeof result === 'object' && 'error' in result)
     throw new Error(String((result as { error: unknown }).error));
 
@@ -71,7 +72,7 @@ export async function workerTopMessage(
 ): Promise<unknown> {
   const tab = await requireWorkerTab();
   await ensureContent(tab);
-  const result = await chrome.tabs.sendMessage(requireTabId(tab), { type, ...extra }, { frameId: 0 });
+  const result = await browser.tabs.sendMessage(requireTabId(tab), { type, ...extra }, { frameId: 0 });
   if (result && typeof result === 'object' && 'error' in result)
     throw new Error(String((result as { error: unknown }).error));
 

@@ -1,3 +1,5 @@
+import { browser } from '../browser-host';
+
 export type Flags = {
   hideJunk: boolean;
   keepSession: boolean;
@@ -7,7 +9,7 @@ const KEY = 'flags';
 const DEFAULTS: Flags = { hideJunk: false, keepSession: false };
 
 export async function getFlags(): Promise<Flags> {
-  const stored = await chrome.storage.local.get(KEY);
+  const stored = await browser.storage.local.get(KEY);
   const raw = stored[KEY];
   if (!raw || typeof raw !== 'object')
     return { ...DEFAULTS };
@@ -22,7 +24,7 @@ export async function getFlags(): Promise<Flags> {
 
 export async function setFlags(patch: Partial<Flags>): Promise<Flags> {
   const next = { ...await getFlags(), ...patch };
-  await chrome.storage.local.set({ [KEY]: next });
+  await browser.storage.local.set({ [KEY]: next });
 
   return next;
 }

@@ -1,3 +1,5 @@
+import { browser } from '../browser-host';
+
 export type ApplyStatus = 'sent' | 'needsHuman';
 
 export type ApplyRecord = {
@@ -52,12 +54,18 @@ export function isJunkApply(item: { title: string; company: string }): boolean {
   return false;
 }
 
+function halfJunk(title: string, company: string): boolean {
+  const titleJunk = title.length > 0 && isJunkApply({ title, company: '' });
+  const companyJunk = company.length > 0 && isJunkApply({ title: 'ok', company });
+
+  return titleJunk || companyJunk;
+}
+
 export async function appendApply(record: ApplyRecord): Promise<ApplyRecord[]> {
   const title = record.title.trim();
   const company = record.company.trim();
 
-  if ((title.length > 0 && isJunkApply({ title, company: '' }))
-    || (company.length > 0 && isJunkApply({ title: 'ok', company })))
+  if (halfJunk(title, company))
     return listApplies();
 
   const safeTitle = title.length > 0 ? title : record.vacancyId;
@@ -72,14 +80,14 @@ export async function appendApply(record: ApplyRecord): Promise<ApplyRecord[]> {
   const log = await listApplies();
   const sameDay = dayKey(normalized.sentAt);
   const dup = log.some((item) => {
-    if (dayKey(item.sentAt) !== sameDay)
-      return false;
-
     if (applyStatus(item) !== applyStatus(normalized))
       return false;
 
-    if (normalized.vacancyId && item.vacancyId === normalized.vacancyId)
+    if (normalized.vacancyId.length > 0 && item.vacancyId === normalized.vacancyId)
       return true;
+
+    if (dayKey(item.sentAt) !== sameDay)
+      return false;
 
     return normalized.vacancyId.length === 0
       && normalized.title.length > 0
@@ -90,7 +98,7 @@ export async function appendApply(record: ApplyRecord): Promise<ApplyRecord[]> {
     return log;
 
   const next = [normalized, ...log].slice(0, MAX);
-  await chrome.storage.local.set({ [LOG_KEY]: next });
+  await browser.storage.local.set({ [LOG_KEY]: next });
   if (applyStatus(normalized) === 'sent')
     void pushRemote(normalized);
 
@@ -98,15 +106,15 @@ export async function appendApply(record: ApplyRecord): Promise<ApplyRecord[]> {
 }
 
 export async function listApplies(): Promise<ApplyRecord[]> {
-  const stored = await chrome.storage.local.get(LOG_KEY);
+  const stored = await browser.storage.local.get(LOG_KEY);
   const raw = stored[LOG_KEY];
   if (Array.isArray(raw) === false)
     return [];
 
   const all = raw.filter(isApplyRecord);
-  const clean = all.filter(item => isJunkApply(item) === false);
+  const clean = uniqueByVacancy(all.filter(item => isJunkApply(item) === false));
   if (clean.length !== all.length)
-    await chrome.storage.local.set({ [LOG_KEY]: clean });
+    await browser.storage.local.set({ [LOG_KEY]: clean });
 
   return clean;
 }
@@ -125,6 +133,7 @@ export function waitingHuman(log: ApplyRecord[]): ApplyRecord[] {
   const sent = new Set(
     log.filter(item => applyStatus(item) === 'sent' && item.vacancyId.length > 0).map(item => item.vacancyId),
   );
+  const seen = new Set<string>();
 
   return log.filter((item) => {
     if (applyStatus(item) !== 'needsHuman')
@@ -133,7 +142,32 @@ export function waitingHuman(log: ApplyRecord[]): ApplyRecord[] {
     if (item.title.length === 0 && item.company.length === 0 && item.vacancyId.length === 0)
       return false;
 
-    return item.vacancyId.length === 0 || sent.has(item.vacancyId) === false;
+    if (item.vacancyId.length === 0)
+      return true;
+
+    if (sent.has(item.vacancyId) || seen.has(item.vacancyId))
+      return false;
+
+    seen.add(item.vacancyId);
+
+    return true;
+  });
+}
+
+function uniqueByVacancy(log: ApplyRecord[]): ApplyRecord[] {
+  const seen = new Set<string>();
+
+  return log.filter((item) => {
+    if (item.vacancyId.length === 0)
+      return true;
+
+    const key = `${applyStatus(item)}:${item.vacancyId}`;
+    if (seen.has(key))
+      return false;
+
+    seen.add(key);
+
+    return true;
   });
 }
 
@@ -142,14 +176,14 @@ export function applyStatus(item: ApplyRecord): ApplyStatus {
 }
 
 export async function getSyncUrl(): Promise<string> {
-  const stored = await chrome.storage.local.get(SYNC_KEY);
+  const stored = await browser.storage.local.get(SYNC_KEY);
   const url = stored[SYNC_KEY];
 
   return typeof url === 'string' ? url : '';
 }
 
 export async function setSyncUrl(url: string): Promise<void> {
-  await chrome.storage.local.set({ [SYNC_KEY]: url.trim() });
+  await browser.storage.local.set({ [SYNC_KEY]: url.trim() });
 }
 
 function isApplyRecord(value: unknown): value is ApplyRecord {

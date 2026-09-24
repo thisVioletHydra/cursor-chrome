@@ -1,0 +1,17 @@
+{
+  "name": "@cursor-chrome/hh",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "scan": "node --experimental-strip-types src/cli.ts scan",
+    "preflight": "node --experimental-strip-types src/cli.ts preflight",
+    "ping": "node --experimental-strip-types src/cli.ts ping"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

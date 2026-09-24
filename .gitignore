@@ -3,3 +3,9 @@ dist
 .DS_Store
 *.tsbuildinfo
 apps/native-host/node.path
+.env
+.env.*
+data/
+seen.json
+owner.json
+web-secrets.json

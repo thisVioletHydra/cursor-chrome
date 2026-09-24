@@ -6,6 +6,7 @@ import { runHhApply } from './hh-apply-cmd';
 import { detachAndLog } from './human-review';
 import { ensureContent, frameMessage, hasTabId, listFrameIds, RESTRICTED, requireTabId } from './inject';
 import { adoptHhWorker, checkWorker, isHhUrl, requireWorkerTab, waitTab } from './worker-tab';
+import { browser } from '../browser-host';
 
 type CommandCtx = {
   method: CommandName;
@@ -67,7 +68,7 @@ export async function pageInfo(): Promise<{ url: string; frames: number; hideJun
   if (check.ok === false || typeof check.tabId !== 'number')
     return { url: '', frames: 0, hideJunk: flags.hideJunk };
 
-  const tab = await chrome.tabs.get(check.tabId);
+  const tab = await browser.tabs.get(check.tabId);
   const frames = hasTabId(tab) ? (await listFrameIds(tab.id)).length : 0;
 
   return { url: tab.url || tab.pendingUrl || '', frames, hideJunk: flags.hideJunk };
@@ -94,14 +95,14 @@ async function newTab(params: Record<string, unknown>): Promise<unknown> {
 }
 
 async function openPlainTab(url: string, background: boolean): Promise<unknown> {
-  const created = await chrome.tabs.create({
+  const created = await browser.tabs.create({
     ...(url ? { url } : {}),
     active: background === false,
   });
   if (hasTabId(created) && url)
     await waitTab(created.id, 15_000);
 
-  const fresh = hasTabId(created) ? await chrome.tabs.get(created.id) : created;
+  const fresh = hasTabId(created) ? await browser.tabs.get(created.id) : created;
 
   return { id: fresh.id, url: fresh.url || url || '' };
 }
@@ -115,9 +116,9 @@ async function navigate(tab: chrome.tabs.Tab, url: string): Promise<unknown> {
 
   const tabId = requireTabId(tab);
   const wait = waitTab(tabId, 15_000);
-  await chrome.tabs.update(tabId, { url, active: false });
+  await browser.tabs.update(tabId, { url, active: false });
   await wait;
-  const fresh = await chrome.tabs.get(tabId);
+  const fresh = await browser.tabs.get(tabId);
 
   return { url: fresh.url || url };
 }
@@ -128,13 +129,13 @@ async function historyNav(tab: chrome.tabs.Tab, delta: number): Promise<unknown>
 
   const tabId = requireTabId(tab);
   const wait = waitTab(tabId, 2_000);
-  await chrome.scripting.executeScript({
+  await browser.scripting.executeScript({
     target: { tabId },
     func: (step: number) => history.go(step),
     args: [delta],
   });
   await wait;
-  const fresh = await chrome.tabs.get(tabId);
+  const fresh = await browser.tabs.get(tabId);
 
   return { url: fresh.url };
 }
@@ -143,12 +144,12 @@ async function screenshot(tab: chrome.tabs.Tab): Promise<{ data: string; mimeTyp
   if (RESTRICTED.test(tab.url || ''))
     throw new Error(`Cannot screenshot restricted URL: ${tab.url}`);
 
-  const windowInfo = await chrome.windows.get(tab.windowId, { populate: true });
+  const windowInfo = await browser.windows.get(tab.windowId, { populate: true });
   const shown = windowInfo.tabs?.find(item => item.active);
   if (shown?.id !== tab.id)
     throw new Error('Worker tab is in the background; use snapshot instead of screenshot');
 
-  const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+  const dataUrl = await browser.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
   const prefix = 'data:image/png;base64,';
   const data = dataUrl.startsWith(prefix) ? dataUrl.slice(prefix.length) : dataUrl;
 

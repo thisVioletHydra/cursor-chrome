@@ -79,14 +79,19 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
         const params: Record<string, unknown> = { background: background !== false };
         if (url)
           params.url = url;
+
         if (detach === true || review === true)
           params.detach = true;
+
         if (title)
           params.title = title;
+
         if (company)
           params.company = company;
+
         if (vacancyId)
           params.vacancyId = vacancyId;
+
         if (hint)
           params.hint = hint;
 

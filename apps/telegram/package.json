@@ -1,0 +1,15 @@
+{
+  "name": "@cursor-chrome/telegram",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types src/index.ts"
+  },
+  "dependencies": {
+    "@cursor-chrome/hh": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

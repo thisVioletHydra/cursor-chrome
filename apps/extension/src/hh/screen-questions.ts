@@ -75,7 +75,7 @@ export function promptFields(): PromptField[] {
 
 export function applyRoot(): HTMLElement | null {
   const scoped = [...document.querySelectorAll<HTMLElement>(APPLY_SEL)]
-    .find(el => visible(el) && APPLY_COPY.test(el.textContent || ''));
+    .find(element => visible(element) && APPLY_COPY.test(element.textContent || ''));
   if (scoped)
     return scoped;
 
@@ -123,12 +123,12 @@ export function isCoverLetter(field: HTMLElement): boolean {
   return /сопровод|письмо/i.test(ph);
 }
 
-function promptText(el: HTMLElement): string {
-  const aria = el.getAttribute('aria-label') || '';
+function promptText(element: HTMLElement): string {
+  const aria = element.getAttribute('aria-label') || '';
   if (aria.length >= 8)
     return aria;
 
-  const clone = el.cloneNode(true) as HTMLElement;
+  const clone = element.cloneNode(true) as HTMLElement;
   for (const nested of clone.querySelectorAll('textarea, input, select, button, a, svg'))
     nested.remove();
 
@@ -177,12 +177,19 @@ function isSubmitTarget(event: Event): boolean {
   return SUBMIT.test(text);
 }
 
+function shouldSkipHandoff(hints: string[], key: string): boolean {
+  const locked = applyLock || inflight;
+  const empty = hints.length === 0 || handed.has(key);
+
+  return locked || empty || thisIsWorker === false;
+}
+
 async function maybeHandoff(): Promise<void> {
   const hints = reviewHints();
   const meta = applyMeta();
   const url = reviewUrl(meta);
   const key = meta.vacancyId || url;
-  if (applyLock || thisIsWorker === false || hints.length === 0 || handed.has(key) || inflight)
+  if (shouldSkipHandoff(hints, key))
     return;
 
   inflight = true;
@@ -218,13 +225,13 @@ export function reviewHints(): string[] {
 
 function offsiteHints(): string[] {
   const hrefs = [...document.querySelectorAll('iframe[src], a[href]')]
-    .map(el => el.getAttribute('src') || (el as HTMLAnchorElement).href || '')
+    .map(element => element.getAttribute('src') || (element as HTMLAnchorElement).href || '')
     .join('\n');
   if (/docs\.google\.com\/forms|forms\.gle\/|typeform\.com|tally\.so/i.test(hrefs))
     return ['гугл-форма / тест'];
 
-  const test = [...document.querySelectorAll('a, button')].some((el) => {
-    return /пройти\s+(тест|задани)/i.test((el.textContent || '').replace(/\s+/g, ' '));
+  const test = [...document.querySelectorAll('a, button')].some((element) => {
+    return /пройти\s+(тест|задани)/i.test((element.textContent || '').replace(/\s+/g, ' '));
   });
 
   return test ? ['гугл-форма / тест'] : [];
@@ -259,8 +266,8 @@ async function refreshWorkerFlag(): Promise<void> {
   thisIsWorker = res?.worker === true;
 }
 
-function visible(el: HTMLElement): boolean {
-  return el.getClientRects().length > 0;
+function visible(element: HTMLElement): boolean {
+  return element.getClientRects().length > 0;
 }
 
 function unique(items: string[]): string[] {

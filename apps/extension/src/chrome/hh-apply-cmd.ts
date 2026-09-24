@@ -1,6 +1,7 @@
 import { handleNeedsHuman } from './human-review';
 import { ensureContent, requireTabId, workerTopMessage } from './inject';
 import { getWorkerTabId, requireWorkerTab, waitTab } from './worker-tab';
+import { browser } from '../browser-host';
 
 type ApplyReply = {
   ok?: boolean;
@@ -36,7 +37,7 @@ async function followNavigation(raw: unknown): Promise<unknown> {
   const tab = await requireWorkerTab();
   const tabId = requireTabId(tab);
   const wait = waitTab(tabId, 15_000);
-  await chrome.tabs.update(tabId, { url: to, active: false });
+  await browser.tabs.update(tabId, { url: to, active: false });
   await wait;
 
   return workerTopMessage('run-apply', { resume: true });

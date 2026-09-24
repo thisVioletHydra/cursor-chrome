@@ -1,4 +1,6 @@
 import { labeledApplies, paintApplyGroup } from './hh/history-list';
+import { openWorkerUrl, pinHere, refreshWorkerPanel } from './popup-pin';
+import { browser } from './browser-host';
 
 type ApplyRecord = {
   title: string;
@@ -17,6 +19,8 @@ type GoodResult = {
 };
 
 type ViewName = 'main' | 'history' | 'settings';
+
+const HH_LABEL = 'Поднять HH';
 
 const verEl = document.getElementById('ver');
 const mainBtn = document.getElementById('make-good') as HTMLButtonElement | null;
@@ -44,14 +48,16 @@ const navs: Record<ViewName, HTMLElement | null> = {
 const syncEl = document.getElementById('sync-url') as HTMLInputElement | null;
 const hideJunkEl = document.getElementById('flag-hide-junk') as HTMLInputElement | null;
 const keepSessionEl = document.getElementById('flag-keep-session') as HTMLInputElement | null;
+const workerUrlForm = document.getElementById('worker-url-form') as HTMLFormElement | null;
 
 if (verEl)
-  verEl.textContent = chrome.runtime.getManifest().version;
+  verEl.textContent = browser.runtime.getManifest().version;
 
 let linked = false;
 
 const clicks: Record<string, () => void> = {
   'make-good': () => void (linked ? hangUp() : makeGood()),
+  'pin-here': () => void pinHere(),
   'go-main': () => show('main'),
   'go-history': () => show('history'),
   'go-settings': () => show('settings'),
@@ -87,11 +93,16 @@ reportEl?.addEventListener('click', () => {
 });
 
 hideJunkEl?.addEventListener('change', () => {
-  void chrome.runtime.sendMessage({ type: 'set-flags', hideJunk: hideJunkEl.checked === true });
+  void browser.runtime.sendMessage({ type: 'set-flags', hideJunk: hideJunkEl.checked === true });
 });
 
 keepSessionEl?.addEventListener('change', () => {
-  void chrome.runtime.sendMessage({ type: 'set-flags', keepSession: keepSessionEl.checked === true });
+  void browser.runtime.sendMessage({ type: 'set-flags', keepSession: keepSessionEl.checked === true });
+});
+
+workerUrlForm?.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void openWorkerUrl();
 });
 
 function show(name: ViewName): void {
@@ -106,6 +117,9 @@ function show(name: ViewName): void {
   syncTabChip();
   if (name === 'history')
     void renderHistory();
+
+  if (name === 'main')
+    void refreshWorkerPanel();
 }
 
 function syncTabChip(): void {
@@ -129,7 +143,7 @@ function paintCta(on: boolean): void {
     return;
 
   mainBtn.classList.toggle('stop', on);
-  mainLabel.textContent = on ? 'Отключить' : 'Сделай хорошо';
+  mainLabel.textContent = on ? 'Отключить' : HH_LABEL;
 }
 
 async function hangUp(): Promise<void> {
@@ -138,7 +152,7 @@ async function hangUp(): Promise<void> {
 
   mainBtn.disabled = true;
   try {
-    await chrome.runtime.sendMessage({ type: 'hangup' });
+    await browser.runtime.sendMessage({ type: 'hangup' });
   }
   catch {
   }
@@ -154,6 +168,7 @@ async function hangUp(): Promise<void> {
     reportEl.hidden = true;
 
   mainBtn.disabled = false;
+  await refreshWorkerPanel();
 }
 
 async function makeGood(): Promise<void> {
@@ -168,7 +183,7 @@ async function makeGood(): Promise<void> {
   pillEl.hidden = true;
   reportEl.hidden = true;
   try {
-    const result = await chrome.runtime.sendMessage({ type: 'make-good' }) as GoodResult;
+    const result = await browser.runtime.sendMessage({ type: 'make-good' }) as GoodResult;
     const report = result?.report || result?.error || 'нет ответа от service worker';
     const ok = result?.ok === true;
     pillEl.hidden = false;
@@ -188,19 +203,20 @@ async function makeGood(): Promise<void> {
       'step: host',
       'reason: service worker asleep',
       `detail: ${error instanceof Error ? error.message : String(error)}`,
-      'fix: reload unpacked и нажми Сделай хорошо',
+      'fix: reload unpacked и нажми Поднять HH',
     ].join('\n');
     paintCta(false);
   }
 
   mainBtn.disabled = false;
+  await refreshWorkerPanel();
 }
 
 async function renderHistory(): Promise<void> {
   if (historyEl === null || todayEl === null)
     return;
 
-  const data = await chrome.runtime.sendMessage({ type: 'apply-history' }) as {
+  const data = await browser.runtime.sendMessage({ type: 'apply-history' }) as {
     log?: ApplyRecord[];
     today?: number;
     waiting?: ApplyRecord[];
@@ -219,11 +235,11 @@ async function renderHistory(): Promise<void> {
 }
 
 async function saveSync(): Promise<void> {
-  await chrome.runtime.sendMessage({ type: 'set-sync-url', url: syncEl?.value || '' });
+  await browser.runtime.sendMessage({ type: 'set-sync-url', url: syncEl?.value || '' });
 }
 
 async function bootSettings(): Promise<void> {
-  const flags = await chrome.runtime.sendMessage({ type: 'get-flags' }) as {
+  const flags = await browser.runtime.sendMessage({ type: 'get-flags' }) as {
     hideJunk?: boolean;
     keepSession?: boolean;
   };
@@ -231,20 +247,20 @@ async function bootSettings(): Promise<void> {
     [hideJunkEl, flags?.hideJunk === true],
     [keepSessionEl, flags?.keepSession === true],
   ];
-  for (const [el, on] of boxes) {
-    if (el)
-      el.checked = on;
+  for (const [element, on] of boxes) {
+    if (element)
+      element.checked = on;
   }
 
-  const sync = await chrome.runtime.sendMessage({ type: 'get-sync-url' }) as { url?: string };
+  const sync = await browser.runtime.sendMessage({ type: 'get-sync-url' }) as { url?: string };
   if (syncEl)
     syncEl.value = sync?.url || '';
 
-  const hist = await chrome.runtime.sendMessage({ type: 'apply-history' }) as { today?: number };
+  const hist = await browser.runtime.sendMessage({ type: 'apply-history' }) as { today?: number };
   if (todayEl)
     todayEl.textContent = String(hist?.today ?? 0);
 
-  const state = await chrome.runtime.sendMessage({ type: 'get-status' }) as { connected?: boolean };
+  const state = await browser.runtime.sendMessage({ type: 'get-status' }) as { connected?: boolean };
   const on = state?.connected === true;
   paintCta(on);
   if (on && pillEl) {
@@ -252,6 +268,8 @@ async function bootSettings(): Promise<void> {
     pillEl.className = 'status ok';
     pillEl.textContent = 'CONNECT';
   }
+
+  await refreshWorkerPanel();
 }
 
 function localDay(ms: number): string {

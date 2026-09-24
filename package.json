@@ -1,10 +1,11 @@
 {
   "name": "cursor-chrome",
-  "version": "0.4.21",
+  "version": "0.4.24",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm -r build",
+    "build": "pnpm -r --if-present build",
+    "preflight": "pnpm --filter @cursor-chrome/hh preflight",
     "dev": "pnpm --filter @cursor-chrome/mcp start",
     "install-host": "pnpm --filter @cursor-chrome/native-host run install-host",
     "lint": "oxlint .",

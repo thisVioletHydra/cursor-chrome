@@ -34,7 +34,7 @@ export async function runMakeGood(link: Link): Promise<GoodReport> {
       step: 'worker',
       reason: 'не удалось открыть HH',
       detail: error instanceof Error ? error.message : String(error),
-      fix: 'открой Edge с unpacked и нажми Сделай хорошо ещё раз',
+      fix: 'открой Edge с unpacked и нажми Поднять HH ещё раз',
     });
   }
 
@@ -91,7 +91,7 @@ export async function runMakeGood(link: Link): Promise<GoodReport> {
     url: worker.url,
     transport: snap.transport,
     detail: snap.detail,
-    fix: 'запусти MCP (pnpm --filter @cursor-chrome/mcp start) и нажми Сделай хорошо ещё раз',
+    fix: 'запусти MCP (pnpm --filter @cursor-chrome/mcp start) и нажми Поднять HH ещё раз',
   });
 }
 
@@ -110,13 +110,14 @@ async function waitSnap(link: Link): Promise<ConnSnap> {
 
 function workerFix(reason?: string): string {
   const fixes: Record<string, string> = {
-    'вкладка не выбрана': 'нажми Сделай хорошо ещё раз — расширение само откроет HH',
-    'вкладка закрыта': 'нажми Сделай хорошо ещё раз — откроем HH в фоне',
-    'не HH': 'открой hh.ru или нажми Сделай хорошо',
-    'пин снят': 'нажми Сделай хорошо — запиним снова',
+    'вкладка не выбрана': 'нажми Поднять HH ещё раз — расширение само откроет HH',
+    'вкладка закрыта': 'нажми Поднять HH ещё раз — откроем HH в фоне',
+    'не HH': 'открой hh.ru или нажми Поднять HH',
+    'не http(s)': 'запинь обычную http(s) вкладку или вставь ссылку внизу',
+    'пин снят': 'нажми Поднять HH — запиним снова',
   };
 
-  return fixes[reason || ''] || 'нажми Сделай хорошо ещё раз';
+  return fixes[reason || ''] || 'нажми Поднять HH ещё раз';
 }
 
 type FailFields = {

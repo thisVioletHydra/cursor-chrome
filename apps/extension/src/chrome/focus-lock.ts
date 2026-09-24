@@ -1,3 +1,5 @@
+import { browser } from '../browser-host';
+
 type Hold = {
   tabId: number;
   windowId: number;
@@ -13,28 +15,28 @@ export function installFocusLock(): void {
     return;
 
   installed = true;
-  chrome.tabs.onCreated.addListener((tab) => {
+  browser.tabs.onCreated.addListener((tab) => {
     if (hold === null || typeof tab.id !== 'number')
       return;
 
     spawned.add(tab.id);
     if (tab.active)
-      void chrome.tabs.update(tab.id, { active: false }).catch(() => {});
+      void browser.tabs.update(tab.id, { active: false }).catch(() => {});
   });
-  chrome.tabs.onActivated.addListener((info) => {
+  browser.tabs.onActivated.addListener((info) => {
     if (hold === null || hold.windowFocused === false || info.tabId === hold.tabId)
       return;
 
-    void chrome.tabs.update(hold.tabId, { active: true }).catch(() => {});
+    void browser.tabs.update(hold.tabId, { active: true }).catch(() => {});
   });
 }
 
 export async function snapshotFocus(): Promise<Hold | null> {
-  const [focused] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  const [focused] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
   if (typeof focused?.id !== 'number')
     return null;
 
-  const win = await chrome.windows.get(focused.windowId);
+  const win = await browser.windows.get(focused.windowId);
 
   return {
     tabId: focused.id,
@@ -49,12 +51,12 @@ export async function restoreFocus(prev: Hold | null): Promise<void> {
 
   try {
     if (prev.windowFocused) {
-      await chrome.tabs.update(prev.tabId, { active: true });
+      await browser.tabs.update(prev.tabId, { active: true });
 
       return;
     }
 
-    await chrome.windows.update(prev.windowId, { focused: false });
+    await browser.windows.update(prev.windowId, { focused: false });
   }
   catch {
   }
@@ -76,7 +78,7 @@ export async function withStayPut<T>(
     spawned.clear();
     if (opts?.keepSpawned !== true) {
       for (const id of extras)
-        await chrome.tabs.remove(id).catch(() => {});
+        await browser.tabs.remove(id).catch(() => {});
     }
 
     await restoreFocus(prev);

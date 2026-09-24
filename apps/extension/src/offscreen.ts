@@ -1,6 +1,7 @@
 import type { CommandName, WsRequest, WsResponse } from '@cursor-chrome/protocol';
 
 import { WS_URL } from '@cursor-chrome/protocol';
+import { browser } from './browser-host';
 
 const CONNECT_BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
 
@@ -19,7 +20,7 @@ function keepAlive(): void {
   catch {
   }
 
-  keepPort = chrome.runtime.connect({ name: 'keepalive' });
+  keepPort = browser.runtime.connect({ name: 'keepalive' });
   keepPort.onDisconnect.addListener(() => {
     keepPort = null;
     setTimeout(keepAlive, 1000);
@@ -36,7 +37,7 @@ setInterval(() => {
 }, 20_000);
 
 function status(connected: boolean, detail = ''): void {
-  void chrome.runtime.sendMessage({ type: 'ws-status', connected, detail }).catch(() => {});
+  void browser.runtime.sendMessage({ type: 'ws-status', connected, detail }).catch(() => {});
 }
 
 function setWsEnabled(enabled: boolean): void {
@@ -121,7 +122,7 @@ function connect(): void {
 
 async function dispatch(request: WsRequest): Promise<WsResponse> {
   try {
-    const result = await chrome.runtime.sendMessage({
+    const result = await browser.runtime.sendMessage({
       type: 'command',
       method: request.method as CommandName,
       params: request.params,
@@ -169,7 +170,7 @@ const onOffscreenMessage: Record<string, (message: { enabled?: unknown }, reply:
   },
 };
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const type = message?.type;
   if (typeof type !== 'string')
     return false;

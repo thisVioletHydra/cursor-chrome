@@ -65,7 +65,7 @@ export function freshSuccess(hadToast: boolean): boolean {
 }
 
 export function findSubmit(): HTMLElement | null {
-  const roots = [applyRoot(), document.body].filter((el): el is HTMLElement => el !== null);
+  const roots = [applyRoot(), document.body].filter((element): element is HTMLElement => element !== null);
 
   for (const root of roots) {
     const qa = root.querySelector<HTMLElement>([
@@ -77,7 +77,7 @@ export function findSubmit(): HTMLElement | null {
       return qa;
 
     const byText = [...root.querySelectorAll<HTMLElement>('button, [role="button"], input[type="submit"]')]
-      .find(el => visible(el) && SUBMIT.test(submitLabel(el)) && /перейти/i.test(submitLabel(el)) === false);
+      .find(element => visible(element) && SUBMIT.test(submitLabel(element)) && /перейти/i.test(submitLabel(element)) === false);
     if (byText)
       return byText;
   }
@@ -91,29 +91,29 @@ export function formErrors(): string[] {
     return [];
 
   return [...root.querySelectorAll<HTMLElement>('[class*="error"], [data-qa*="error"], [aria-invalid="true"]')]
-    .map(el => compact(el.textContent || ''))
+    .map(element => compact(element.textContent || ''))
     .filter(text => text.length > 2 && text.length < 200);
 }
 
 function findMainApply(): HTMLElement | null {
   const byQa = PAGE_QA
     .map(sel => document.querySelector<HTMLElement>(sel))
-    .find(el => el !== null && visible(el) && isRelated(el) === false);
+    .find(element => element !== null && visible(element) && isRelated(element) === false);
   if (byQa)
     return byQa;
 
   return [...document.querySelectorAll<HTMLElement>('button, a, [role="button"]')]
-    .find(el => visible(el) && isApplyText(el) && isRelated(el) === false) ?? null;
+    .find(element => visible(element) && isApplyText(element) && isRelated(element) === false) ?? null;
 }
 
 function mainAction(): HTMLElement | null {
   return PAGE_QA
     .map(sel => document.querySelector<HTMLElement>(sel))
-    .find(el => el !== null && visible(el)) ?? findMainApply();
+    .find(element => element !== null && visible(element)) ?? findMainApply();
 }
 
-function isApplyText(el: HTMLElement): boolean {
-  return compact(el.textContent || '').toLowerCase().startsWith('откликнуться');
+function isApplyText(element: HTMLElement): boolean {
+  return compact(element.textContent || '').toLowerCase().startsWith('откликнуться');
 }
 
 function isRelated(start: HTMLElement): boolean {
@@ -123,8 +123,8 @@ function isRelated(start: HTMLElement): boolean {
   return pageId.length > 0 && meta.vacancyId.length > 0 && meta.vacancyId !== pageId;
 }
 
-function responseHref(el: HTMLElement): string | null {
-  const link = el instanceof HTMLAnchorElement ? el : el.closest('a');
+function responseHref(element: HTMLElement): string | null {
+  const link = element instanceof HTMLAnchorElement ? element : element.closest('a');
   const href = link?.href || '';
   if (/vacancy_response/i.test(href) === false)
     return null;
@@ -132,8 +132,8 @@ function responseHref(el: HTMLElement): string | null {
   return href;
 }
 
-function submitLabel(el: HTMLElement): string {
-  const value = el instanceof HTMLInputElement ? el.value : '';
+function submitLabel(element: HTMLElement): string {
+  const value = element instanceof HTMLInputElement ? element.value : '';
 
-  return compact(`${el.textContent || ''} ${value}`);
+  return compact(`${element.textContent || ''} ${value}`);
 }
