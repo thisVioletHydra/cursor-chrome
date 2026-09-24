@@ -3,10 +3,9 @@ import { ping, scan } from '@cursor-chrome/hh';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import url from 'node:url';
 
 const OWNER_NAME = 'rtxroman';
-const token = process.env.TELEGRAM_BOT_TOKEN ?? '';
-const api = `https://api.telegram.org/bot${token}`;
 
 type Update = {
   update_id: number;
@@ -19,25 +18,62 @@ type Update = {
 
 let offset = 0;
 let stopScan: AbortController | null = null;
+let started = false;
+let polling = false;
+
+export function telegramOn(): boolean {
+  return polling;
+}
+
+function token(): string {
+  return process.env.TELEGRAM_BOT_TOKEN ?? '';
+}
+
+function api(): string {
+  return `https://api.telegram.org/bot${token()}`;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 const ownerFile = path.join(path.dirname(process.env.HH_STORE ?? path.join(process.cwd(), 'data', 'seen.json')), 'owner.json');
 
-async function main(): Promise<void> {
-  if (token.length === 0)
-    throw new Error('нет токена телеги');
+export function startTelegram(): void {
+  if (started)
+    return;
 
+  started = true;
+  void loop();
+}
+
+async function loop(): Promise<void> {
   for (;;) {
-    const updates = await getUpdates();
-    for (const update of updates)
-      await onUpdate(update);
+    if (token().length === 0) {
+      polling = false;
+      await delay(3000);
+      continue;
+    }
+
+    polling = true;
+    try {
+      const updates = await getUpdates();
+      for (const update of updates)
+        await onUpdate(update);
+    }
+    catch (error) {
+      polling = false;
+      console.error(error instanceof Error ? error.message : 'telegram');
+      await delay(3000);
+    }
   }
 }
 
 async function getUpdates(): Promise<Update[]> {
-  const url = new URL(`${api}/getUpdates`);
-  url.searchParams.set('timeout', '30');
-  url.searchParams.set('offset', String(offset));
-  const res = await fetch(url);
+  const updatesUrl = new URL(`${api()}/getUpdates`);
+  updatesUrl.searchParams.set('timeout', '30');
+  updatesUrl.searchParams.set('offset', String(offset));
+  const res = await fetch(updatesUrl);
   if (res.ok === false)
     throw new Error(`telegram ${res.status}`);
 
@@ -131,7 +167,7 @@ async function writeOwner(chatId: number): Promise<void> {
 }
 
 async function send(chatId: number, text: string): Promise<void> {
-  const res = await fetch(`${api}/sendMessage`, {
+  const res = await fetch(`${api()}/sendMessage`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ chat_id: chatId, text }),
@@ -148,4 +184,6 @@ async function pingQuiet(): Promise<string> {
   return failed ? 'HH, телега или Mistral не ответили' : '';
 }
 
-await main();
+const entry = process.argv[1];
+if (entry !== undefined && import.meta.url === url.pathToFileURL(entry).href)
+  startTelegram();

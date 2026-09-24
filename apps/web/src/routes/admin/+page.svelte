@@ -6,6 +6,7 @@ let { data, form } = $props();
   <div>
     <h1 class="text-2xl font-semibold">Админка</h1>
     <p class="text-base-content/70">{data.login}</p>
+    <p class="text-sm">{data.polling ? 'Бот слушает' : 'Бот молчит, нет токена телеги'}</p>
   </div>
   <form method="POST" action="/logout">
     <button class="btn btn-ghost" type="submit">Выйти</button>

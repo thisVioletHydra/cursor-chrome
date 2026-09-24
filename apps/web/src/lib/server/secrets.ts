@@ -43,6 +43,29 @@ export async function writeSecrets(next: Secrets): Promise<void> {
   await fsPromises.writeFile(file, JSON.stringify(next));
 }
 
+const envKeys: Record<keyof Secrets, string> = {
+  telegramToken: 'TELEGRAM_BOT_TOKEN',
+  mistralKey: 'MISTRAL_API_KEY',
+  hhAccessToken: 'HH_ACCESS_TOKEN',
+  hhResumeId: 'HH_RESUME_ID',
+};
+
+export async function applySavedSecrets(): Promise<void> {
+  const saved = await readSecrets();
+  for (const key of Object.keys(envKeys) as (keyof Secrets)[]) {
+    const value = secretValue(key, saved);
+    if (value.length > 0)
+      process.env[envKeys[key]] = value;
+  }
+}
+
+export function publishSecrets(next: Secrets): void {
+  for (const key of Object.keys(envKeys) as (keyof Secrets)[]) {
+    if (next[key].length > 0)
+      process.env[envKeys[key]] = next[key];
+  }
+}
+
 export function secretValue(name: keyof Secrets, saved: Secrets): string {
   const fromEnv: Record<keyof Secrets, string | undefined> = {
     telegramToken: process.env.TELEGRAM_BOT_TOKEN,

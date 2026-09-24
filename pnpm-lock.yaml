@@ -125,6 +125,10 @@ importers:
         version: 5.9.3
 
   apps/web:
+    dependencies:
+      '@cursor-chrome/telegram':
+        specifier: workspace:*
+        version: link:../telegram
     devDependencies:
       '@sveltejs/adapter-node':
         specifier: ^5.4.0

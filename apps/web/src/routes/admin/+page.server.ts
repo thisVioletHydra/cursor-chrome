@@ -1,9 +1,10 @@
 import type { Actions, PageServerLoad } from './$types';
 import type { Secrets } from '$lib/server/secrets';
 
+import { telegramOn } from '@cursor-chrome/telegram';
 import { error, redirect } from '@sveltejs/kit';
 import { checkLinks } from '$lib/server/checks';
-import { readSecrets, secretValue, writeSecrets } from '$lib/server/secrets';
+import { publishSecrets, readSecrets, secretValue, writeSecrets } from '$lib/server/secrets';
 import { allowedLogins, readSession } from '$lib/server/session';
 
 const fields = ['telegramToken', 'mistralKey', 'hhAccessToken', 'hhResumeId'] as const;
@@ -16,7 +17,7 @@ export const load: PageServerLoad = async ({ cookies }) => {
   const saved = await readSecrets();
   const links = await checkLinks();
   const set = Object.fromEntries(fields.map(key => [key, secretValue(key, saved).length > 0]));
-  return { login: session.login, links, set };
+  return { login: session.login, links, set, polling: telegramOn() };
 };
 
 export const actions: Actions = {
@@ -35,6 +36,7 @@ export const actions: Actions = {
     }
 
     await writeSecrets(next);
+    publishSecrets(next);
     return { saved: true };
   },
 };

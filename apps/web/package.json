@@ -7,6 +7,9 @@
     "build": "vite build",
     "start": "node build/index.js"
   },
+  "dependencies": {
+    "@cursor-chrome/telegram": "workspace:*"
+  },
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.4.0",
     "@sveltejs/kit": "^2.43.0",
