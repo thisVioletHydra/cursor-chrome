@@ -18,7 +18,11 @@ export type Labels = {
   hhLabel: string;
 };
 
-export type Stored = Secrets & Labels;
+export type Texts = {
+  coverLetter: string;
+};
+
+export type Stored = Secrets & Labels & Texts;
 
 export type Charge = {
   at: number;
@@ -46,6 +50,7 @@ const empty = (): Account => ({
   telegramLabel: '',
   mistralLabel: '',
   hhLabel: '',
+  coverLetter: '',
   balance: 0,
   history: [],
 });

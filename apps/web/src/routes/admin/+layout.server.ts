@@ -1,6 +1,6 @@
 import type { LayoutServerLoad } from './$types';
 
-import { moscowDay, readMemory, readQueue } from '@cursor-chrome/hh';
+import { COVER_LETTER, moscowDay, readMemory, readQueue } from '@cursor-chrome/hh';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { redirect } from '@sveltejs/kit';
 import { coolLeft } from '$lib/server/admin-actions';
@@ -68,6 +68,7 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
     resumeId: preview ? '' : account.hhResumeId,
     hhQuery: preview ? '' : (account.hhQuery || DEFAULT_QUERY),
     hasExtToken: preview ? false : account.extToken.length > 0,
+    coverLetter: preview ? '' : (account.coverLetter || COVER_LETTER),
     stats: await statsOf(preview),
   };
 };

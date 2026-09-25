@@ -1,6 +1,7 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import type { Stored } from './secrets';
 
+import { COVER_LETTER, splitQueries, suggestQueries } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
 import { probeHh, probeMistral, probeTelegram } from './checks';
 import { isCreator, newExtToken, publishSecrets, readAccount, writeAccount } from './secrets';
@@ -144,7 +145,7 @@ export async function saveQueryAdmin({ request, cookies }: RequestEvent) {
     return { ok: false, detail: 'это просмотр', wait: 0 };
 
   const form = await request.formData();
-  const query = String(form.get('hhQuery') ?? '').trim().slice(0, 200);
+  const query = splitQueries(String(form.get('hhQuery') ?? '').slice(0, 600)).join('\n');
   if (query.length === 0)
     return { ok: false, detail: 'пустой запрос', wait: 0 };
 
@@ -153,6 +154,38 @@ export async function saveQueryAdmin({ request, cookies }: RequestEvent) {
   publishSecrets(login, next);
 
   return { ok: true, detail: query, wait: 0 };
+}
+
+export async function suggestQueryAdmin({ cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const saved = await readAccount(login);
+  if (saved.mistralKey.length === 0)
+    return { ok: false, detail: 'нет ключа mistral', wait: 0 };
+
+  const queries = await suggestQueries(saved.mistralKey, saved.coverLetter || COVER_LETTER).catch(() => []);
+  if (queries.length === 0)
+    return { ok: false, detail: 'mistral не ответил', wait: 0 };
+
+  return { ok: true, detail: queries.join('\n'), wait: 0 };
+}
+
+export async function saveLetterAdmin({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const form = await request.formData();
+  const letter = String(form.get('coverLetter') ?? '').replace(/\r\n/g, '\n').trim().slice(0, 4000);
+  if (letter.length === 0)
+    return { ok: false, detail: 'пустое письмо', wait: 0 };
+
+  const next = { ...await readAccount(login), coverLetter: letter };
+  await writeAccount(login, next);
+
+  return { ok: true, detail: 'Сохранено', wait: 0 };
 }
 
 export async function issueExtTokenAdmin({ cookies }: RequestEvent) {

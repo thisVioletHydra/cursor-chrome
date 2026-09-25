@@ -1,6 +1,7 @@
 import type { Vacancy } from './rules.ts';
 
 import { HH_API, HH_USER_AGENT, PING_MS } from './limits.ts';
+import { splitQueries } from './queries.ts';
 
 type SearchItem = {
   id: string;
@@ -23,12 +24,28 @@ type VacancyCard = {
 const FORM = /https:\/\/docs\.google\.com\/forms\/[^\s"'<>]+/i;
 
 export async function searchVacancies(query: string, limit: number): Promise<Vacancy[]> {
+  const queries = splitQueries(query);
+  if (queries.length === 0)
+    return [];
+
+  const perQuery = Math.ceil(limit / queries.length);
+  const pages = await Promise.all(queries.map(text => searchPage(text, perQuery)));
+  const unique = new Map<string, SearchItem>();
+  for (const item of pages.flat()) {
+    if (unique.has(item.id) === false)
+      unique.set(item.id, item);
+  }
+
+  return Promise.all([...unique.values()].slice(0, limit).map(item => loadCard(item)));
+}
+
+async function searchPage(text: string, limit: number): Promise<SearchItem[]> {
   const url = new URL(`${HH_API}/vacancies`);
-  url.searchParams.set('text', query);
+  url.searchParams.set('text', text);
   url.searchParams.set('per_page', String(limit));
   const page = await hhGet<SearchPage>(url);
-  const cards = await Promise.all((page.items ?? []).slice(0, limit).map(item => loadCard(item)));
-  return cards;
+
+  return page.items ?? [];
 }
 
 async function loadCard(item: SearchItem): Promise<Vacancy> {

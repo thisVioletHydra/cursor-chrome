@@ -16,6 +16,10 @@ export function mistralFromEnv(): Model | null {
 }
 
 export async function askMistral(key: string, prompt: string): Promise<{ verdict: Verdict; reason: string }> {
+  return parseVerdict(await mistralText(key, prompt));
+}
+
+export async function mistralText(key: string, prompt: string): Promise<string> {
   const res = await fetch(URL, {
     method: 'POST',
     signal: AbortSignal.timeout(PING_MS),
@@ -34,7 +38,7 @@ export async function askMistral(key: string, prompt: string): Promise<{ verdict
 
   const body = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
 
-  return parseVerdict(body.choices?.[0]?.message?.content ?? '');
+  return body.choices?.[0]?.message?.content ?? '';
 }
 
 export function parseVerdict(raw: string): { verdict: Verdict; reason: string } {

@@ -9,6 +9,7 @@ const items = [
   { href: '/admin/telegram', label: 'Telegram', exact: false },
   { href: '/admin/mistral', label: 'Mistral', exact: false },
   { href: '/admin/hh', label: 'HeadHunter', exact: false },
+  { href: '/admin/letter', label: 'Сопроводительное', exact: false },
   { href: '/admin/billing', label: 'Billing', exact: false },
 ];
 

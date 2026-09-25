@@ -3,7 +3,7 @@ import type { ApplyBlock } from './apply-detect';
 import { typeInto } from '../page/actions';
 import { applyBlocker } from './apply-detect';
 import { compact, sleep, until, visible } from './dom';
-import { COVER_LETTER } from './letter';
+import { coverLetter } from './letter';
 import { ensureFullstack } from './resume';
 import { applyRoot, isCoverLetter, isStandardQuestion, promptFields } from './screen-questions';
 
@@ -77,9 +77,10 @@ async function insertLetter(): Promise<boolean> {
   if (field === null)
     return false;
 
-  typeInto(field, COVER_LETTER, false);
+  const letter = await coverLetter();
+  typeInto(field, letter, false);
 
-  return fieldHasLetter(field);
+  return fieldHasLetter(field, letter);
 }
 
 async function openLetter(): Promise<void> {
@@ -116,12 +117,13 @@ function letterToggle(): HTMLElement | null {
     .find(element => /добавить сопроводительн|сопроводительное письмо/i.test(compact(element.textContent || ''))) ?? null;
 }
 
-function fieldHasLetter(field: HTMLElement): boolean {
+function fieldHasLetter(field: HTMLElement, letter: string): boolean {
   const value = field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement
     ? field.value
     : (field.textContent || '');
+  const head = compact(letter).slice(0, 40);
 
-  return /selfskills/i.test(value);
+  return compact(value).includes(head);
 }
 
 async function typeOrClick(block: HTMLElement, text: string, re: RegExp): Promise<boolean> {

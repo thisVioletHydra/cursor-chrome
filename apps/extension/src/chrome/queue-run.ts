@@ -3,6 +3,7 @@ import { runHhApply } from './hh-apply-cmd';
 import { requireTabId } from './inject';
 import { adoptHhWorker, requireWorkerTab, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
+import { setCoverLetter } from '../hh/letter';
 
 type QueueItem = { id: string; company: string; title: string; url: string };
 
@@ -101,7 +102,10 @@ async function fetchQueue(base: string, key: string): Promise<QueueItem[] | null
     if (res.ok === false)
       return null;
 
-    const body = await res.json() as { items?: unknown };
+    const body = await res.json() as { items?: unknown; letter?: unknown };
+    if (typeof body.letter === 'string')
+      await setCoverLetter(body.letter);
+
     if (Array.isArray(body.items) === false)
       return [];
 

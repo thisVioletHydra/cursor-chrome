@@ -8,6 +8,7 @@ let openUnlink = $state(false);
 let queryDraft = $state('');
 let queryMessage = $state('');
 let queryOk = $state(false);
+let suggesting = $state(false);
 let extToken = $state('');
 
 $effect(() => {
@@ -104,33 +105,48 @@ function openResume() {
 
 <section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Что искать</h2>
-  <p class="mt-2 text-sm text-zinc-400">Слова для поиска вакансий. Бот берёт их на «старт».</p>
+  <p class="mt-2 text-sm text-zinc-400">Один запрос на строку, бот ищет по каждому. «Подобрать» — Mistral соберёт запросы из фактов о тебе и сопроводительного, потом правишь и сохраняешь.</p>
   {#if queryMessage}
     <p class="mt-3 font-mono text-xs {queryOk ? 'text-emerald-300' : 'text-rose-300'}">{queryMessage}</p>
   {/if}
   <form
-    class="mt-4 flex items-end gap-3"
+    class="mt-4 grid gap-3"
     method="POST"
     action="?/query"
-    use:enhance={() => {
+    use:enhance={({ action }) => {
       queryMessage = '';
+      const suggest = action.search === '?/suggest';
       return async ({ result, update }) => {
+        suggesting = false;
         const body = result.type === 'success' ? result.data : null;
+        const detail = typeof body?.detail === 'string' ? body.detail : 'не вышло';
         queryOk = body?.ok === true;
-        queryMessage = queryOk ? 'Сохранено' : (typeof body?.detail === 'string' ? body.detail : 'не вышло');
+        if (suggest) {
+          queryMessage = queryOk ? 'Подобрал, проверь и сохрани' : detail;
+          if (queryOk)
+            queryDraft = detail;
+          return;
+        }
+
+        queryMessage = queryOk ? 'Сохранено' : detail;
         if (queryOk)
           await update({ reset: false });
       };
     }}
   >
-    <input
-      class="input input-bordered h-11 min-w-0 flex-1 border-white/10 bg-black/30 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
+    <textarea
+      class="textarea textarea-bordered min-h-28 w-full border-white/10 bg-black/30 text-sm leading-6 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
       name="hhQuery"
       autocomplete="off"
-      placeholder="typescript react nestjs"
+      placeholder={'Frontend TypeScript Vue\nFullstack Node.js NestJS'}
       bind:value={queryDraft}
-    />
-    <button class="btn btn-primary h-11 min-h-11 shrink-0 px-4" type="submit" disabled={queryDraft.trim().length === 0 || queryDraft.trim() === data.hhQuery}>Сохранить</button>
+    ></textarea>
+    <div class="flex items-center gap-3">
+      <button class="btn btn-primary h-11 min-h-11 px-4" type="submit" disabled={queryDraft.trim().length === 0 || queryDraft.trim() === data.hhQuery}>Сохранить</button>
+      <button class="btn btn-ghost h-11 min-h-11 px-4" type="submit" formaction="?/suggest" disabled={suggesting} onclick={() => { suggesting = true; }}>
+        {suggesting ? 'Mistral думает' : 'Подобрать'}
+      </button>
+    </div>
   </form>
 </section>
 
