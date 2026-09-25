@@ -39,6 +39,9 @@ let {
   actionHref = '',
   actionLabel = '',
   showActive = true,
+  quiet = false,
+  bare = false,
+  note = $bindable(''),
   ask = $bindable(false),
 }: {
   section: 'telegram' | 'mistral' | 'hh';
@@ -50,6 +53,9 @@ let {
   actionHref?: string;
   actionLabel?: string;
   showActive?: boolean;
+  quiet?: boolean;
+  bare?: boolean;
+  note?: string;
   ask?: boolean;
 } = $props();
 
@@ -78,6 +84,10 @@ const ready = $derived(fields.every(field => (draft[field.name] ?? '').trim().le
 const output = $derived(active ? detail : message);
 const locked = $derived(active || phase === 'checking' || waitLeft > 0);
 const showCheck = $derived(active === false && (ready || phase === 'checking' || waitLeft > 0));
+
+$effect(() => {
+  note = quiet ? (active ? '' : output) : '';
+});
 
 function armWait(seconds: number) {
   waitLeft = seconds;
@@ -133,7 +143,7 @@ $effect(() => {
 
 {#if active === false || showActive}
 <form
-  class="rounded-2xl border border-white/8 bg-[#151922] p-4"
+  class={bare ? '' : 'rounded-2xl border border-white/8 bg-[#151922] p-4'}
   method="POST"
   action="?/verify"
   use:enhance={() => {
@@ -158,7 +168,7 @@ $effect(() => {
   }}
 >
   <input name="section" type="hidden" value={section} />
-  {#if active === false && output}
+  {#if quiet === false && active === false && output}
     <p class="mb-3 font-mono text-xs text-zinc-400">{output}{#if waitLeft > 0} · {waitLeft} с{/if}</p>
   {/if}
   {#if active && showActive}

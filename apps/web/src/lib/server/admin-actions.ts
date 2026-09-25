@@ -81,6 +81,24 @@ export async function verifyAdmin({ request, cookies }: RequestEvent) {
   return { ok: true, detail: probe.detail, wait: 0 };
 }
 
+export async function saveResumeAdmin({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const form = await request.formData();
+  const id = resumeIdOf(String(form.get('hhResumeId') ?? '').trim());
+  if (/^[A-Za-z0-9]{8,}$/.test(id) === false)
+    return { ok: false, detail: 'это не ссылка на резюме', wait: 0 };
+
+  const next = { ...await readAccount(login) };
+  next.hhResumeId = id;
+  await writeAccount(login, next);
+  publishSecrets(login, next);
+
+  return { ok: true, detail: id, wait: 0 };
+}
+
 async function probeSection(section: Section, form: FormData) {
   if (section === 'telegram')
     return probeTelegram(String(form.get('telegramToken') ?? '').trim());
