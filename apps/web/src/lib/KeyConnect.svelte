@@ -38,6 +38,7 @@ function hint(name: string): string {
 }
 
 const ready = $derived(fields.every(field => (draft[field.name] ?? '').trim().length > 0));
+const output = $derived(active ? detail : message);
 const locked = $derived(active || phase === 'checking' || waitLeft > 0);
 const showCheck = $derived(active === false && (ready || phase === 'checking' || waitLeft > 0));
 
@@ -88,7 +89,16 @@ $effect(() => {
   }}
 >
   <input name="section" type="hidden" value={section} />
-  <p class="mb-6 text-sm text-zinc-400">{active ? detail : message}</p>
+  {#if output}
+    <div class="mb-6 overflow-hidden rounded-xl border border-white/10 bg-black font-mono text-xs">
+      <div class="flex gap-1.5 border-b border-white/10 px-3 py-2">
+        <span class="size-2 rounded-full bg-rose-400"></span>
+        <span class="size-2 rounded-full bg-amber-300"></span>
+        <span class="size-2 rounded-full bg-emerald-400"></span>
+      </div>
+      <pre class="px-3 py-3 leading-5 whitespace-pre-wrap text-zinc-300"><span class="text-emerald-400">$</span> {section}{'\n'}{output}{#if waitLeft > 0}{'\n'}retry {waitLeft}s{/if}</pre>
+    </div>
+  {/if}
   <div class="grid gap-6">
     {#each fields as field, index}
       <div class="flex items-end gap-3">
