@@ -1,3 +1,4 @@
+import { askCloud } from './answer';
 import { appendApply, getSyncKey, getSyncUrl, listApplies, setSyncKey, setSyncUrl, todayCount, waitingHuman } from './apply-log';
 import { getFlags, setFlags } from './flags';
 import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from './human-review';
@@ -112,6 +113,12 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
   },
   'run-queue': (_message, reply) => {
     replyJob(reply, runQueue());
+
+    return true;
+  },
+  'answer-question': (message, reply) => {
+    const { type: _type, ...question } = message;
+    replyJob(reply, askCloud(question));
 
     return true;
   },

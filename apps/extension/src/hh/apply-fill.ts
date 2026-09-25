@@ -2,6 +2,7 @@ import type { ApplyBlock } from './apply-detect';
 
 import { typeInto } from '../page/actions';
 import { applyBlocker } from './apply-detect';
+import { ask } from './bridge';
 import { compact, sleep, until, visible } from './dom';
 import { coverLetter } from './letter';
 import { ensureFullstack } from './resume';
@@ -14,7 +15,7 @@ export type FillFail = {
   hints?: string[];
 };
 
-type QuestionKind = 'city' | 'pay' | 'ip' | 'open' | 'schedule' | 'contact' | 'citizen';
+type QuestionKind = 'city' | 'pay' | 'ip' | 'open' | 'schedule' | 'citizen';
 
 const KIND_RE: Array<[QuestionKind, RegExp]> = [
   ['ip', /ип|самозанят|\bгпх\b|контрагент/i],
@@ -22,7 +23,6 @@ const KIND_RE: Array<[QuestionKind, RegExp]> = [
   ['schedule', /график|формат работ/i],
   ['open', /вакансия\s+открыт/i],
   ['pay', /оплат|зарплат|ожидан/i],
-  ['contact', /как\s+(с\s+вами\s+)?связат|способ\s+связи|телефон|e-?mail/i],
   ['citizen', /гражданств/i],
 ];
 
@@ -32,9 +32,20 @@ const FILL: Record<QuestionKind, (block: HTMLElement) => Promise<boolean>> = {
   ip: block => clickChoice(block, /^(да|yes)\b/i),
   open: block => clickChoice(block, /^(да|yes)\b/i),
   schedule: block => clickChoice(block, /удал|remote|дистанц|гибк/i),
-  contact: async () => true,
   citizen: block => typeOrClick(block, 'Кыргызстан', /кыргыз|киргиз/i).then(ok => ok || clickChoice(block, /^(нет|no)\b/i)),
 };
+
+type CloudQuestion = {
+  context: string;
+  prompt: string;
+  kind: 'text' | 'number' | 'choice';
+  options: string[];
+};
+
+type CloudAnswer = { answer?: string; human?: boolean; reason?: string };
+
+const CUSTOM_REASON = 'свои вопросы HH';
+const FIELD_SEL = 'textarea, input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]):not([type="file"]):not([type="submit"])';
 
 export async function fillApply(): Promise<FillFail | null> {
   const resumeOk = await ensureFullstack();
@@ -49,22 +60,101 @@ export async function fillApply(): Promise<FillFail | null> {
 }
 
 async function fillQuestions(): Promise<FillFail | null> {
+  const answered: string[] = [];
   for (const row of promptFields()) {
     const kind = KIND_RE.find(([, re]) => re.test(row.prompt))?.[0];
-    const skip = kind === undefined || isStandardQuestion(row.prompt) === false;
-    if (skip)
-      continue;
+    const known = kind !== undefined && isStandardQuestion(row.prompt);
+    if (known) {
+      const ok = await FILL[kind](row.root);
+      if (ok === false)
+        return humanFail(`не заполнил: ${row.prompt}`, [row.prompt]);
 
-    const ok = await FILL[kind](row.root);
-    if (ok === false && kind !== 'contact')
-      return humanFail(`не заполнил: ${row.prompt}`, [row.prompt]);
+      continue;
+    }
+
+    const fail = await fillByCloud(row.prompt, row.root);
+    if (fail)
+      return fail;
+
+    answered.push(row.prompt);
   }
 
   const blocked = applyBlocker();
-  if (blocked)
+  if (blocked && coveredBy(blocked.reason, blocked.hints, answered) === false)
     return humanFail(blocked.reason, blocked.hints);
 
   return null;
+}
+
+function coveredBy(reason: string, hints: string[], answered: string[]): boolean {
+  if (reason !== CUSTOM_REASON || answered.length === 0)
+    return false;
+
+  const norm = (text: string) => compact(text).toLowerCase();
+  const done = answered.map(norm);
+
+  return hints.every((hint) => {
+    const key = norm(hint);
+
+    return done.some(item => item.includes(key) || key.includes(item));
+  });
+}
+
+async function fillByCloud(prompt: string, block: HTMLElement): Promise<FillFail | null> {
+  const question = describeField(prompt, block);
+  if (question === null)
+    return humanFail(`поле не разобрал: ${prompt}`, [prompt]);
+
+  const reply = await ask<CloudAnswer>({ type: 'answer-question', ...question });
+  const answer = reply?.answer;
+  if (typeof answer !== 'string' || answer.length === 0)
+    return humanFail(`${prompt}: ${reply?.reason || 'нет ответа'}`, [prompt]);
+
+  const ok = question.kind === 'choice'
+    ? clickChoice(block, exactRe(answer))
+    : typeAnswer(block, answer);
+  if (ok === false)
+    return humanFail(`не вставил ответ: ${prompt}`, [prompt]);
+
+  return null;
+}
+
+function describeField(prompt: string, block: HTMLElement): CloudQuestion | null {
+  const context = compact(applyRoot()?.innerText || '').slice(0, 1500);
+  const select = block.querySelector('select');
+  if (select)
+    return { context, prompt, kind: 'choice', options: [...select.options].map(item => compact(item.text)).filter(item => item.length > 0) };
+
+  const choices = [...block.querySelectorAll<HTMLElement>('label, [role="radio"], [role="option"]')]
+    .map(element => compact(element.textContent || ''))
+    .filter(text => text.length > 0 && text.length < 80 && text !== compact(prompt));
+  if (choices.length >= 2)
+    return { context, prompt, kind: 'choice', options: [...new Set(choices)] };
+
+  const field = block.querySelector<HTMLElement>(FIELD_SEL);
+  if (field === null)
+    return null;
+
+  const numeric = field.getAttribute('type') === 'number' || /numeric|decimal/i.test(field.getAttribute('inputmode') || '');
+
+  return { context, prompt, kind: numeric ? 'number' : 'text', options: [] };
+}
+
+function typeAnswer(block: HTMLElement, answer: string): boolean {
+  const field = block.querySelector<HTMLElement>(FIELD_SEL);
+  if (field === null)
+    return false;
+
+  typeInto(field, answer, false);
+  const value = field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement ? field.value : (field.textContent || '');
+
+  return compact(value).includes(compact(answer).slice(0, 20));
+}
+
+function exactRe(text: string): RegExp {
+  const escaped = compact(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  return new RegExp(`^${escaped}$`, 'i');
 }
 
 function humanFail(reason: string, hints: string[]): FillFail {

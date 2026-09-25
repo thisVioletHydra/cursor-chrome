@@ -1,3 +1,5 @@
+export { answerQuestion, asQuestion } from './answer.ts';
+export type { Answer, Question } from './answer.ts';
 export { COVER_LETTER, FACTS } from './copy.ts';
 export { moscowDay, readMemory, remember, writeMemory } from './memory.ts';
 export type { Memory } from './memory.ts';
