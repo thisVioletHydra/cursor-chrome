@@ -25,7 +25,7 @@ const link = $derived(data.links.find(item => item.name === 'HeadHunter'));
 />
 
 <section class="mt-8 rounded-2xl border border-white/8 bg-[#151922] p-7 text-sm leading-7 text-zinc-300">
-  <h2 class="text-base font-semibold text-white">Resume id</h2>
+  <h2 class="text-base font-semibold text-white">Резюме</h2>
   <ol class="mt-4 list-decimal space-y-4 pl-5">
     <li>Жми <Out href="https://hh.ru/applicant/resumes" text="свои резюме" /> и открой Fullstack.</li>
     <li>Скопируй адресную строку и вставь в поле.</li>
