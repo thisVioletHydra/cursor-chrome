@@ -93,6 +93,11 @@ async function onUpdate(update: Update): Promise<void> {
     return;
 
   const text = (message.text ?? '').trim().toLowerCase();
+  if (text === '/start' || text.startsWith('/start ')) {
+    await send(message.chat.id, 'Чат открыт. Кнопки снизу: старт начинает, стоп останавливает.', true);
+    return;
+  }
+
   if (text === 'стоп') {
     stopScan?.abort();
     stopScan = null;
@@ -166,11 +171,17 @@ async function writeOwner(chatId: number): Promise<void> {
   await fsPromises.writeFile(ownerFile, JSON.stringify({ chatId }));
 }
 
-async function send(chatId: number, text: string): Promise<void> {
+async function send(chatId: number, text: string, keys = false): Promise<void> {
   const res = await fetch(`${api()}/sendMessage`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text }),
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      ...(keys
+        ? { reply_markup: { keyboard: [[{ text: 'старт' }, { text: 'стоп' }]], resize_keyboard: true } }
+        : {}),
+    }),
   });
   if (res.ok === false)
     throw new Error(`telegram send ${res.status}`);
