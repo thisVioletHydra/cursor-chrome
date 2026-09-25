@@ -35,12 +35,16 @@ let {
   detail,
   wait,
   fields,
+  actionHref = '',
+  actionLabel = '',
 }: {
   section: 'telegram' | 'mistral' | 'hh';
   active: boolean;
   detail: string;
   wait: number;
   fields: Field[];
+  actionHref?: string;
+  actionLabel?: string;
 } = $props();
 
 let draft: Record<string, string> = $state({});
@@ -112,7 +116,7 @@ $effect(() => {
 </script>
 
 <form
-  class="rounded-2xl border border-white/8 bg-[#151922] p-7"
+  class="rounded-2xl border border-white/8 bg-[#151922] p-4"
   method="POST"
   action="?/verify"
   use:enhance={() => {
@@ -137,17 +141,19 @@ $effect(() => {
   }}
 >
   <input name="section" type="hidden" value={section} />
-  {#if output}
-    <div class="mb-6 overflow-hidden rounded-xl border border-white/10 bg-black font-mono text-xs">
-      <div class="flex gap-1.5 border-b border-white/10 px-3 py-2">
-        <span class="size-2 rounded-full bg-rose-400"></span>
-        <span class="size-2 rounded-full bg-amber-300"></span>
-        <span class="size-2 rounded-full bg-emerald-400"></span>
-      </div>
-      <pre class="px-3 py-3 leading-5 whitespace-pre-wrap text-zinc-300"><span class="text-emerald-400">$</span> {section}{'\n'}{output}{#if waitLeft > 0}{'\n'}retry {waitLeft}s{/if}</pre>
-    </div>
+  {#if active === false && output}
+    <p class="mb-3 font-mono text-xs text-zinc-400">{output}{#if waitLeft > 0} · {waitLeft} с{/if}</p>
   {/if}
-  <div class="grid gap-6">
+  {#if active}
+    <div class="flex flex-wrap items-center gap-3">
+      <p class="min-w-0 flex-1 text-sm text-zinc-200">{detail}</p>
+      {#if actionHref}
+        <a class="btn btn-primary btn-sm" href={actionHref} target="_blank" rel="noreferrer">{actionLabel}</a>
+      {/if}
+      <button class="btn btn-error btn-sm" type="button" onclick={() => { phrase = ''; openUnlink = true; }}>Отвязать</button>
+    </div>
+  {:else}
+  <div class="grid gap-4">
     {#each fields as field, index}
       <div class="flex items-end gap-3">
         <label class="flex min-w-0 flex-1 flex-col gap-2 text-sm text-zinc-400">
@@ -187,13 +193,8 @@ $effect(() => {
       </div>
     {/each}
   </div>
+  {/if}
 </form>
-
-{#if active}
-  <button class="btn btn-error mt-6 h-12 min-h-12 w-72 max-w-full" type="button" onclick={() => { phrase = ''; openUnlink = true; }}>
-    Отвязать
-  </button>
-{/if}
 
 {#if openUnlink}
   <dialog class="modal modal-open">
