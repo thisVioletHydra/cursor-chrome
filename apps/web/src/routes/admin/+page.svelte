@@ -11,7 +11,7 @@ const cards = $derived([
 <header class="mb-8">
   <p class="text-xs tracking-wide text-zinc-500 uppercase">Обзор</p>
   <h1 class="mt-1 text-3xl font-semibold tracking-tight">Сервисы</h1>
-  <p class="mt-2 text-sm text-zinc-500">Карточка или пункт слева ведут в один и тот же раздел. Зелёная рамка значит, что пинг прошёл.</p>
+  <p class="mt-2 text-sm text-zinc-500">Карточка или пункт слева ведут в один и тот же раздел. Зелёная рамка значит, что ключ активирован.</p>
 </header>
 
 <div class="grid gap-4 md:grid-cols-3">

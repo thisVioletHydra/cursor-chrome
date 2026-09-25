@@ -1,5 +1,5 @@
 <script lang="ts">
-import SecretForm from '$lib/SecretForm.svelte';
+import KeyConnect from '$lib/KeyConnect.svelte';
 
 let { data } = $props();
 const link = $derived(data.links.find(item => item.name === 'HeadHunter'));
@@ -17,10 +17,15 @@ const link = $derived(data.links.find(item => item.name === 'HeadHunter'));
   {/if}
 </header>
 
-<SecretForm fields={[
-  { name: 'hhAccessToken', label: 'Access token', secret: true, set: data.set.hhAccessToken },
-  { name: 'hhResumeId', label: 'Resume id', secret: false, set: data.set.hhResumeId },
-]} />
+<KeyConnect
+  section="hh"
+  active={link?.ok === true}
+  detail={link?.detail ?? ''}
+  fields={[
+    { name: 'hhAccessToken', label: 'Access token', secret: true },
+    { name: 'hhResumeId', label: 'Resume id', secret: false },
+  ]}
+/>
 
 <section class="mt-6 rounded-2xl border border-white/8 bg-[#151922] p-5 text-sm leading-6 text-zinc-300">
   <h2 class="text-base font-semibold text-white">Resume id</h2>

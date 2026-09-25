@@ -9,11 +9,22 @@ export type Secrets = {
   hhResumeId: string;
 };
 
-const empty: Secrets = {
+export type Labels = {
+  telegramLabel: string;
+  mistralLabel: string;
+  hhLabel: string;
+};
+
+export type Stored = Secrets & Labels;
+
+const empty: Stored = {
   telegramToken: '',
   mistralKey: '',
   hhAccessToken: '',
   hhResumeId: '',
+  telegramLabel: '',
+  mistralLabel: '',
+  hhLabel: '',
 };
 
 function filePath(): string {
@@ -26,9 +37,9 @@ function filePath(): string {
   return path.join(process.cwd(), 'data', 'web-secrets.json');
 }
 
-export async function readSecrets(): Promise<Secrets> {
+export async function readSecrets(): Promise<Stored> {
   try {
-    const raw = JSON.parse(await fsPromises.readFile(filePath(), 'utf8')) as Partial<Secrets>;
+    const raw = JSON.parse(await fsPromises.readFile(filePath(), 'utf8')) as Partial<Stored>;
 
     return { ...empty, ...raw };
   }
@@ -37,27 +48,7 @@ export async function readSecrets(): Promise<Secrets> {
   }
 }
 
-const UNDO_MS = 15_000;
-let pendingUndo: { at: number; secrets: Secrets } | null = null;
-
-export function stageUndo(previous: Secrets): void {
-  pendingUndo = { at: Date.now(), secrets: { ...previous } };
-}
-
-export function takeUndo(): Secrets | null {
-  if (pendingUndo === null)
-    return null;
-
-  const fresh = Date.now() - pendingUndo.at <= UNDO_MS;
-  const secrets = pendingUndo.secrets;
-  pendingUndo = null;
-  if (fresh === false)
-    return null;
-
-  return secrets;
-}
-
-export async function writeSecrets(next: Secrets): Promise<void> {
+export async function writeSecrets(next: Stored): Promise<void> {
   const file = filePath();
   await fsPromises.mkdir(path.dirname(file), { recursive: true });
   await fsPromises.writeFile(file, JSON.stringify(next));

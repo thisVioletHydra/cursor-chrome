@@ -1,5 +1,5 @@
 <script lang="ts">
-import SecretForm from '$lib/SecretForm.svelte';
+import KeyConnect from '$lib/KeyConnect.svelte';
 
 let { data } = $props();
 const link = $derived(data.links.find(item => item.name === 'Mistral'));
@@ -17,7 +17,12 @@ const link = $derived(data.links.find(item => item.name === 'Mistral'));
   {/if}
 </header>
 
-<SecretForm fields={[{ name: 'mistralKey', label: 'API key', secret: true, set: data.set.mistralKey }]} />
+<KeyConnect
+  section="mistral"
+  active={link?.ok === true}
+  detail={link?.detail ?? ''}
+  fields={[{ name: 'mistralKey', label: 'API key', secret: true }]}
+/>
 
 <section class="mt-6 rounded-2xl border border-white/8 bg-[#151922] p-5 text-sm leading-6 text-zinc-300">
   <h2 class="text-base font-semibold text-white">Где взять ключ</h2>

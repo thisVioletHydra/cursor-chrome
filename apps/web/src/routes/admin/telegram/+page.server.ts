@@ -1,8 +1,8 @@
 import type { Actions } from './$types';
 
-import { saveAdmin, undoAdmin } from '$lib/server/admin-actions';
+import { unlinkAdmin, verifyAdmin } from '$lib/server/admin-actions';
 
 export const actions: Actions = {
-  save: saveAdmin,
-  undo: undoAdmin,
+  verify: verifyAdmin,
+  unlink: unlinkAdmin,
 };

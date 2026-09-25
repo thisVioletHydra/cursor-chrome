@@ -1,11 +1,16 @@
 import type { RequestEvent } from '@sveltejs/kit';
-import type { Secrets } from './secrets';
+import type { Stored } from './secrets';
 
 import { error } from '@sveltejs/kit';
-import { publishSecrets, readSecrets, stageUndo, takeUndo, writeSecrets } from './secrets';
+import { probeHh, probeMistral, probeTelegram } from './checks';
+import { publishSecrets, readSecrets, writeSecrets } from './secrets';
 import { allowedLogins, readSession } from './session';
 
-const fields = ['telegramToken', 'mistralKey', 'hhAccessToken', 'hhResumeId'] as const;
+const sections = ['telegram', 'mistral', 'hh'] as const;
+type Section = typeof sections[number];
+
+const COOLDOWN = 30;
+const coolUntil = new Map<Section, number>();
 
 function guard(cookies: RequestEvent['cookies']) {
   const session = readSession(cookies.get('session'));
@@ -13,34 +18,114 @@ function guard(cookies: RequestEvent['cookies']) {
     error(401, 'нет');
 }
 
-export async function saveAdmin({ request, cookies }: RequestEvent) {
-  guard(cookies);
-  const form = await request.formData();
-  const saved = await readSecrets();
-  const next: Secrets = { ...saved };
-  for (const key of fields) {
-    const value = String(form.get(key) ?? '').trim();
-    if (value.length > 0)
-      next[key] = value;
-  }
+function sectionOf(form: FormData): Section | null {
+  const value = String(form.get('section') ?? '');
 
-  const changed = fields.some(key => next[key] !== saved[key]);
-  if (changed === false)
-    return { saved: false };
-
-  stageUndo(saved);
-  await writeSecrets(next);
-  publishSecrets(next);
-  return { saved: true };
+  return sections.includes(value as Section) ? value as Section : null;
 }
 
-export async function undoAdmin({ cookies }: RequestEvent) {
-  guard(cookies);
-  const previous = takeUndo();
-  if (previous === null)
-    return { undone: false };
+function cooling(section: Section): number {
+  const left = (coolUntil.get(section) ?? 0) - Date.now();
 
-  await writeSecrets(previous);
-  publishSecrets(previous);
-  return { undone: true };
+  return left > 0 ? Math.ceil(left / 1000) : 0;
+}
+
+function hold(section: Section, retryAfter: number): number {
+  const seconds = Math.max(COOLDOWN, retryAfter);
+  coolUntil.set(section, Date.now() + seconds * 1000);
+
+  return seconds;
+}
+
+export async function verifyAdmin({ request, cookies }: RequestEvent) {
+  guard(cookies);
+  const form = await request.formData();
+  const section = sectionOf(form);
+  if (section === null)
+    return { ok: false, detail: 'раздел не тот', wait: 0 };
+
+  const left = cooling(section);
+  if (left > 0)
+    return { ok: false, detail: 'подожди', wait: left };
+
+  const saved = await readSecrets();
+  const next: Stored = { ...saved };
+  const probe = await probeSection(section, form);
+  const wait = probe.ok ? 0 : hold(section, probe.retryAfter);
+  if (probe.ok === false)
+    return { ok: false, detail: probe.detail, wait };
+
+  hold(section, probe.retryAfter);
+  applyProbe(section, next, form, probe.detail);
+  await writeSecrets(next);
+  publishSecrets(next);
+
+  return { ok: true, detail: probe.detail, wait: 0 };
+}
+
+async function probeSection(section: Section, form: FormData) {
+  if (section === 'telegram')
+    return probeTelegram(String(form.get('telegramToken') ?? '').trim());
+
+  if (section === 'mistral')
+    return probeMistral(String(form.get('mistralKey') ?? '').trim());
+
+  return probeHh(
+    String(form.get('hhAccessToken') ?? '').trim(),
+    String(form.get('hhResumeId') ?? '').trim(),
+  );
+}
+
+function applyProbe(section: Section, next: Stored, form: FormData, detail: string) {
+  if (section === 'telegram') {
+    next.telegramToken = String(form.get('telegramToken') ?? '').trim();
+    next.telegramLabel = detail;
+    return;
+  }
+
+  if (section === 'mistral') {
+    next.mistralKey = String(form.get('mistralKey') ?? '').trim();
+    next.mistralLabel = detail;
+    return;
+  }
+
+  next.hhAccessToken = String(form.get('hhAccessToken') ?? '').trim();
+  next.hhResumeId = String(form.get('hhResumeId') ?? '').trim();
+  next.hhLabel = detail;
+}
+
+export async function unlinkAdmin({ request, cookies }: RequestEvent) {
+  guard(cookies);
+  const form = await request.formData();
+  if (String(form.get('phrase') ?? '') !== 'unlink')
+    return { ok: false };
+
+  const section = sectionOf(form);
+  if (section === null)
+    return { ok: false };
+
+  const next: Stored = { ...await readSecrets() };
+  clearSection(section, next);
+  await writeSecrets(next);
+  publishSecrets(next);
+
+  return { ok: true };
+}
+
+function clearSection(section: Section, next: Stored) {
+  if (section === 'telegram') {
+    next.telegramToken = '';
+    next.telegramLabel = '';
+    return;
+  }
+
+  if (section === 'mistral') {
+    next.mistralKey = '';
+    next.mistralLabel = '';
+    return;
+  }
+
+  next.hhAccessToken = '';
+  next.hhResumeId = '';
+  next.hhLabel = '';
 }
