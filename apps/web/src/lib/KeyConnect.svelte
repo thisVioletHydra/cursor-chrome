@@ -26,6 +26,17 @@ let phrase = $state('');
 let tick: ReturnType<typeof setInterval> | undefined;
 let armed = false;
 
+const hints: Record<string, string> = {
+  telegramToken: '7123456789:AAHxx...',
+  mistralKey: 'abcdef0123456789...',
+  hhAccessToken: 'USER...',
+  hhResumeId: 'a1b2c3d4ff0e123456',
+};
+
+function hint(name: string): string {
+  return hints[name] ?? '';
+}
+
 const ready = $derived(fields.every(field => (draft[field.name] ?? '').trim().length > 0));
 const locked = $derived(active || phase === 'checking' || waitLeft > 0);
 const showCheck = $derived(active === false && (ready || phase === 'checking' || waitLeft > 0));
@@ -85,10 +96,11 @@ $effect(() => {
           {field.label}
           <span class="relative block">
             <input
-              class="input input-bordered h-11 w-full border-white/10 bg-black/30 text-zinc-100 focus:border-indigo-400 focus:outline-none disabled:text-transparent"
+              class="input input-bordered h-11 w-full border-white/10 bg-black/30 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none disabled:text-transparent"
               name={field.name}
               type={field.secret ? 'password' : 'text'}
               autocomplete="off"
+              placeholder={active ? '' : hint(field.name)}
               readonly={phase === 'checking'}
               disabled={active}
               bind:value={draft[field.name]}
