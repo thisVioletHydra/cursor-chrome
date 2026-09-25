@@ -46,93 +46,99 @@ function queueSave(event: Event) {
 }
 </script>
 
-<header class="mb-8 flex items-center justify-between">
-  <div>
-    <h1 class="text-2xl font-semibold">Админка</h1>
-    <p class="text-base-content/70">{data.login}</p>
-  </div>
-  <form method="POST" action="/logout">
-    <button class="btn btn-ghost" type="submit">Выйти</button>
-  </form>
-</header>
+<div class="min-h-dvh bg-[#0b0d12] text-zinc-100 lg:grid lg:grid-cols-[232px_1fr]">
+  <aside class="flex items-center justify-between border-b border-white/8 bg-[#10131a] px-5 py-4 lg:flex-col lg:items-stretch lg:justify-between lg:border-r lg:border-b-0 lg:px-4 lg:py-6">
+    <div>
+      <div class="flex items-center gap-3">
+        <span class="grid size-9 place-items-center rounded-xl bg-indigo-500 text-sm font-semibold text-white">H</span>
+        <div>
+          <p class="text-sm font-semibold">Админка</p>
+          <p class="text-xs text-zinc-500">hh-auth</p>
+        </div>
+      </div>
+      <p class="mt-6 hidden rounded-xl bg-white/5 px-3 py-2 text-sm text-zinc-300 lg:block">Обзор</p>
+    </div>
+    <div class="text-right lg:text-left">
+      <p class="text-sm text-zinc-300">{data.login}</p>
+      <form method="POST" action="/logout">
+        <button class="mt-1 text-xs text-zinc-500" type="submit">Выйти</button>
+      </form>
+    </div>
+  </aside>
 
-<form
-  class="flex flex-col gap-6"
-  method="POST"
-  action="?/save"
-  use:enhance={() => {
-    return async ({ result, update }) => {
-      await update({ reset: true });
-      const saved = result.type === 'success' && result.data?.saved === true;
-      const undone = result.type === 'success' && result.data?.undone === true;
-      if (undone) {
-        undoLeft = 0;
-        clearInterval(tick);
-        status = 'откатил';
-        return;
-      }
+  <main class="px-5 py-6 lg:px-10 lg:py-8">
+    <header class="mb-8">
+      <p class="text-xs tracking-wide text-zinc-500 uppercase">Связи</p>
+      <h1 class="mt-1 text-3xl font-semibold tracking-tight">Обзор</h1>
+    </header>
 
-      status = saved ? 'сохранено' : '';
-      if (saved)
-        armUndo();
-    };
-  }}
->
-  <button class="hidden" type="submit" tabindex="-1" aria-hidden="true"></button>
-  <section class="card bg-base-200">
-    <div class="card-body gap-4">
-      <div class="flex items-center justify-between gap-3">
-        <h2 class="card-title">Телега</h2>
-        {#if telegram}
-          <span class="badge {telegram.ok ? 'badge-success' : 'badge-error'}">{telegram.detail}</span>
+    <div class="grid gap-4 md:grid-cols-3">
+      <article class="rounded-2xl border border-white/8 bg-[#151922] p-5">
+        <p class="text-sm text-zinc-400">Телега</p>
+        <p class="mt-3 text-lg font-medium">{telegram?.detail ?? 'нет данных'}</p>
+        <p class="mt-2 text-xs text-zinc-500">{data.polling ? 'Бот слушает' : 'Бот молчит'}</p>
+      </article>
+      <article class="rounded-2xl border border-white/8 bg-[#151922] p-5">
+        <p class="text-sm text-zinc-400">Mistral</p>
+        <p class="mt-3 text-lg font-medium">{mistral?.detail ?? 'нет данных'}</p>
+      </article>
+      <article class="rounded-2xl border border-white/8 bg-[#151922] p-5">
+        <p class="text-sm text-zinc-400">HeadHunter</p>
+        <p class="mt-3 text-lg font-medium">{hh?.detail ?? 'нет данных'}</p>
+      </article>
+    </div>
+
+    <form
+      class="mt-8 rounded-2xl border border-white/8 bg-[#151922] p-5 lg:p-6"
+      method="POST"
+      action="?/save"
+      use:enhance={() => {
+        return async ({ result, update }) => {
+          await update({ reset: true });
+          const saved = result.type === 'success' && result.data?.saved === true;
+          const undone = result.type === 'success' && result.data?.undone === true;
+          if (undone) {
+            undoLeft = 0;
+            clearInterval(tick);
+            status = 'откатил';
+            return;
+          }
+
+          status = saved ? 'сохранено' : '';
+          if (saved)
+            armUndo();
+        };
+      }}
+    >
+      <button class="hidden" type="submit" tabindex="-1" aria-hidden="true"></button>
+      <div class="mb-6 flex items-end justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-semibold">Ключи</h2>
+          <p class="mt-1 text-sm text-zinc-500">{status || 'Пишется само. Пустое поле не затирает сохранённое.'}</p>
+        </div>
+        {#if undoLeft > 0}
+          <button class="rounded-full border border-white/10 px-4 py-2 text-sm" type="submit" formaction="?/undo">Откатить {undoLeft} с</button>
         {/if}
       </div>
-      <p class="text-sm text-base-content/70">{data.polling ? 'Бот слушает' : 'Бот молчит'}</p>
-      <label class="flex flex-col gap-1 text-sm">
-        Токен бота
-        <input class="input input-bordered w-full" name="telegramToken" type="password" autocomplete="off" placeholder={data.set.telegramToken ? 'задан' : 'нет'} oninput={queueSave} onblur={queueSave} />
-      </label>
-    </div>
-  </section>
 
-  <section class="card bg-base-200">
-    <div class="card-body gap-4">
-      <div class="flex items-center justify-between gap-3">
-        <h2 class="card-title">Mistral</h2>
-        {#if mistral}
-          <span class="badge {mistral.ok ? 'badge-success' : 'badge-error'}">{mistral.detail}</span>
-        {/if}
+      <div class="grid gap-6 lg:grid-cols-3">
+        <label class="flex flex-col gap-2 text-sm text-zinc-400">
+          Токен бота
+          <input class="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-zinc-100 outline-none focus:border-indigo-400" name="telegramToken" type="password" autocomplete="off" placeholder={data.set.telegramToken ? 'задан' : 'нет'} oninput={queueSave} onblur={queueSave} />
+        </label>
+        <label class="flex flex-col gap-2 text-sm text-zinc-400">
+          Ключ Mistral
+          <input class="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-zinc-100 outline-none focus:border-indigo-400" name="mistralKey" type="password" autocomplete="off" placeholder={data.set.mistralKey ? 'задан' : 'нет'} oninput={queueSave} onblur={queueSave} />
+        </label>
+        <label class="flex flex-col gap-2 text-sm text-zinc-400">
+          HH access token
+          <input class="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-zinc-100 outline-none focus:border-indigo-400" name="hhAccessToken" type="password" autocomplete="off" placeholder={data.set.hhAccessToken ? 'задан' : 'нет'} oninput={queueSave} onblur={queueSave} />
+        </label>
+        <label class="flex flex-col gap-2 text-sm text-zinc-400 lg:col-span-1">
+          HH resume id
+          <input class="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-zinc-100 outline-none focus:border-indigo-400" name="hhResumeId" autocomplete="off" placeholder={data.set.hhResumeId ? 'задан' : 'нет'} oninput={queueSave} onblur={queueSave} />
+        </label>
       </div>
-      <label class="flex flex-col gap-1 text-sm">
-        Ключ
-        <input class="input input-bordered w-full" name="mistralKey" type="password" autocomplete="off" placeholder={data.set.mistralKey ? 'задан' : 'нет'} oninput={queueSave} onblur={queueSave} />
-      </label>
-    </div>
-  </section>
-
-  <section class="card bg-base-200">
-    <div class="card-body gap-4">
-      <div class="flex items-center justify-between gap-3">
-        <h2 class="card-title">HeadHunter</h2>
-        {#if hh}
-          <span class="badge {hh.ok ? 'badge-success' : 'badge-error'}">{hh.detail}</span>
-        {/if}
-      </div>
-      <label class="flex flex-col gap-1 text-sm">
-        Access token
-        <input class="input input-bordered w-full" name="hhAccessToken" type="password" autocomplete="off" placeholder={data.set.hhAccessToken ? 'задан' : 'нет'} oninput={queueSave} onblur={queueSave} />
-      </label>
-      <label class="flex flex-col gap-1 text-sm">
-        Resume id
-        <input class="input input-bordered w-full" name="hhResumeId" autocomplete="off" placeholder={data.set.hhResumeId ? 'задан' : 'нет'} oninput={queueSave} onblur={queueSave} />
-      </label>
-    </div>
-  </section>
-
-  <div class="flex items-center gap-3">
-    <p class="text-sm text-base-content/70">{status || 'Пишется само. Пустое поле не затирает сохранённое.'}</p>
-    {#if undoLeft > 0}
-      <button class="btn btn-ghost" type="submit" formaction="?/undo">Откатить {undoLeft} с</button>
-    {/if}
-  </div>
-</form>
+    </form>
+  </main>
+</div>
