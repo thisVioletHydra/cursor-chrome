@@ -1,5 +1,6 @@
 <script lang="ts">
 import { enhance } from '$app/forms';
+import { page } from '$app/state';
 import Mark from '$lib/Mark.svelte';
 import Out from '$lib/Out.svelte';
 
@@ -10,6 +11,7 @@ let queryMessage = $state('');
 let queryOk = $state(false);
 let suggesting = $state(false);
 let extToken = $state('');
+const connectLink = $derived(`${page.url.origin}/connect#${extToken}`);
 
 $effect(() => {
   queryDraft = data.hhQuery;
@@ -152,13 +154,13 @@ function openResume() {
 
 <section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Расширение в Chrome</h2>
-  <p class="mt-2 text-sm text-zinc-400">Оно забирает очередь и откликается из твоей вкладки hh.ru. В настройках расширения вставь адрес сайта и этот ключ.</p>
+  <p class="mt-2 text-sm text-zinc-400">Оно забирает очередь и откликается из твоей вкладки hh.ru. Скопируй ссылку подключения и вставь в расширение на главной, в поле «Подключи админку».</p>
   {#if extToken}
     <div class="mt-4 flex items-center gap-3 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm">
-      <span class="min-w-0 flex-1 truncate font-mono text-zinc-100">{extToken}</span>
-      <Mark copy icon text={extToken} />
+      <span class="min-w-0 flex-1 truncate font-mono text-zinc-100">{connectLink}</span>
+      <Mark copy icon text={connectLink} />
     </div>
-    <p class="mt-2 text-xs text-zinc-500">Показан один раз. Потеряешь — выпусти новый, старый перестанет работать.</p>
+    <p class="mt-2 text-xs text-zinc-500">Показана один раз. Потеряешь — выпусти новую, старая перестанет работать.</p>
   {:else}
     <form
       class="mt-4"
@@ -174,9 +176,9 @@ function openResume() {
         };
       }}
     >
-      <button class="btn btn-primary h-11 min-h-11 px-4" type="submit">{data.hasExtToken ? 'Выпустить новый ключ' : 'Выпустить ключ'}</button>
+      <button class="btn btn-primary h-11 min-h-11 px-4" type="submit">{data.hasExtToken ? 'Выпустить новую ссылку' : 'Выпустить ссылку подключения'}</button>
       {#if data.hasExtToken}
-        <span class="ml-3 text-xs text-zinc-500">Ключ уже есть. Новый заменит старый.</span>
+        <span class="ml-3 text-xs text-zinc-500">Расширение уже подключали. Новая ссылка заменит старую.</span>
       {/if}
     </form>
   {/if}

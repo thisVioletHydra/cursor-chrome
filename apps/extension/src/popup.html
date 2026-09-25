@@ -28,7 +28,15 @@
         </svg>
         <span class="cta-label">Поднять HH</span>
       </button>
-      <button id="run-queue" class="pin-primary" type="button" title="забрать очередь из админки и откликнуться из этой вкладки">Разобрать очередь</button>
+      <form id="connect-form" class="connect" autocomplete="off" hidden>
+        <p class="connect-title">Подключи админку</p>
+        <p class="connect-note">В админке → HeadHunter → «Выпустить ключ» → скопируй ссылку подключения и вставь сюда.</p>
+        <input id="connect-link" type="text" placeholder="https://…/connect#ключ" autocomplete="off" />
+        <button id="connect-save" class="pin-primary" type="submit">Подключить</button>
+        <p id="connect-error" class="connect-error" hidden></p>
+      </form>
+      <button id="run-queue" class="pin-primary" type="button" title="забрать очередь из админки и откликнуться из этой вкладки" hidden>Разобрать очередь</button>
+      <p id="connect-line" class="connect-line" hidden></p>
       <p id="pill" class="status" hidden></p>
       <pre id="report" hidden></pre>
     </section>
@@ -64,9 +72,9 @@
       </label>
 
       <details class="sync">
-        <summary>Админка</summary>
-        <input id="sync-url" placeholder="https://web-production-f8ad5.up.railway.app" type="url" />
-        <input id="sync-key" placeholder="ключ расширения из админки" type="password" autocomplete="off" />
+        <summary>Админка вручную</summary>
+        <input id="sync-url" placeholder="https://…" type="url" />
+        <input id="sync-key" placeholder="ключ расширения" type="password" autocomplete="off" />
         <button id="save-sync" class="ghost" type="button">Сохранить</button>
       </details>
     </section>

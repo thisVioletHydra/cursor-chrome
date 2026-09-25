@@ -48,6 +48,10 @@ const navs: Record<ViewName, HTMLElement | null> = {
 const syncEl = document.getElementById('sync-url') as HTMLInputElement | null;
 const syncKeyEl = document.getElementById('sync-key') as HTMLInputElement | null;
 const queueBtn = document.getElementById('run-queue') as HTMLButtonElement | null;
+const connectForm = document.getElementById('connect-form') as HTMLFormElement | null;
+const connectLinkEl = document.getElementById('connect-link') as HTMLInputElement | null;
+const connectErrorEl = document.getElementById('connect-error') as HTMLElement | null;
+const connectLineEl = document.getElementById('connect-line') as HTMLElement | null;
 const hideJunkEl = document.getElementById('flag-hide-junk') as HTMLInputElement | null;
 const showPopEl = document.getElementById('flag-show-pop') as HTMLInputElement | null;
 const keepSessionEl = document.getElementById('flag-keep-session') as HTMLInputElement | null;
@@ -248,6 +252,75 @@ async function saveSync(): Promise<void> {
     syncKeyEl.value = '';
     syncKeyEl.placeholder = 'ключ сохранён';
   }
+
+  await paintConnect();
+}
+
+function parseConnectLink(raw: string): { url: string; key: string } | null {
+  try {
+    const link = new URL(raw.trim());
+    const key = decodeURIComponent(link.hash.replace(/^#/, '')).trim();
+    if (key.length < 16)
+      return null;
+
+    return { url: `${link.protocol}//${link.host}`, key };
+  }
+  catch {
+    return null;
+  }
+}
+
+async function connectFromLink(): Promise<void> {
+  if (connectLinkEl === null || connectErrorEl === null)
+    return;
+
+  const parsed = parseConnectLink(connectLinkEl.value);
+  if (parsed === null) {
+    connectErrorEl.hidden = false;
+    connectErrorEl.textContent = 'Это не ссылка подключения. Нужна вида https://…/connect#ключ';
+    return;
+  }
+
+  connectErrorEl.hidden = true;
+  await browser.runtime.sendMessage({ type: 'set-sync-url', url: parsed.url, key: parsed.key });
+  connectLinkEl.value = '';
+  await paintConnect();
+}
+
+connectForm?.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void connectFromLink();
+});
+
+async function paintConnect(): Promise<void> {
+  const sync = await browser.runtime.sendMessage({ type: 'get-sync-url' }) as { url?: string; hasKey?: boolean };
+  const url = sync?.url || '';
+  const on = sync?.hasKey === true && url.length > 0;
+  if (connectForm)
+    connectForm.hidden = on;
+
+  if (queueBtn)
+    queueBtn.hidden = on === false;
+
+  if (connectLineEl) {
+    connectLineEl.hidden = on === false;
+    connectLineEl.textContent = on ? `Админка: ${hostOf(url)}` : '';
+  }
+
+  if (syncEl)
+    syncEl.value = url;
+
+  if (syncKeyEl && sync?.hasKey === true)
+    syncKeyEl.placeholder = 'ключ сохранён, вставь новый чтобы заменить';
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  }
+  catch {
+    return url;
+  }
 }
 
 type QueueRun = {
@@ -312,12 +385,7 @@ async function bootSettings(): Promise<void> {
       element.checked = on;
   }
 
-  const sync = await browser.runtime.sendMessage({ type: 'get-sync-url' }) as { url?: string; hasKey?: boolean };
-  if (syncEl)
-    syncEl.value = sync?.url || '';
-
-  if (syncKeyEl && sync?.hasKey === true)
-    syncKeyEl.placeholder = 'ключ сохранён, вставь новый чтобы заменить';
+  await paintConnect();
 
   const hist = await browser.runtime.sendMessage({ type: 'apply-history' }) as { today?: number };
   if (todayEl)

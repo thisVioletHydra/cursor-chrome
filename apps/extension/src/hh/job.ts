@@ -4,7 +4,7 @@ import { mountOverlay, refreshOverlay } from './overlay';
 import { pickFullstack } from './resume';
 import { scanScreenQuestions, watchScreenQuestions } from './screen-questions';
 
-const HOST_OK = /(?:^|\.)hh\.ru$/i;
+const HOST_OK = /^(?:www\.)?hh\.ru$/i;
 
 export function startHhJob(): void {
   if (window !== window.top)

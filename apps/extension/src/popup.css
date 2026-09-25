@@ -374,6 +374,59 @@ body {
   color: var(--fog);
 }
 
+.connect {
+  margin: 0 0 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  background: var(--glass);
+}
+
+.connect-title {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.connect-note {
+  margin: 0 0 10px;
+  color: var(--fog);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.connect input {
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 30%);
+  color: #fff;
+  font: inherit;
+  outline: none;
+}
+
+.connect input:focus {
+  border-color: var(--pink);
+}
+
+.connect .pin-primary {
+  margin-bottom: 0;
+}
+
+.connect-error {
+  margin: 8px 0 0;
+  color: #ff7a9a;
+  font-size: 12px;
+}
+
+.connect-line {
+  margin: -4px 0 10px;
+  color: var(--fog);
+  font-size: 12px;
+  text-align: center;
+}
+
 .sync {
   margin-top: 8px;
   color: var(--fog);
