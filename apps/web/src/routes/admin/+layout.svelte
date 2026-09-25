@@ -17,8 +17,8 @@ const current = (href: string) => {
 };
 </script>
 
-<div class="grid min-h-dvh grid-cols-[200px_1fr] bg-[#0b0d12] text-zinc-100">
-  <aside class="flex flex-col justify-between border-r border-white/8 bg-[#10131a] px-4 py-6">
+<div class="grid h-dvh grid-cols-[200px_1fr] overflow-hidden bg-[#0b0d12] text-zinc-100">
+  <aside class="flex h-full flex-col justify-between overflow-hidden border-r border-white/8 bg-[#10131a] px-4 py-6">
     <div>
       <a class="flex items-center gap-3" href="/admin">
         <span class="grid size-9 place-items-center rounded-xl bg-indigo-500 text-sm font-semibold text-white">H</span>
@@ -49,7 +49,7 @@ const current = (href: string) => {
       </form>
     </div>
   </aside>
-  <main class="px-5 py-6 lg:px-10 lg:py-8">
+  <main class="min-h-0 overflow-y-auto px-5 py-6 lg:px-10 lg:py-8">
     {@render children()}
   </main>
 </div>
