@@ -16,6 +16,13 @@ let resumeMessage = $state('');
 let tokenNote = $state('');
 let booted = false;
 
+const curl = `curl -X POST https://hh.ru/oauth/token \\
+  -d grant_type=authorization_code \\
+  -d client_id=CLIENT_ID \\
+  -d client_secret=CLIENT_SECRET \\
+  -d redirect_uri=http://localhost \\
+  -d code=CODE`;
+
 $effect(() => {
   if (booted || typeof sessionStorage === 'undefined')
     return;
@@ -150,18 +157,18 @@ function openResume() {
   {:else}
     <h2 class="text-base font-semibold text-white">Access token</h2>
     <ol class="mt-4 list-decimal space-y-4 pl-5 text-sm leading-6 text-zinc-300">
-      <li>Жми <Out href="https://dev.hh.ru/admin" text="dev.hh.ru/admin" />. Добавь приложение. Redirect: <Mark text="http://localhost" />.</li>
-      <li>В ссылку подставь Client ID и жми её. Разреши доступ. <Mark text="https://hh.ru/oauth/authorize?response_type=code&client_id=ТВОЙ_CLIENT_ID" /></li>
-      <li>Со страницы <Mark text="http://localhost/?code=..." /> скопируй <Mark text="code" />.</li>
+      <li>Жми <Out href="https://dev.hh.ru/admin" text="dev.hh.ru/admin" />. Добавь приложение. Redirect: <Mark copy text="http://localhost" />.</li>
+      <li>В ссылку подставь Client ID и жми её. Разреши доступ. <Mark copy text="https://hh.ru/oauth/authorize?response_type=code&client_id=ТВОЙ_CLIENT_ID" /></li>
+      <li>Со страницы <Mark copy text="http://localhost/?code=..." /> скопируй <Mark text="code" />.</li>
       <li>Вставь в терминал, подставив свои значения. В ответе бери <Mark text="access_token" />.</li>
       <li>Вставь токен и жми <Mark text="Проверить" />.</li>
     </ol>
-    <pre class="mt-4 overflow-x-auto rounded-xl bg-black/40 p-4 text-xs leading-6 text-orange-200/90">curl -X POST https://hh.ru/oauth/token \
-  -d grant_type=authorization_code \
-  -d client_id=CLIENT_ID \
-  -d client_secret=CLIENT_SECRET \
-  -d redirect_uri=http://localhost \
-  -d code=CODE</pre>
+    <div class="relative mt-4">
+      <pre class="overflow-x-auto rounded-xl bg-black/40 p-4 pr-12 text-xs leading-6 text-orange-200/90">{curl}</pre>
+      <span class="absolute top-2 right-2">
+        <Mark copy icon text={curl} />
+      </span>
+    </div>
     <div class="mt-4">
       <KeyConnect
         section="hh"
