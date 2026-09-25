@@ -14,10 +14,11 @@ export async function checkLinks(): Promise<LinkStatus[]> {
   const telegram = secretValue('telegramToken', saved);
   const mistral = secretValue('mistralKey', saved);
   const hh = secretValue('hhAccessToken', saved);
+  const resumeId = secretValue('hhResumeId', saved);
   const [tg, mi, head] = await Promise.all([
     checkTelegram(telegram),
     checkMistral(mistral),
-    checkHh(hh),
+    checkHh(hh, resumeId),
   ]);
   return [tg, mi, head];
 }
@@ -56,17 +57,19 @@ async function checkMistral(key: string): Promise<LinkStatus> {
   return { name: 'Mistral', set: true, ok: true, detail: 'аккаунт отвечает' };
 }
 
-async function checkHh(token: string): Promise<LinkStatus> {
+const hhHeaders = (token: string) => ({
+  authorization: `Bearer ${token}`,
+  'user-agent': 'cursor-chrome-web (workonsunday@yandex.ru)',
+  accept: 'application/json',
+});
+
+async function checkHh(token: string, resumeId: string): Promise<LinkStatus> {
   if (token.length === 0)
     return { name: 'HeadHunter', set: false, ok: false, detail: 'токена нет' };
 
   const res = await fetch('https://api.hh.ru/me', {
     signal: AbortSignal.timeout(TIMEOUT),
-    headers: {
-      authorization: `Bearer ${token}`,
-      'user-agent': 'cursor-chrome-web (workonsunday@yandex.ru)',
-      accept: 'application/json',
-    },
+    headers: hhHeaders(token),
   }).catch(() => null);
   if (res === null)
     return { name: 'HeadHunter', set: true, ok: false, detail: 'нет ответа' };
@@ -74,8 +77,15 @@ async function checkHh(token: string): Promise<LinkStatus> {
   if (res.ok === false)
     return { name: 'HeadHunter', set: true, ok: false, detail: `hh ${res.status}` };
 
-  const body = await res.json() as { email?: string; first_name?: string };
-  const who = body.email || body.first_name || 'аккаунт';
+  if (resumeId.length === 0)
+    return { name: 'HeadHunter', set: true, ok: false, detail: 'токен живой, resume id нет' };
 
-  return { name: 'HeadHunter', set: true, ok: true, detail: `${who} авторизован` };
+  const resume = await fetch(`https://api.hh.ru/resumes/${resumeId}`, {
+    signal: AbortSignal.timeout(TIMEOUT),
+    headers: hhHeaders(token),
+  }).catch(() => null);
+  if (resume === null || resume.ok === false)
+    return { name: 'HeadHunter', set: true, ok: false, detail: 'токен живой, резюме не открылось' };
+
+  return { name: 'HeadHunter', set: true, ok: true, detail: 'токен и резюме на связи' };
 }

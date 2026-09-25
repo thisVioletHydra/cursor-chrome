@@ -4,17 +4,14 @@ import { page } from '$app/stores';
 let { data, children } = $props();
 
 const items = [
-  { href: '/admin', label: 'Главная' },
-  { href: '/admin/telegram', label: 'Телега' },
+  { href: '/admin/telegram', label: 'Telegram' },
   { href: '/admin/mistral', label: 'Mistral' },
   { href: '/admin/hh', label: 'HeadHunter' },
-  { href: '/admin/billing', label: 'Расходы' },
+  { href: '/admin/billing', label: 'Billing' },
 ];
 
 const current = (href: string) => {
   const path = $page.url.pathname;
-  if (href === '/admin')
-    return path === '/admin';
 
   return path === href || path.startsWith(`${href}/`);
 };
@@ -23,13 +20,13 @@ const current = (href: string) => {
 <div class="grid min-h-dvh grid-cols-[200px_1fr] bg-[#0b0d12] text-zinc-100">
   <aside class="flex flex-col justify-between border-r border-white/8 bg-[#10131a] px-4 py-6">
     <div>
-      <div class="flex items-center gap-3">
+      <a class="flex items-center gap-3" href="/admin">
         <span class="grid size-9 place-items-center rounded-xl bg-indigo-500 text-sm font-semibold text-white">H</span>
         <div>
-          <p class="text-sm font-semibold">Админка</p>
+          <p class="text-sm font-semibold">Обзор</p>
           <p class="text-xs text-zinc-500">hh-auth</p>
         </div>
-      </div>
+      </a>
       <nav class="mt-6 flex flex-col gap-1">
         {#each items as item}
           <a
