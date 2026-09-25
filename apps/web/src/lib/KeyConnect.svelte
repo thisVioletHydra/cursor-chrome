@@ -2,6 +2,9 @@
 import { enhance } from '$app/forms';
 
 type Field = { name: string; label: string; secret: boolean };
+type Memory = { draft: Record<string, string>; message: string };
+
+const memory = new Map<string, Memory>();
 
 let {
   section,
@@ -25,6 +28,7 @@ let openUnlink = $state(false);
 let phrase = $state('');
 let tick: ReturnType<typeof setInterval> | undefined;
 let armed = false;
+let restored = $state(false);
 
 const hints: Record<string, string> = {
   telegramToken: '7123456789:AAHxx...',
@@ -54,6 +58,27 @@ function armWait(seconds: number) {
     clearInterval(tick);
   }, 1000);
 }
+
+$effect(() => {
+  if (active)
+    return;
+
+  const kept = memory.get(section);
+  if (kept) {
+    draft = { ...kept.draft };
+    message = kept.message;
+    if (kept.message.length > 0)
+      phase = 'error';
+  }
+  restored = true;
+});
+
+$effect(() => {
+  if (restored === false || active)
+    return;
+
+  memory.set(section, { draft: $state.snapshot(draft), message });
+});
 
 $effect(() => {
   if (armed || wait < 1 || active)
