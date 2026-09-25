@@ -16,18 +16,18 @@ let ask = $state(false);
 
 {#if link?.ok && username}
   <div class="flex items-center gap-3 rounded-2xl border border-white/8 bg-[#151922] px-4 py-3">
-    <a class="flex min-w-0 items-center gap-3" href="https://t.me/{username}" target="_blank" rel="noreferrer">
-      <svg class="size-9 shrink-0 text-sky-400" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-        <path d="M21.5 4.3 2.7 11.5c-1.3.5-1.3 1.2-.2 1.5l4.8 1.5 1.9 5.8c.2.7.1.9.8.9.5 0 .7-.2 1-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.1-14.6c.3-1.2-.5-1.8-1.4-1.3M8.8 14.6l9.3-5.9c.5-.3.9-.1.5.2l-7.6 6.9-.3 3.2z" />
-      </svg>
-      <span class="truncate text-sm text-indigo-300 underline-offset-4 hover:underline">@{username}</span>
-    </a>
+    <svg class="size-9 shrink-0 text-sky-400" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M21.5 4.3 2.7 11.5c-1.3.5-1.3 1.2-.2 1.5l4.8 1.5 1.9 5.8c.2.7.1.9.8.9.5 0 .7-.2 1-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.1-14.6c.3-1.2-.5-1.8-1.4-1.3M8.8 14.6l9.3-5.9c.5-.3.9-.1.5.2l-7.6 6.9-.3 3.2z" />
+    </svg>
+    <div class="min-w-0">
+      <a class="block truncate text-sm text-indigo-300 underline-offset-4 hover:underline" href="https://t.me/{username}" target="_blank" rel="noreferrer">@{username}</a>
+      <p class="mt-0.5 flex items-center gap-1.5 text-xs text-zinc-500">
+        <span class="size-1.5 rounded-full bg-emerald-400"></span>
+        активирован
+      </p>
+    </div>
     <button class="btn btn-error btn-sm ml-auto" type="button" onclick={() => ask = true}>Отвязать</button>
   </div>
-  <p class="mt-3 flex items-center gap-2 text-sm text-zinc-300">
-    <span class="size-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]"></span>
-    активирован
-  </p>
 {/if}
 
 <KeyConnect
