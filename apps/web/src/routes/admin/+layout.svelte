@@ -5,14 +5,17 @@ let { data, children } = $props();
 let accountOpen = $state(false);
 
 const items = [
-  { href: '/admin/telegram', label: 'Telegram' },
-  { href: '/admin/mistral', label: 'Mistral' },
-  { href: '/admin/hh', label: 'HeadHunter' },
-  { href: '/admin/billing', label: 'Billing' },
+  { href: '/admin', label: 'Главная', exact: true },
+  { href: '/admin/telegram', label: 'Telegram', exact: false },
+  { href: '/admin/mistral', label: 'Mistral', exact: false },
+  { href: '/admin/hh', label: 'HeadHunter', exact: false },
+  { href: '/admin/billing', label: 'Billing', exact: false },
 ];
 
-const current = (href: string) => {
+const current = (href: string, exact: boolean) => {
   const path = $page.url.pathname;
+  if (exact)
+    return path === href;
 
   return path === href || path.startsWith(`${href}/`);
 };
@@ -21,17 +24,10 @@ const current = (href: string) => {
 <div class="grid h-dvh grid-cols-[200px_1fr] overflow-hidden bg-[#0b0d12] text-zinc-100">
   <aside class="flex h-full flex-col justify-between overflow-hidden border-r border-white/8 bg-[#10131a] px-4 py-6">
     <div>
-      <a class="flex items-center gap-3" href="/admin">
-        <span class="grid size-9 place-items-center rounded-xl bg-indigo-500 text-sm font-semibold text-white">H</span>
-        <div>
-          <p class="text-sm font-semibold">Обзор</p>
-          <p class="text-xs text-zinc-500">hh-auth</p>
-        </div>
-      </a>
-      <nav class="mt-6 flex flex-col gap-1">
+      <nav class="flex flex-col gap-1">
         {#each items as item}
           <a
-            class="rounded-xl px-3 py-2 text-sm transition hover:bg-white/5 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 {current(item.href) ? 'bg-white/10 text-white' : 'text-zinc-400'}"
+            class="rounded-xl px-3 py-2 text-sm transition hover:bg-white/5 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 {current(item.href, item.exact) ? 'bg-white/10 text-white' : 'text-zinc-400'}"
             href={item.href}
           >{item.label}</a>
         {/each}
