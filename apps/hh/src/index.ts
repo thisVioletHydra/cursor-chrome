@@ -1,6 +1,7 @@
 export { COVER_LETTER, FACTS } from './copy.ts';
 export { moscowDay, readMemory, remember, writeMemory } from './memory.ts';
 export type { Memory } from './memory.ts';
+export { mistralStatus } from './mistral.ts';
 export { ping, pingReasons } from './ping.ts';
 export { splitQueries, suggestQueries } from './queries.ts';
 export { markDone, pending, readQueue } from './queue.ts';

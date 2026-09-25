@@ -1,3 +1,4 @@
+import { mistralStatus } from '@cursor-chrome/hh';
 import { readAccount } from './secrets';
 
 export type LinkStatus = {
@@ -88,15 +89,15 @@ export async function probeMistral(key: string): Promise<Probe> {
   if (key.length === 0)
     return { ok: false, detail: 'ключа нет', retryAfter: 0 };
 
-  const res = await fetch('https://api.mistral.ai/v1/models', {
-    signal: AbortSignal.timeout(TIMEOUT),
-    headers: { authorization: `Bearer ${key}` },
-  }).catch(() => null);
-  if (res === null)
+  const status = await mistralStatus(key, TIMEOUT).catch(() => 0);
+  if (status === 0)
     return { ok: false, detail: 'нет ответа', retryAfter: 0 };
 
-  if (res.ok === false)
-    return { ok: false, detail: `mistral ${res.status}`, retryAfter: await retryAfter(res) };
+  if (status === 429)
+    return { ok: false, detail: 'mistral 429: у ключа нет плана или кончилась квота', retryAfter: 5 };
+
+  if (status >= 400)
+    return { ok: false, detail: `mistral ${status}`, retryAfter: 0 };
 
   return { ok: true, detail: 'Ключ активирован', retryAfter: 0 };
 }

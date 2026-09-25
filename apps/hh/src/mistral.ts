@@ -41,6 +41,24 @@ export async function mistralText(key: string, prompt: string, timeoutMs = PING_
   return body.choices?.[0]?.message?.content ?? '';
 }
 
+export async function mistralStatus(key: string, timeoutMs = PING_MS): Promise<number> {
+  const res = await fetch(URL, {
+    method: 'POST',
+    signal: AbortSignal.timeout(timeoutMs),
+    headers: {
+      authorization: `Bearer ${key}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: process.env.MISTRAL_MODEL ?? 'mistral-small-latest',
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'ok' }],
+    }),
+  });
+
+  return res.status;
+}
+
 export function parseVerdict(raw: string): { verdict: Verdict; reason: string } {
   const match = raw.match(/\{[\s\S]*\}/);
   if (match === null)

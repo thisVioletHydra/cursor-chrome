@@ -1,4 +1,5 @@
 import { HH_API, HH_USER_AGENT, PING_MS } from './limits.ts';
+import { mistralStatus } from './mistral.ts';
 
 import process from 'node:process';
 
@@ -55,13 +56,13 @@ async function pingMistral(): Promise<void> {
   if (key.length === 0)
     throw new Error('нет ключа mistral');
 
-  const res = await fetch('https://api.mistral.ai/v1/models', {
-    signal: AbortSignal.timeout(PING_MS),
-    headers: { authorization: `Bearer ${key}` },
-  }).catch(() => null);
-  if (res === null)
+  const status = await mistralStatus(key).catch(() => 0);
+  if (status === 0)
     throw new Error('mistral не ответил');
 
-  if (res.ok === false)
-    throw new Error(`mistral ${res.status}`);
+  if (status === 429)
+    throw new Error('mistral 429, у ключа нет плана или кончилась квота');
+
+  if (status >= 400)
+    throw new Error(`mistral ${status}`);
 }

@@ -138,12 +138,20 @@ async function run(chatId: number): Promise<void> {
   stopScan = new AbortController();
   const live = process.env.HH_LIVE === '1';
   const query = process.env.HH_QUERY || 'typescript react nestjs';
-  const reports = await scan({
-    query,
-    dry: live === false,
-    live,
-    signal: stopScan.signal,
-  });
+  let reports: Awaited<ReturnType<typeof scan>>;
+  try {
+    reports = await scan({
+      query,
+      dry: live === false,
+      live,
+      signal: stopScan.signal,
+    });
+  }
+  catch (error) {
+    stopScan = null;
+    await send(chatId, `Упал: ${error instanceof Error ? error.message : 'без причины'}.`);
+    return;
+  }
   stopScan = null;
   for (const report of reports) {
     if (report.verdict === 'apply' && live && onApply !== null) {
