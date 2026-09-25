@@ -46,8 +46,8 @@ function queueSave(event: Event) {
 }
 </script>
 
-<div class="min-h-dvh bg-[#0b0d12] text-zinc-100 lg:grid lg:grid-cols-[232px_1fr]">
-  <aside class="flex items-center justify-between border-b border-white/8 bg-[#10131a] px-5 py-4 lg:flex-col lg:items-stretch lg:justify-between lg:border-r lg:border-b-0 lg:px-4 lg:py-6">
+<div class="grid min-h-dvh grid-cols-[200px_1fr] bg-[#0b0d12] text-zinc-100">
+  <aside class="flex flex-col justify-between border-r border-white/8 bg-[#10131a] px-4 py-6">
     <div>
       <div class="flex items-center gap-3">
         <span class="grid size-9 place-items-center rounded-xl bg-indigo-500 text-sm font-semibold text-white">H</span>
@@ -56,9 +56,9 @@ function queueSave(event: Event) {
           <p class="text-xs text-zinc-500">hh-auth</p>
         </div>
       </div>
-      <p class="mt-6 hidden rounded-xl bg-white/5 px-3 py-2 text-sm text-zinc-300 lg:block">Обзор</p>
+      <p class="mt-6 rounded-xl bg-white/5 px-3 py-2 text-sm text-zinc-300">Обзор</p>
     </div>
-    <div class="text-right lg:text-left">
+    <div>
       <p class="text-sm text-zinc-300">{data.login}</p>
       <form method="POST" action="/logout">
         <button class="mt-1 text-xs text-zinc-500" type="submit">Выйти</button>
@@ -121,7 +121,7 @@ function queueSave(event: Event) {
         {/if}
       </div>
 
-      <div class="grid gap-6 lg:grid-cols-3">
+      <div class="grid gap-6 md:grid-cols-2">
         <label class="flex flex-col gap-2 text-sm text-zinc-400">
           Токен бота
           <input class="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-zinc-100 outline-none focus:border-indigo-400" name="telegramToken" type="password" autocomplete="off" placeholder={data.set.telegramToken ? 'задан' : 'нет'} oninput={queueSave} onblur={queueSave} />
@@ -134,7 +134,7 @@ function queueSave(event: Event) {
           HH access token
           <input class="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-zinc-100 outline-none focus:border-indigo-400" name="hhAccessToken" type="password" autocomplete="off" placeholder={data.set.hhAccessToken ? 'задан' : 'нет'} oninput={queueSave} onblur={queueSave} />
         </label>
-        <label class="flex flex-col gap-2 text-sm text-zinc-400 lg:col-span-1">
+        <label class="flex flex-col gap-2 text-sm text-zinc-400">
           HH resume id
           <input class="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-zinc-100 outline-none focus:border-indigo-400" name="hhResumeId" autocomplete="off" placeholder={data.set.hhResumeId ? 'задан' : 'нет'} oninput={queueSave} onblur={queueSave} />
         </label>
