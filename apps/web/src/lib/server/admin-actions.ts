@@ -165,11 +165,16 @@ export async function suggestQueryAdmin({ cookies }: RequestEvent) {
   if (saved.mistralKey.length === 0)
     return { ok: false, detail: 'нет ключа mistral', wait: 0 };
 
-  const queries = await suggestQueries(saved.mistralKey, saved.coverLetter || COVER_LETTER).catch(() => []);
-  if (queries.length === 0)
-    return { ok: false, detail: 'mistral не ответил', wait: 0 };
+  try {
+    const queries = await suggestQueries(saved.mistralKey, saved.coverLetter || COVER_LETTER);
 
-  return { ok: true, detail: queries.join('\n'), wait: 0 };
+    return { ok: true, detail: queries.join('\n'), wait: 0 };
+  }
+  catch (err) {
+    const why = err instanceof Error ? err.message : 'без ответа';
+
+    return { ok: false, detail: `mistral: ${why}`, wait: 0 };
+  }
 }
 
 export async function saveLetterAdmin({ request, cookies }: RequestEvent) {

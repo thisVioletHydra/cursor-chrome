@@ -2,11 +2,15 @@ import { FACTS } from './copy.ts';
 import { mistralText } from './mistral.ts';
 
 const MAX_QUERIES = 5;
+const SUGGEST_MS = 25_000;
 
 export async function suggestQueries(key: string, letter: string): Promise<string[]> {
-  const raw = await mistralText(key, queriesPrompt(letter));
+  const raw = await mistralText(key, queriesPrompt(letter), SUGGEST_MS);
+  const queries = parseQueries(raw);
+  if (queries.length === 0)
+    throw new Error(`ответ без списка: ${raw.slice(0, 80)}`);
 
-  return parseQueries(raw);
+  return queries;
 }
 
 export function queriesPrompt(letter: string): string {

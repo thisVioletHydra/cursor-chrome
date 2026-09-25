@@ -19,10 +19,10 @@ export async function askMistral(key: string, prompt: string): Promise<{ verdict
   return parseVerdict(await mistralText(key, prompt));
 }
 
-export async function mistralText(key: string, prompt: string): Promise<string> {
+export async function mistralText(key: string, prompt: string, timeoutMs = PING_MS): Promise<string> {
   const res = await fetch(URL, {
     method: 'POST',
-    signal: AbortSignal.timeout(PING_MS),
+    signal: AbortSignal.timeout(timeoutMs),
     headers: {
       authorization: `Bearer ${key}`,
       'content-type': 'application/json',
