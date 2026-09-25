@@ -17,7 +17,14 @@ export type Labels = {
 
 export type Stored = Secrets & Labels;
 
-const empty: Stored = {
+export type Account = Stored & {
+  balance: number;
+};
+
+export const CREATOR = 'thisVioletHydra';
+export const VACANCY_RUB = 1;
+
+const empty = (): Account => ({
   telegramToken: '',
   mistralKey: '',
   hhAccessToken: '',
@@ -25,31 +32,47 @@ const empty: Stored = {
   telegramLabel: '',
   mistralLabel: '',
   hhLabel: '',
-};
+  balance: 0,
+});
 
-function filePath(): string {
+export function isCreator(login: string): boolean {
+  return login.toLowerCase() === CREATOR.toLowerCase();
+}
+
+function rootDir(): string {
   if (process.env.WEB_SECRETS)
-    return process.env.WEB_SECRETS;
+    return path.dirname(process.env.WEB_SECRETS);
 
   if (process.env.RAILWAY_ENVIRONMENT)
-    return '/data/web-secrets.json';
+    return '/data';
 
-  return path.join(process.cwd(), 'data', 'web-secrets.json');
+  return path.join(process.cwd(), 'data');
 }
 
-export async function readSecrets(): Promise<Stored> {
-  try {
-    const raw = JSON.parse(await fsPromises.readFile(filePath(), 'utf8')) as Partial<Stored>;
+function safeLogin(login: string): string {
+  if (/^[A-Za-z0-9-]{1,39}$/.test(login) === false)
+    throw new Error('login');
 
-    return { ...empty, ...raw };
+  return login;
+}
+
+function accountPath(login: string): string {
+  return path.join(rootDir(), 'accounts', `${safeLogin(login)}.json`);
+}
+
+export async function readAccount(login: string): Promise<Account> {
+  try {
+    const raw = JSON.parse(await fsPromises.readFile(accountPath(login), 'utf8')) as Partial<Account>;
+
+    return { ...empty(), ...raw, balance: typeof raw.balance === 'number' ? raw.balance : 0 };
   }
   catch {
-    return { ...empty };
+    return empty();
   }
 }
 
-export async function writeSecrets(next: Stored): Promise<void> {
-  const file = filePath();
+export async function writeAccount(login: string, next: Account): Promise<void> {
+  const file = accountPath(login);
   await fsPromises.mkdir(path.dirname(file), { recursive: true });
   await fsPromises.writeFile(file, JSON.stringify(next));
 }
@@ -62,15 +85,17 @@ const envKeys: Record<keyof Secrets, string> = {
 };
 
 export async function applySavedSecrets(): Promise<void> {
-  const saved = await readSecrets();
+  const saved = await readAccount(CREATOR);
   for (const key of Object.keys(envKeys) as (keyof Secrets)[]) {
-    const value = secretValue(key, saved);
-    if (value.length > 0)
-      process.env[envKeys[key]] = value;
+    if (saved[key].length > 0)
+      process.env[envKeys[key]] = saved[key];
   }
 }
 
-export function publishSecrets(next: Secrets): void {
+export function publishSecrets(login: string, next: Secrets): void {
+  if (isCreator(login) === false)
+    return;
+
   for (const key of Object.keys(envKeys) as (keyof Secrets)[]) {
     if (next[key].length > 0)
       process.env[envKeys[key]] = next[key];
@@ -79,12 +104,16 @@ export function publishSecrets(next: Secrets): void {
   }
 }
 
-export function secretValue(name: keyof Secrets, saved: Secrets): string {
-  const fromEnv: Record<keyof Secrets, string | undefined> = {
-    telegramToken: process.env.TELEGRAM_BOT_TOKEN,
-    mistralKey: process.env.MISTRAL_API_KEY,
-    hhAccessToken: process.env.HH_ACCESS_TOKEN,
-    hhResumeId: process.env.HH_RESUME_ID,
-  };
-  return fromEnv[name] || saved[name] || '';
+export async function takeVacancy(login: string): Promise<boolean> {
+  if (isCreator(login))
+    return true;
+
+  const account = await readAccount(login);
+  if (account.balance < VACANCY_RUB)
+    return false;
+
+  account.balance -= VACANCY_RUB;
+  await writeAccount(login, account);
+
+  return true;
 }

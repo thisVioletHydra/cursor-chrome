@@ -1,50 +1,22 @@
-<header class="mb-6">
+<script lang="ts">
+import { page } from '$app/stores';
+</script>
+
+<header class="mb-8">
   <p class="text-xs tracking-wide text-zinc-500 uppercase">Billing</p>
-  <h1 class="mt-1 text-3xl font-semibold tracking-tight">Расходы</h1>
+  <h1 class="mt-2 text-3xl font-semibold tracking-tight">Расходы</h1>
 </header>
 
-<div class="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-  <article class="rounded-2xl border border-white/8 bg-[#151922] p-6">
-    <div class="flex items-start justify-between gap-4">
-      <div>
-        <p class="text-sm text-zinc-400">Кредит на месяц</p>
-        <p class="mt-2 text-4xl font-semibold tracking-tight">$4.60</p>
-        <p class="mt-1 text-sm text-zinc-500">осталось из $10</p>
-      </div>
-      <div class="grid size-24 place-items-center rounded-full bg-[conic-gradient(#818cf8_0_166deg,#ffffff14_166deg_360deg)]">
-        <div class="grid size-16 place-items-center rounded-full bg-[#151922] text-sm text-zinc-300">46%</div>
-      </div>
-    </div>
-    <div class="mt-6 h-2 overflow-hidden rounded-full bg-white/10">
-      <div class="h-full w-[46%] rounded-full bg-indigo-400"></div>
-    </div>
+{#if $page.data.billing.infinite}
+  <article class="max-w-md rounded-2xl border border-indigo-400/40 bg-[#151922] p-6">
+    <p class="text-sm text-zinc-400">Создатель</p>
+    <p class="mt-3 text-6xl leading-none text-indigo-300">∞</p>
+    <p class="mt-4 text-sm text-zinc-400">Лимита нет. Вакансии не списываются.</p>
   </article>
-  <article class="rounded-2xl border border-white/8 bg-[#151922] p-6">
-    <p class="text-xs tracking-wide text-zinc-500 uppercase">План</p>
-    <p class="mt-3 text-2xl font-semibold">Hobby</p>
-    <p class="mt-2 text-sm text-zinc-400">$5 / мес</p>
+{:else}
+  <article class="max-w-md rounded-2xl border border-white/8 bg-[#151922] p-6">
+    <p class="text-sm text-zinc-400">Баланс</p>
+    <p class="mt-3 text-5xl font-semibold tracking-tight">{$page.data.billing.balance} ₽</p>
+    <p class="mt-4 text-sm text-zinc-400">1 вакансия = {$page.data.billing.vacancyRub} ₽. Сколько на счёте, столько откликов.</p>
   </article>
-</div>
-
-<section class="mt-4 rounded-2xl border border-white/8 bg-[#151922]">
-  <div class="grid grid-cols-[1fr_auto_auto] gap-4 border-b border-white/8 px-5 py-3 text-xs text-zinc-500">
-    <span>Строка</span>
-    <span>Период</span>
-    <span>Сумма</span>
-  </div>
-  <div class="grid grid-cols-[1fr_auto_auto] gap-4 px-5 py-4 text-sm">
-    <span>План</span>
-    <span class="text-zinc-400">сен 2026</span>
-    <span>$5.00</span>
-  </div>
-  <div class="grid grid-cols-[1fr_auto_auto] gap-4 border-t border-white/8 px-5 py-4 text-sm">
-    <span>Mistral</span>
-    <span class="text-zinc-400">сен 2026</span>
-    <span>$0.40</span>
-  </div>
-  <div class="grid grid-cols-[1fr_auto_auto] gap-4 border-t border-white/8 px-5 py-4 text-sm">
-    <span>Итого</span>
-    <span class="text-zinc-400">сен 2026</span>
-    <span>$5.40</span>
-  </div>
-</section>
+{/if}

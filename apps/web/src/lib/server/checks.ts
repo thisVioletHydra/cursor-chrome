@@ -1,4 +1,4 @@
-import { secretValue, readSecrets } from './secrets';
+import { readAccount } from './secrets';
 
 export type LinkStatus = {
   name: string;
@@ -15,12 +15,12 @@ export type Probe = {
 
 const TIMEOUT = 8_000;
 
-export async function storedLinks(): Promise<LinkStatus[]> {
-  const saved = await readSecrets();
-  const telegram = secretValue('telegramToken', saved);
-  const mistral = secretValue('mistralKey', saved);
-  const hh = secretValue('hhAccessToken', saved);
-  const resumeId = secretValue('hhResumeId', saved);
+export async function storedLinks(login: string): Promise<LinkStatus[]> {
+  const saved = await readAccount(login);
+  const telegram = saved.telegramToken;
+  const mistral = saved.mistralKey;
+  const hh = saved.hhAccessToken;
+  const resumeId = saved.hhResumeId;
   const hhOn = hh.length > 0 && resumeId.length > 0;
 
   return [

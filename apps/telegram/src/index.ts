@@ -20,9 +20,14 @@ let offset = 0;
 let stopScan: AbortController | null = null;
 let started = false;
 let polling = false;
+let onApply: (() => Promise<boolean>) | null = null;
 
 export function telegramOn(): boolean {
   return polling;
+}
+
+export function setApplyGate(gate: () => Promise<boolean>): void {
+  onApply = gate;
 }
 
 function token(): string {
@@ -132,8 +137,14 @@ async function run(chatId: number): Promise<void> {
     signal: stopScan.signal,
   });
   stopScan = null;
-  for (const report of reports)
+  for (const report of reports) {
+    if (report.verdict === 'apply' && onApply !== null && await onApply() === false) {
+      await send(chatId, 'Баланс кончился. Вакансия стоит 1 ₽.');
+      break;
+    }
+
     await send(chatId, report.line);
+  }
 
   if (reports.length === 0)
     await send(chatId, 'Пусто.');

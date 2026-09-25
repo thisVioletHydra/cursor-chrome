@@ -3,7 +3,7 @@ import type { Stored } from './secrets';
 
 import { error } from '@sveltejs/kit';
 import { probeHh, probeMistral, probeTelegram } from './checks';
-import { publishSecrets, readSecrets, writeSecrets } from './secrets';
+import { publishSecrets, readAccount, writeAccount } from './secrets';
 import { allowedLogins, readSession } from './session';
 
 const sections = ['telegram', 'mistral', 'hh'] as const;
@@ -12,10 +12,12 @@ type Section = typeof sections[number];
 const COOLDOWN = 30;
 const coolUntil = new Map<Section, number>();
 
-function guard(cookies: RequestEvent['cookies']) {
+function guard(cookies: RequestEvent['cookies']): string {
   const session = readSession(cookies.get('session'));
   if (session === null || allowedLogins().includes(session.login) === false)
     error(401, 'нет');
+
+  return session.login;
 }
 
 function sectionOf(form: FormData): Section | null {
@@ -42,7 +44,7 @@ function hold(section: Section, retryAfter: number): number {
 }
 
 export async function verifyAdmin({ request, cookies }: RequestEvent) {
-  guard(cookies);
+  const login = guard(cookies);
   const form = await request.formData();
   const section = sectionOf(form);
   if (section === null)
@@ -52,8 +54,8 @@ export async function verifyAdmin({ request, cookies }: RequestEvent) {
   if (left > 0)
     return { ok: false, detail: 'подожди', wait: left };
 
-  const saved = await readSecrets();
-  const next: Stored = { ...saved };
+  const saved = await readAccount(login);
+  const next = { ...saved };
   const probe = await probeSection(section, form);
   const wait = probe.ok ? 0 : hold(section, probe.retryAfter);
   if (probe.ok === false)
@@ -61,8 +63,8 @@ export async function verifyAdmin({ request, cookies }: RequestEvent) {
 
   hold(section, probe.retryAfter);
   applyProbe(section, next, form, probe.detail);
-  await writeSecrets(next);
-  publishSecrets(next);
+  await writeAccount(login, next);
+  publishSecrets(login, next);
 
   return { ok: true, detail: probe.detail, wait: 0 };
 }
@@ -99,7 +101,7 @@ function applyProbe(section: Section, next: Stored, form: FormData, detail: stri
 }
 
 export async function unlinkAdmin({ request, cookies }: RequestEvent) {
-  guard(cookies);
+  const login = guard(cookies);
   const form = await request.formData();
   if (String(form.get('phrase') ?? '') !== 'unlink')
     return { ok: false };
@@ -108,10 +110,10 @@ export async function unlinkAdmin({ request, cookies }: RequestEvent) {
   if (section === null)
     return { ok: false };
 
-  const next: Stored = { ...await readSecrets() };
+  const next = { ...await readAccount(login) };
   clearSection(section, next);
-  await writeSecrets(next);
-  publishSecrets(next);
+  await writeAccount(login, next);
+  publishSecrets(login, next);
 
   return { ok: true };
 }

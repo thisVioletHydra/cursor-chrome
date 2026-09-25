@@ -37,7 +37,14 @@ const current = (href: string) => {
       </nav>
     </div>
     <div>
-      <p class="text-sm text-zinc-300">{data.login}</p>
+      <p class="flex items-center gap-2 text-sm text-zinc-300">
+        <span class="truncate">{data.login}</span>
+        {#if data.billing.infinite}
+          <span class="text-lg leading-none text-indigo-300" title="без лимита">∞</span>
+        {:else}
+          <span class="text-xs text-zinc-500">{data.billing.balance} ₽</span>
+        {/if}
+      </p>
       <form class="mt-3" method="POST" action="/logout">
         <button class="grid size-9 place-items-center rounded-lg text-zinc-400 transition hover:bg-white/10 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400" type="submit" title="Выйти" aria-label="Выйти">
           <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
