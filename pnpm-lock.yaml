@@ -126,6 +126,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@cursor-chrome/hh':
+        specifier: workspace:*
+        version: link:../hh
       '@cursor-chrome/telegram':
         specifier: workspace:*
         version: link:../telegram

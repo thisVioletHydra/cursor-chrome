@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
@@ -7,6 +8,8 @@ export type Secrets = {
   mistralKey: string;
   hhAccessToken: string;
   hhResumeId: string;
+  hhQuery: string;
+  extToken: string;
 };
 
 export type Labels = {
@@ -38,6 +41,8 @@ const empty = (): Account => ({
   mistralKey: '',
   hhAccessToken: '',
   hhResumeId: '',
+  hhQuery: '',
+  extToken: '',
   telegramLabel: '',
   mistralLabel: '',
   hhLabel: '',
@@ -97,7 +102,15 @@ const envKeys: Record<keyof Secrets, string> = {
   mistralKey: 'MISTRAL_API_KEY',
   hhAccessToken: 'HH_ACCESS_TOKEN',
   hhResumeId: 'HH_RESUME_ID',
+  hhQuery: 'HH_QUERY',
+  extToken: 'EXT_TOKEN',
 };
+
+export const DEFAULT_QUERY = 'typescript react nestjs';
+
+export function newExtToken(): string {
+  return crypto.randomBytes(24).toString('base64url');
+}
 
 export async function applySavedSecrets(): Promise<void> {
   const saved = await readAccount(CREATOR);

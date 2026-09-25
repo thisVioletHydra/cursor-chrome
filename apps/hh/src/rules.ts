@@ -47,7 +47,7 @@ export function hardSkip(vacancy: Vacancy): string | null {
 
 export function lineOf(company: string, verdict: Verdict, reason: string, url: string, dry: boolean): string {
   const action: Record<Verdict, string> = {
-    apply: dry ? 'Откликнулся бы' : 'Откликнулся',
+    apply: dry ? 'Откликнулся бы' : 'В очереди',
     skip: `Скип, ${reason}`,
     human: 'Застрял, зову человека',
   };

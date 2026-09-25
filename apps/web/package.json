@@ -8,6 +8,7 @@
     "start": "node build/index.js"
   },
   "dependencies": {
+    "@cursor-chrome/hh": "workspace:*",
     "@cursor-chrome/telegram": "workspace:*"
   },
   "devDependencies": {

@@ -2,10 +2,15 @@ import { HH_API, HH_USER_AGENT, PING_MS } from './limits.ts';
 
 import process from 'node:process';
 
-export async function ping(): Promise<void> {
+export async function pingReasons(): Promise<string[]> {
   const checks = [pingHh(), pingTelegram(), pingMistral()];
-  const results = await Promise.all(checks.map(check => check.then(() => '', error => String(error))));
-  const failed = results.filter(item => item.length > 0);
+  const results = await Promise.all(checks.map(check => check.then(() => '', (error: unknown) => (error instanceof Error ? error.message : String(error)))));
+
+  return results.filter(item => item.length > 0);
+}
+
+export async function ping(): Promise<void> {
+  const failed = await pingReasons();
   if (failed.length > 0) {
     console.error(failed.join('\n'));
     process.exitCode = 1;
@@ -22,7 +27,10 @@ async function pingHh(): Promise<void> {
   const res = await fetch(url, {
     signal: AbortSignal.timeout(PING_MS),
     headers: { 'user-agent': HH_USER_AGENT, accept: 'application/json' },
-  });
+  }).catch(() => null);
+  if (res === null)
+    throw new Error('hh не ответил');
+
   if (res.ok === false)
     throw new Error(`hh ${res.status}`);
 }
@@ -34,7 +42,10 @@ async function pingTelegram(): Promise<void> {
 
   const res = await fetch(`https://api.telegram.org/bot${token}/getMe`, {
     signal: AbortSignal.timeout(PING_MS),
-  });
+  }).catch(() => null);
+  if (res === null)
+    throw new Error('telegram не ответил');
+
   if (res.ok === false)
     throw new Error(`telegram ${res.status}`);
 }
@@ -47,7 +58,10 @@ async function pingMistral(): Promise<void> {
   const res = await fetch('https://api.mistral.ai/v1/models', {
     signal: AbortSignal.timeout(PING_MS),
     headers: { authorization: `Bearer ${key}` },
-  });
+  }).catch(() => null);
+  if (res === null)
+    throw new Error('mistral не ответил');
+
   if (res.ok === false)
     throw new Error(`mistral ${res.status}`);
 }

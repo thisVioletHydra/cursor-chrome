@@ -19,7 +19,7 @@ export function guestLinks(): LinkStatus[] {
   return [
     { name: 'Телега', set: false, ok: false, detail: 'токена нет' },
     { name: 'Mistral', set: false, ok: false, detail: 'ключа нет' },
-    { name: 'HeadHunter', set: false, ok: false, detail: 'токена нет' },
+    { name: 'HeadHunter', set: false, ok: false, detail: 'резюме нет' },
   ];
 }
 
@@ -27,9 +27,7 @@ export async function storedLinks(login: string): Promise<LinkStatus[]> {
   const saved = await readAccount(login);
   const telegram = saved.telegramToken;
   const mistral = saved.mistralKey;
-  const hh = saved.hhAccessToken;
-  const resumeId = saved.hhResumeId;
-  const hhOn = hh.length > 0 && resumeId.length > 0;
+  const hhOn = saved.hhResumeId.length > 0;
 
   return [
     {
@@ -48,7 +46,7 @@ export async function storedLinks(login: string): Promise<LinkStatus[]> {
       name: 'HeadHunter',
       set: hhOn,
       ok: hhOn,
-      detail: hhOn ? (saved.hhLabel || 'Токен активирован') : 'токена нет',
+      detail: hhOn ? 'Резюме привязано' : 'резюме нет',
     },
   ];
 }

@@ -1,4 +1,4 @@
-import { ping, scan } from '@cursor-chrome/hh';
+import { pingReasons, scan } from '@cursor-chrome/hh';
 
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -120,16 +120,24 @@ async function onUpdate(update: Update): Promise<void> {
   await run(message.chat.id);
 }
 
+export async function notifyOwner(text: string): Promise<void> {
+  const chatId = await readOwner();
+  if (chatId === null || token().length === 0)
+    return;
+
+  await send(chatId, text).catch(() => undefined);
+}
+
 async function run(chatId: number): Promise<void> {
-  const gate = await pingQuiet();
-  if (gate.length > 0) {
-    await send(chatId, `Не стартую. ${gate}`);
+  const reasons = await pingReasons();
+  if (reasons.length > 0) {
+    await send(chatId, `Не стартую: ${reasons.join(', ')}.`);
     return;
   }
 
   stopScan = new AbortController();
   const live = process.env.HH_LIVE === '1';
-  const query = process.env.HH_QUERY ?? 'typescript react nestjs';
+  const query = process.env.HH_QUERY || 'typescript react nestjs';
   const reports = await scan({
     query,
     dry: live === false,
@@ -149,8 +157,14 @@ async function run(chatId: number): Promise<void> {
     await send(chatId, report.line);
   }
 
-  if (reports.length === 0)
+  if (reports.length === 0) {
     await send(chatId, 'Пусто.');
+    return;
+  }
+
+  const queued = reports.filter(report => report.verdict === 'apply').length;
+  if (live && queued > 0)
+    await send(chatId, `В очереди ${queued}. Открой Chrome с hh.ru и нажми «Разобрать очередь» в расширении.`);
 }
 
 async function allow(chatId: number, username: string): Promise<boolean> {
@@ -199,14 +213,6 @@ async function send(chatId: number, text: string, keys = false): Promise<void> {
   });
   if (res.ok === false)
     throw new Error(`telegram send ${res.status}`);
-}
-
-async function pingQuiet(): Promise<string> {
-  const before = process.exitCode;
-  await ping();
-  const failed = process.exitCode === 1;
-  process.exitCode = before;
-  return failed ? 'HH, телега или Mistral не ответили' : '';
 }
 
 const entry = process.argv[1];

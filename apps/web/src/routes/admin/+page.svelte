@@ -6,6 +6,18 @@ const cards = $derived([
   { href: '/admin/mistral', light: data.links.find(item => item.name === 'Mistral') },
   { href: '/admin/hh', light: data.links.find(item => item.name === 'HeadHunter') },
 ].flatMap(card => (card.light ? [{ href: card.href, light: card.light }] : [])));
+
+const statusText: Record<string, string> = {
+  pending: 'в очереди',
+  sent: 'откликнулся',
+  needsHuman: 'ждёт тебя',
+};
+
+const statusDot: Record<string, string> = {
+  pending: 'bg-indigo-400',
+  sent: 'bg-emerald-400',
+  needsHuman: 'bg-amber-400',
+};
 </script>
 
 <header class="mb-8">
@@ -29,4 +41,26 @@ const cards = $derived([
   {/each}
 </div>
 
-<p class="mt-6 text-sm text-zinc-500">{data.polling ? 'Бот слушает команды.' : 'Бот молчит, пока нет токена телеги.'}</p>
+<section class="mt-8 rounded-2xl border border-white/8 bg-[#151922] p-6">
+  <div class="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+    <p class="text-sm text-zinc-400">Сегодня <span class="ml-1 text-2xl font-semibold text-white">{data.stats.today}</span></p>
+    <p class="text-sm text-zinc-400">В очереди <span class="ml-1 text-2xl font-semibold text-white">{data.stats.queued}</span></p>
+    <p class="text-sm text-zinc-400">Ждут тебя <span class="ml-1 text-2xl font-semibold text-white">{data.stats.waiting}</span></p>
+    <p class="ml-auto text-xs text-zinc-500">{data.polling ? 'Бот слушает команды.' : 'Бот молчит, пока нет токена телеги.'}</p>
+  </div>
+
+  {#if data.stats.rows.length > 0}
+    <ul class="mt-6 divide-y divide-white/6">
+      {#each data.stats.rows as row (row.id)}
+        <li class="flex items-center gap-3 py-3 text-sm">
+          <span class="size-2 shrink-0 rounded-full {statusDot[row.status] ?? 'bg-zinc-500'}"></span>
+          <a class="min-w-0 flex-1 truncate text-zinc-200 underline-offset-4 hover:underline" href={row.url} target="_blank" rel="noreferrer">{row.company} · {row.title}</a>
+          <span class="shrink-0 text-xs text-zinc-500">{statusText[row.status] ?? row.status}</span>
+          <span class="shrink-0 text-xs text-zinc-600">{row.when}</span>
+        </li>
+      {/each}
+    </ul>
+  {:else}
+    <p class="mt-6 text-sm text-zinc-500">Очередь пустая. Напиши боту «старт».</p>
+  {/if}
+</section>

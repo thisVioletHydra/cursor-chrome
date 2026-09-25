@@ -84,19 +84,16 @@ async function finish(
       return { report: rewrite(report, 'human', 'форма'), memory: remember(memory, vacancy.id, false), sentThisStart: state.sentThisStart, stop: false };
   }
 
-  const sent = await sendApply(vacancy.id);
-  if (sent === 'limit')
-    return { report: rewrite(report, 'human', 'лимит HH'), memory: remember(memory, vacancy.id, false), sentThisStart: state.sentThisStart, stop: true };
-
-  if (sent !== 'sent' && sent !== 'again')
-    return { report: rewrite(report, 'human', 'HH не принял'), memory: remember(memory, vacancy.id, false), sentThisStart: state.sentThisStart, stop: false };
+  const sent = await sendApply(vacancy, report.reason);
+  if (sent === 'human')
+    return { report: rewrite(report, 'human', 'нет резюме'), memory: remember(memory, vacancy.id, false), sentThisStart: state.sentThisStart, stop: false };
 
   const applied = rewrite(report, 'apply', report.reason);
 
   return {
     report: { ...applied, line: lineOf(vacancy.company, 'apply', report.reason, vacancy.url, false) },
-    memory: remember(memory, vacancy.id, sent === 'sent'),
-    sentThisStart: state.sentThisStart + (sent === 'sent' ? 1 : 0),
+    memory: remember(memory, vacancy.id, sent === 'queued'),
+    sentThisStart: state.sentThisStart + (sent === 'queued' ? 1 : 0),
     stop: false,
   };
 }

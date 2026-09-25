@@ -1,4 +1,8 @@
 export { COVER_LETTER, FACTS } from './copy.ts';
-export { ping } from './ping.ts';
+export { moscowDay, readMemory, remember, writeMemory } from './memory.ts';
+export type { Memory } from './memory.ts';
+export { ping, pingReasons } from './ping.ts';
+export { markDone, pending, readQueue } from './queue.ts';
+export type { QueueItem, QueueStatus } from './queue.ts';
 export { scan } from './scan.ts';
 export type { Report, Vacancy } from './rules.ts';

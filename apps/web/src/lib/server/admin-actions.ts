@@ -3,7 +3,7 @@ import type { Stored } from './secrets';
 
 import { error } from '@sveltejs/kit';
 import { probeHh, probeMistral, probeTelegram } from './checks';
-import { isCreator, publishSecrets, readAccount, writeAccount } from './secrets';
+import { isCreator, newExtToken, publishSecrets, readAccount, writeAccount } from './secrets';
 import { allowedLogins, readSession } from './session';
 
 const sections = ['telegram', 'mistral', 'hh'] as const;
@@ -136,6 +136,35 @@ function applyProbe(section: Section, next: Stored, form: FormData, detail: stri
   next.hhAccessToken = String(form.get('hhAccessToken') ?? '').trim() || next.hhAccessToken;
   next.hhResumeId = resumeIdOf(String(form.get('hhResumeId') ?? '').trim());
   next.hhLabel = detail;
+}
+
+export async function saveQueryAdmin({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const form = await request.formData();
+  const query = String(form.get('hhQuery') ?? '').trim().slice(0, 200);
+  if (query.length === 0)
+    return { ok: false, detail: 'пустой запрос', wait: 0 };
+
+  const next = { ...await readAccount(login), hhQuery: query };
+  await writeAccount(login, next);
+  publishSecrets(login, next);
+
+  return { ok: true, detail: query, wait: 0 };
+}
+
+export async function issueExtTokenAdmin({ cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const next = { ...await readAccount(login), extToken: newExtToken() };
+  await writeAccount(login, next);
+  publishSecrets(login, next);
+
+  return { ok: true, detail: next.extToken, wait: 0 };
 }
 
 export async function unlinkAdmin({ request, cookies }: RequestEvent) {
