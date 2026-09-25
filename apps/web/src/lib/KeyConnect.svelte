@@ -89,7 +89,7 @@ $effect(() => {
               name={field.name}
               type={field.secret ? 'password' : 'text'}
               autocomplete="off"
-              readonly={locked && active === false}
+              readonly={phase === 'checking'}
               disabled={active}
               bind:value={draft[field.name]}
             />
