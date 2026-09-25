@@ -4,7 +4,30 @@ import { enhance } from '$app/forms';
 type Field = { name: string; label: string; secret: boolean };
 type Memory = { draft: Record<string, string>; message: string };
 
-const memory = new Map<string, Memory>();
+function readMemory(section: string): Memory {
+  if (typeof sessionStorage === 'undefined')
+    return { draft: {}, message: '' };
+
+  try {
+    const raw = sessionStorage.getItem(`key-draft:${section}`);
+    if (raw === null)
+      return { draft: {}, message: '' };
+
+    const parsed = JSON.parse(raw) as Partial<Memory>;
+
+    return {
+      draft: parsed.draft ?? {},
+      message: parsed.message ?? '',
+    };
+  }
+  catch {
+    return { draft: {}, message: '' };
+  }
+}
+
+function writeMemory(section: string, next: Memory) {
+  sessionStorage.setItem(`key-draft:${section}`, JSON.stringify(next));
+}
 
 let {
   section,
@@ -59,21 +82,24 @@ function armWait(seconds: number) {
 }
 
 function rememberField(name: string, value: string) {
-  const kept = memory.get(section) ?? { draft: {}, message };
-  memory.set(section, { draft: { ...kept.draft, [name]: value }, message });
+  const kept = readMemory(section);
+  writeMemory(section, { draft: { ...kept.draft, [name]: value }, message });
 }
 
 $effect(() => {
-  if (active)
+  if (typeof sessionStorage === 'undefined')
     return;
 
-  const kept = memory.get(section);
-  if (kept) {
-    draft = { ...kept.draft };
-    message = kept.message;
-    if (kept.message.length > 0)
-      phase = 'error';
+  if (active) {
+    sessionStorage.removeItem(`key-draft:${section}`);
+    return;
   }
+
+  const kept = readMemory(section);
+  draft = { ...kept.draft };
+  message = kept.message;
+  if (kept.message.length > 0)
+    phase = 'error';
 });
 
 $effect(() => {
@@ -103,7 +129,7 @@ $effect(() => {
 
       phase = 'error';
       message = typeof data?.detail === 'string' ? data.detail : 'не вышло';
-      memory.set(section, { draft: $state.snapshot(draft), message });
+      writeMemory(section, { draft: $state.snapshot(draft), message });
       const nextWait = typeof data?.wait === 'number' ? data.wait : 0;
       if (nextWait > 0)
         armWait(nextWait);
