@@ -37,6 +37,8 @@ let {
   fields,
   actionHref = '',
   actionLabel = '',
+  showActive = true,
+  ask = $bindable(false),
 }: {
   section: 'telegram' | 'mistral' | 'hh';
   active: boolean;
@@ -45,6 +47,8 @@ let {
   fields: Field[];
   actionHref?: string;
   actionLabel?: string;
+  showActive?: boolean;
+  ask?: boolean;
 } = $props();
 
 let draft: Record<string, string> = $state({});
@@ -113,8 +117,18 @@ $effect(() => {
   armed = true;
   armWait(wait);
 });
+
+$effect(() => {
+  if (ask === false)
+    return;
+
+  phrase = '';
+  openUnlink = true;
+  ask = false;
+});
 </script>
 
+{#if active === false || showActive}
 <form
   class="rounded-2xl border border-white/8 bg-[#151922] p-4"
   method="POST"
@@ -144,7 +158,7 @@ $effect(() => {
   {#if active === false && output}
     <p class="mb-3 font-mono text-xs text-zinc-400">{output}{#if waitLeft > 0} · {waitLeft} с{/if}</p>
   {/if}
-  {#if active}
+  {#if active && showActive}
     <div class="flex flex-wrap items-center gap-3">
       <p class="min-w-0 flex-1 text-sm text-zinc-200">{detail}</p>
       {#if actionHref}
@@ -195,6 +209,7 @@ $effect(() => {
   </div>
   {/if}
 </form>
+{/if}
 
 {#if openUnlink}
   <dialog class="modal modal-open">
