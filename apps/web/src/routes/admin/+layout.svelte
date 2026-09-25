@@ -38,8 +38,8 @@ const current = (href: string) => {
     </div>
     <div>
       <p class="text-sm text-zinc-300">{data.login}</p>
-      <form method="POST" action="/logout">
-        <button class="mt-1 text-xs text-zinc-500" type="submit">Выйти</button>
+      <form class="mt-3" method="POST" action="/logout">
+        <button class="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-white/40 hover:bg-white/10" type="submit">Выйти</button>
       </form>
     </div>
   </aside>
