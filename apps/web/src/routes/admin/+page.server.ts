@@ -4,7 +4,7 @@ import type { Secrets } from '$lib/server/secrets';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { error, redirect } from '@sveltejs/kit';
 import { checkLinks } from '$lib/server/checks';
-import { publishSecrets, readSecrets, secretValue, writeSecrets } from '$lib/server/secrets';
+import { publishSecrets, readSecrets, secretValue, stageUndo, takeUndo, writeSecrets } from '$lib/server/secrets';
 import { allowedLogins, readSession } from '$lib/server/session';
 
 const fields = ['telegramToken', 'mistralKey', 'hhAccessToken', 'hhResumeId'] as const;
@@ -35,8 +35,26 @@ export const actions: Actions = {
         next[key] = value;
     }
 
+    const changed = fields.some(key => next[key] !== saved[key]);
+    if (changed === false)
+      return { saved: false };
+
+    stageUndo(saved);
     await writeSecrets(next);
     publishSecrets(next);
     return { saved: true };
+  },
+  undo: async ({ cookies }) => {
+    const session = readSession(cookies.get('session'));
+    if (session === null || allowedLogins().includes(session.login) === false)
+      error(401, 'нет');
+
+    const previous = takeUndo();
+    if (previous === null)
+      return { undone: false };
+
+    await writeSecrets(previous);
+    publishSecrets(previous);
+    return { undone: true };
   },
 };

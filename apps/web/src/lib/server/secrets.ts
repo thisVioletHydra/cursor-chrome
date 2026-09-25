@@ -37,6 +37,26 @@ export async function readSecrets(): Promise<Secrets> {
   }
 }
 
+const UNDO_MS = 15_000;
+let pendingUndo: { at: number; secrets: Secrets } | null = null;
+
+export function stageUndo(previous: Secrets): void {
+  pendingUndo = { at: Date.now(), secrets: { ...previous } };
+}
+
+export function takeUndo(): Secrets | null {
+  if (pendingUndo === null)
+    return null;
+
+  const fresh = Date.now() - pendingUndo.at <= UNDO_MS;
+  const secrets = pendingUndo.secrets;
+  pendingUndo = null;
+  if (fresh === false)
+    return null;
+
+  return secrets;
+}
+
 export async function writeSecrets(next: Secrets): Promise<void> {
   const file = filePath();
   await fsPromises.mkdir(path.dirname(file), { recursive: true });
@@ -63,6 +83,8 @@ export function publishSecrets(next: Secrets): void {
   for (const key of Object.keys(envKeys) as (keyof Secrets)[]) {
     if (next[key].length > 0)
       process.env[envKeys[key]] = next[key];
+    else
+      delete process.env[envKeys[key]];
   }
 }
 
