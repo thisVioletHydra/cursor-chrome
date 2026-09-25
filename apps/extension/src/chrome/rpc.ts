@@ -1,6 +1,7 @@
-import { appendApply, getSyncUrl, listApplies, setSyncUrl, todayCount, waitingHuman } from './apply-log';
+import { appendApply, getSyncKey, getSyncUrl, listApplies, setSyncKey, setSyncUrl, todayCount, waitingHuman } from './apply-log';
 import { getFlags, setFlags } from './flags';
 import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from './human-review';
+import { runQueue } from './queue-run';
 import { checkWorker, listJobTabs, openHhBackground, pinWorker } from './worker-tab';
 import { openPinnedWorker } from './worker-open';
 
@@ -33,13 +34,15 @@ async function applyHistory(): Promise<unknown> {
 }
 
 async function readSyncUrl(): Promise<unknown> {
-  const url = await getSyncUrl();
+  const [url, key] = await Promise.all([getSyncUrl(), getSyncKey()]);
 
-  return { url };
+  return { url, hasKey: key.length > 0 };
 }
 
-async function writeSyncUrl(url: string): Promise<unknown> {
+async function writeSyncUrl(url: string, key: string): Promise<unknown> {
   await setSyncUrl(url);
+  if (key.length > 0)
+    await setSyncKey(key);
 
   return { ok: true };
 }
@@ -103,7 +106,12 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
     return true;
   },
   'set-sync-url': (message, reply) => {
-    replyJob(reply, writeSyncUrl(String(message.url || '')));
+    replyJob(reply, writeSyncUrl(String(message.url || ''), String(message.key || '')));
+
+    return true;
+  },
+  'run-queue': (_message, reply) => {
+    replyJob(reply, runQueue());
 
     return true;
   },

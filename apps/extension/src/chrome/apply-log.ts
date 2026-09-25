@@ -14,6 +14,7 @@ export type ApplyRecord = {
 
 const LOG_KEY = 'applyLog';
 const SYNC_KEY = 'applySyncUrl';
+const SYNC_TOKEN_KEY = 'applySyncKey';
 const MAX = 200;
 
 const FOOTER_LABELS = new Set([
@@ -186,6 +187,17 @@ export async function setSyncUrl(url: string): Promise<void> {
   await browser.storage.local.set({ [SYNC_KEY]: url.trim() });
 }
 
+export async function getSyncKey(): Promise<string> {
+  const stored = await browser.storage.local.get(SYNC_TOKEN_KEY);
+  const key = stored[SYNC_TOKEN_KEY];
+
+  return typeof key === 'string' ? key : '';
+}
+
+export async function setSyncKey(key: string): Promise<void> {
+  await browser.storage.local.set({ [SYNC_TOKEN_KEY]: key.trim() });
+}
+
 function isApplyRecord(value: unknown): value is ApplyRecord {
   if (!value || typeof value !== 'object')
     return false;
@@ -210,15 +222,32 @@ export function dayKey(ms: number): string {
 }
 
 async function pushRemote(record: ApplyRecord): Promise<void> {
-  const url = await getSyncUrl();
-  if (url.length === 0)
+  const raw = (await getSyncUrl()).trim();
+  const key = await getSyncKey();
+  if (raw.length === 0 || key.length === 0)
     return;
 
+  let base = '';
   try {
-    await fetch(url, {
+    const url = new URL(raw);
+    base = `${url.protocol}//${url.host}`;
+  }
+  catch {
+    return;
+  }
+
+  try {
+    await fetch(`${base}/api/applied`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(record),
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        vacancyId: record.vacancyId,
+        status: applyStatus(record),
+        company: record.company,
+        title: record.title,
+        url: record.url,
+        hints: record.hints ?? [],
+      }),
     });
   }
   catch {

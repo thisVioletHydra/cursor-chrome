@@ -28,6 +28,7 @@
         </svg>
         <span class="cta-label">Поднять HH</span>
       </button>
+      <button id="run-queue" class="pin-primary" type="button" title="забрать очередь из админки и откликнуться из этой вкладки">Разобрать очередь</button>
       <p id="pill" class="status" hidden></p>
       <pre id="report" hidden></pre>
     </section>
@@ -63,9 +64,10 @@
       </label>
 
       <details class="sync">
-        <summary>Railway POST</summary>
-        <input id="sync-url" placeholder="https://selfskills-api-production.up.railway.app/hh-applies" type="url" />
-        <button id="save-sync" class="ghost" type="button">Сохранить URL</button>
+        <summary>Админка</summary>
+        <input id="sync-url" placeholder="https://web-production-f8ad5.up.railway.app" type="url" />
+        <input id="sync-key" placeholder="ключ расширения из админки" type="password" autocomplete="off" />
+        <button id="save-sync" class="ghost" type="button">Сохранить</button>
       </details>
     </section>
 

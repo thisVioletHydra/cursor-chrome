@@ -46,6 +46,8 @@ const navs: Record<ViewName, HTMLElement | null> = {
   settings: goSettings,
 };
 const syncEl = document.getElementById('sync-url') as HTMLInputElement | null;
+const syncKeyEl = document.getElementById('sync-key') as HTMLInputElement | null;
+const queueBtn = document.getElementById('run-queue') as HTMLButtonElement | null;
 const hideJunkEl = document.getElementById('flag-hide-junk') as HTMLInputElement | null;
 const showPopEl = document.getElementById('flag-show-pop') as HTMLInputElement | null;
 const keepSessionEl = document.getElementById('flag-keep-session') as HTMLInputElement | null;
@@ -63,6 +65,7 @@ const clicks: Record<string, () => void> = {
   'go-history': () => show('history'),
   'go-settings': () => show('settings'),
   'save-sync': () => void saveSync(),
+  'run-queue': () => void runQueue(),
 };
 
 document.addEventListener('click', (event) => {
@@ -240,7 +243,57 @@ async function renderHistory(): Promise<void> {
 }
 
 async function saveSync(): Promise<void> {
-  await browser.runtime.sendMessage({ type: 'set-sync-url', url: syncEl?.value || '' });
+  await browser.runtime.sendMessage({ type: 'set-sync-url', url: syncEl?.value || '', key: syncKeyEl?.value || '' });
+  if (syncKeyEl && syncKeyEl.value.length > 0) {
+    syncKeyEl.value = '';
+    syncKeyEl.placeholder = 'ключ сохранён';
+  }
+}
+
+type QueueRun = {
+  ok?: boolean;
+  sent?: number;
+  human?: number;
+  skipped?: number;
+  left?: number;
+  reason?: string;
+  lines?: string[];
+  error?: string;
+};
+
+async function runQueue(): Promise<void> {
+  if (queueBtn === null || pillEl === null || reportEl === null)
+    return;
+
+  queueBtn.disabled = true;
+  queueBtn.textContent = 'Откликаюсь…';
+  pillEl.hidden = true;
+  reportEl.hidden = true;
+  try {
+    const run = await browser.runtime.sendMessage({ type: 'run-queue' }) as QueueRun;
+    const ok = run?.ok === true;
+    pillEl.hidden = false;
+    pillEl.className = `status ${ok ? 'ok' : 'fail'}`;
+    pillEl.textContent = ok ? `Отправлено ${run.sent ?? 0} · ждут ${run.human ?? 0} · осталось ${run.left ?? 0}` : 'НЕ ВЫШЛО';
+    const lines = [...(run?.lines ?? [])];
+    const tail = run?.error || run?.reason || '';
+    if (tail.length > 0)
+      lines.push(tail);
+
+    reportEl.hidden = lines.length === 0;
+    reportEl.textContent = lines.join('\n');
+  }
+  catch (error) {
+    pillEl.hidden = false;
+    pillEl.className = 'status fail';
+    pillEl.textContent = 'НЕ ВЫШЛО';
+    reportEl.hidden = false;
+    reportEl.textContent = error instanceof Error ? error.message : String(error);
+  }
+
+  queueBtn.disabled = false;
+  queueBtn.textContent = 'Разобрать очередь';
+  await renderHistory();
 }
 
 async function bootSettings(): Promise<void> {
@@ -259,9 +312,12 @@ async function bootSettings(): Promise<void> {
       element.checked = on;
   }
 
-  const sync = await browser.runtime.sendMessage({ type: 'get-sync-url' }) as { url?: string };
+  const sync = await browser.runtime.sendMessage({ type: 'get-sync-url' }) as { url?: string; hasKey?: boolean };
   if (syncEl)
     syncEl.value = sync?.url || '';
+
+  if (syncKeyEl && sync?.hasKey === true)
+    syncKeyEl.placeholder = 'ключ сохранён, вставь новый чтобы заменить';
 
   const hist = await browser.runtime.sendMessage({ type: 'apply-history' }) as { today?: number };
   if (todayEl)
