@@ -1,7 +1,5 @@
 <script lang="ts">
 import { enhance } from '$app/forms';
-import KeyConnect from '$lib/KeyConnect.svelte';
-import Mark from '$lib/Mark.svelte';
 import Out from '$lib/Out.svelte';
 
 let { data } = $props();
@@ -13,15 +11,8 @@ let resumeOpen = $state(false);
 let resumeDraft = $state('');
 let resumePhase = $state<'idle' | 'checking' | 'error'>('idle');
 let resumeMessage = $state('');
-let tokenNote = $state('');
 let booted = false;
 
-const curl = `curl -X POST https://hh.ru/oauth/token \\
-  -d grant_type=authorization_code \\
-  -d client_id=CLIENT_ID \\
-  -d client_secret=CLIENT_SECRET \\
-  -d redirect_uri=http://localhost \\
-  -d code=CODE`;
 
 $effect(() => {
   if (booted || typeof sessionStorage === 'undefined')
@@ -73,11 +64,6 @@ function openResume() {
     <div class="flex items-center gap-3 rounded-2xl border border-emerald-400/30 bg-[#151922] px-4 py-3">
       <span class="size-1.5 shrink-0 rounded-full bg-emerald-400"></span>
       <p class="text-sm text-zinc-200">{link.detail || 'Токен активирован'}</p>
-    </div>
-  {:else if tokenNote}
-    <div class="flex items-center gap-3 rounded-2xl border border-rose-400/30 bg-[#151922] px-4 py-3">
-      <span class="size-1.5 shrink-0 rounded-full bg-rose-400"></span>
-      <p class="font-mono text-sm text-rose-200">{tokenNote}</p>
     </div>
   {/if}
 </div>
@@ -155,33 +141,8 @@ function openResume() {
       </form>
     {/if}
   {:else}
-    <h2 class="text-base font-semibold text-white">Access token</h2>
-    <ol class="mt-4 list-decimal space-y-4 pl-5 text-sm leading-6 text-zinc-300">
-      <li>Жми <Out href="https://dev.hh.ru/admin" text="dev.hh.ru/admin" />. Добавь приложение. Redirect: <Mark copy text="http://localhost" />.</li>
-      <li>В ссылку подставь Client ID и жми её. Разреши доступ. <Mark copy text="https://hh.ru/oauth/authorize?response_type=code&client_id=ТВОЙ_CLIENT_ID" /></li>
-      <li>Со страницы <Mark copy text="http://localhost/?code=..." /> скопируй <Mark text="code" />.</li>
-      <li>Вставь в терминал, подставив свои значения. В ответе бери <Mark text="access_token" />.</li>
-      <li>Вставь токен и жми <Mark text="Проверить" />.</li>
-    </ol>
-    <div class="relative mt-4">
-      <pre class="overflow-x-auto rounded-xl bg-black/40 p-4 pr-12 text-xs leading-6 text-orange-200/90">{curl}</pre>
-      <span class="absolute top-2 right-2">
-        <Mark copy icon text={curl} />
-      </span>
-    </div>
-    <div class="mt-4">
-      <KeyConnect
-        section="hh"
-        active={link?.ok === true}
-        detail={link?.detail ?? ''}
-        wait={data.locks.hh}
-        fields={[{ name: 'hhAccessToken', label: 'Access token', secret: true }]}
-        showActive={false}
-        quiet
-        bare
-        bind:note={tokenNote}
-      />
-    </div>
+    <h2 class="text-base font-semibold text-white">Токен не делаем</h2>
+    <p class="mt-3 text-sm leading-6 text-zinc-300">Заявку на приложение не отправляй. HH закрыл API для соискателей 15 декабря 2025. Эта форма только для сотрудников работодателя, отклик с такого токена не уйдёт.</p>
   {/if}
 </section>
 
