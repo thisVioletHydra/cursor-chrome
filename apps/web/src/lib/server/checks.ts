@@ -49,10 +49,16 @@ async function retryAfter(res: Response): Promise<number> {
   if (res.status !== 429)
     return 0;
 
+  const header = Number(res.headers.get('retry-after'));
+  if (Number.isFinite(header) && header > 0)
+    return Math.ceil(header);
+
   const body = await res.json().catch(() => null) as { parameters?: { retry_after?: number } } | null;
   const value = body?.parameters?.retry_after;
+  if (typeof value === 'number' && value > 0)
+    return value;
 
-  return typeof value === 'number' ? value : 30;
+  return 5;
 }
 
 export async function probeTelegram(token: string): Promise<Probe> {

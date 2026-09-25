@@ -81,7 +81,7 @@ $effect(() => {
 
       phase = 'error';
       message = typeof data?.detail === 'string' ? data.detail : 'не вышло';
-      const nextWait = typeof data?.wait === 'number' ? data.wait : 30;
+      const nextWait = typeof data?.wait === 'number' ? data.wait : 0;
       if (nextWait > 0)
         armWait(nextWait);
     };

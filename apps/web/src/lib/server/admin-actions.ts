@@ -9,7 +9,6 @@ import { allowedLogins, readSession } from './session';
 const sections = ['telegram', 'mistral', 'hh'] as const;
 type Section = typeof sections[number];
 
-const COOLDOWN = 30;
 const coolUntil = new Map<Section, number>();
 
 function guard(cookies: RequestEvent['cookies']): string {
@@ -37,10 +36,12 @@ export function coolLeft(section: Section): number {
 }
 
 function hold(section: Section, retryAfter: number): number {
-  const seconds = Math.max(COOLDOWN, retryAfter);
-  coolUntil.set(section, Date.now() + seconds * 1000);
+  if (retryAfter < 1)
+    return 0;
 
-  return seconds;
+  coolUntil.set(section, Date.now() + retryAfter * 1000);
+
+  return retryAfter;
 }
 
 export async function verifyAdmin({ request, cookies }: RequestEvent) {
@@ -61,7 +62,6 @@ export async function verifyAdmin({ request, cookies }: RequestEvent) {
   if (probe.ok === false)
     return { ok: false, detail: probe.detail, wait };
 
-  hold(section, probe.retryAfter);
   applyProbe(section, next, form, probe.detail);
   await writeAccount(login, next);
   publishSecrets(login, next);
