@@ -17,7 +17,7 @@ const cards = $derived([
 <div class="grid gap-4 md:grid-cols-3">
   {#each cards as card}
     <a
-      class="rounded-2xl border bg-[#151922] p-5 {card.light.ok ? 'border-emerald-400 shadow-[0_0_24px_rgba(52,211,153,0.2)]' : 'border-white/8'}"
+      class="rounded-2xl border bg-[#151922] p-6 transition hover:-translate-y-0.5 hover:bg-[#1a1f29] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 {card.light.ok ? 'border-emerald-400 shadow-[0_0_24px_rgba(52,211,153,0.2)]' : 'border-white/8'}"
       href={card.href}
     >
       <div class="flex items-center gap-3">

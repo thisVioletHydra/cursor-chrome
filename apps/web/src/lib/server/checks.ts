@@ -69,7 +69,7 @@ export async function probeTelegram(token: string): Promise<Probe> {
   const body = await res.json() as { result?: { username?: string } };
   const username = body.result?.username ?? 'бот';
 
-  return { ok: true, detail: `@${username} на связи`, retryAfter: 0 };
+  return { ok: true, detail: `активирован · @${username}`, retryAfter: 0 };
 }
 
 export async function probeMistral(key: string): Promise<Probe> {

@@ -30,6 +30,10 @@ function cooling(section: Section): number {
   return left > 0 ? Math.ceil(left / 1000) : 0;
 }
 
+export function coolLeft(section: Section): number {
+  return cooling(section);
+}
+
 function hold(section: Section, retryAfter: number): number {
   const seconds = Math.max(COOLDOWN, retryAfter);
   coolUntil.set(section, Date.now() + seconds * 1000);

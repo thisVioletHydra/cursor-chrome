@@ -7,11 +7,13 @@ let {
   section,
   active,
   detail,
+  wait,
   fields,
 }: {
   section: 'telegram' | 'mistral' | 'hh';
   active: boolean;
   detail: string;
+  wait: number;
   fields: Field[];
 } = $props();
 
@@ -22,8 +24,10 @@ let waitLeft = $state(0);
 let openUnlink = $state(false);
 let phrase = $state('');
 let tick: ReturnType<typeof setInterval> | undefined;
+let armed = false;
 
 const ready = $derived(fields.every(field => (draft[field.name] ?? '').trim().length > 0));
+const locked = $derived(active || phase === 'checking' || waitLeft > 0);
 const showCheck = $derived(active === false && (ready || phase === 'checking' || waitLeft > 0));
 
 function armWait(seconds: number) {
@@ -38,10 +42,18 @@ function armWait(seconds: number) {
     clearInterval(tick);
   }, 1000);
 }
+
+$effect(() => {
+  if (armed || wait < 1 || active)
+    return;
+
+  armed = true;
+  armWait(wait);
+});
 </script>
 
 <form
-  class="rounded-2xl border border-white/8 bg-[#151922] p-5"
+  class="rounded-2xl border border-white/8 bg-[#151922] p-7"
   method="POST"
   action="?/verify"
   use:enhance={() => {
@@ -58,39 +70,39 @@ function armWait(seconds: number) {
 
       phase = 'error';
       message = typeof data?.detail === 'string' ? data.detail : 'не вышло';
-      const wait = typeof data?.wait === 'number' ? data.wait : 30;
-      if (wait > 0)
-        armWait(wait);
+      const nextWait = typeof data?.wait === 'number' ? data.wait : 30;
+      if (nextWait > 0)
+        armWait(nextWait);
     };
   }}
 >
   <input name="section" type="hidden" value={section} />
-  <p class="mb-5 text-sm text-zinc-400">{active ? detail : message}</p>
-  <div class="grid gap-5">
+  <p class="mb-6 text-sm text-zinc-400">{active ? detail : message}</p>
+  <div class="grid gap-6">
     {#each fields as field, index}
       <div class="flex items-end gap-3">
         <label class="flex min-w-0 flex-1 flex-col gap-2 text-sm text-zinc-400">
           {field.label}
           <span class="relative block">
             <input
-              class="h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-zinc-100 outline-none focus:border-indigo-400 disabled:text-transparent"
+              class="input input-bordered h-11 w-full border-white/10 bg-black/30 text-zinc-100 focus:border-indigo-400 focus:outline-none disabled:text-transparent"
               name={field.name}
               type={field.secret ? 'password' : 'text'}
               autocomplete="off"
+              readonly={locked && active === false}
               disabled={active}
-              readonly={phase === 'checking'}
               bind:value={draft[field.name]}
             />
             {#if active}
-              <span class="absolute inset-0 rounded-xl bg-black/55"></span>
+              <span class="absolute inset-0 rounded-lg bg-black/55"></span>
             {/if}
           </span>
         </label>
         {#if index === fields.length - 1 && showCheck}
           <button
-            class="h-11 shrink-0 rounded-xl bg-indigo-500 px-4 text-sm text-white disabled:opacity-50"
+            class="btn btn-primary h-11 min-h-11 shrink-0 px-4"
             type="submit"
-            disabled={phase === 'checking' || waitLeft > 0 || ready === false}
+            disabled={locked || ready === false}
           >
             {phase === 'checking' ? 'Проверяю' : waitLeft > 0 ? `Проверить · ${waitLeft}` : 'Проверить'}
           </button>
@@ -101,26 +113,24 @@ function armWait(seconds: number) {
 </form>
 
 {#if active}
-  <button
-    class="mt-4 w-full max-w-md rounded-xl bg-rose-600 px-4 py-3 text-sm font-medium text-white"
-    type="button"
-    onclick={() => {
-      phrase = '';
-      openUnlink = true;
-    }}
-  >Отвязать</button>
+  <button class="btn btn-error mt-6 h-12 min-h-12 w-72 max-w-full" type="button" onclick={() => { phrase = ''; openUnlink = true; }}>
+    Отвязать
+  </button>
 {/if}
 
 {#if openUnlink}
-  <div class="fixed inset-0 z-30 grid place-items-center bg-black/60 px-4">
-    <form class="w-full max-w-sm rounded-2xl border border-white/10 bg-[#151922] p-5" method="POST" action="?/unlink">
-      <p class="text-sm text-zinc-300">Впиши unlink, чтобы отвязать.</p>
-      <input class="mt-4 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-zinc-100 outline-none" name="phrase" autocomplete="off" bind:value={phrase} />
-      <input name="section" type="hidden" value={section} />
-      <div class="mt-4 flex gap-3">
-        <button class="rounded-xl bg-rose-600 px-4 py-2 text-sm text-white disabled:opacity-40" type="submit" disabled={phrase !== 'unlink'}>Отвязать</button>
-        <button class="rounded-xl border border-white/15 px-4 py-2 text-sm text-zinc-300" type="button" onclick={() => openUnlink = false}>Закрыть</button>
-      </div>
-    </form>
-  </div>
+  <dialog class="modal modal-open">
+    <div class="modal-box border border-white/10 bg-[#151922]">
+      <form method="POST" action="?/unlink">
+        <p class="text-sm leading-6 text-zinc-300">Впиши unlink, чтобы отвязать.</p>
+        <input class="input input-bordered mt-4 w-full border-white/10 bg-black/30 focus:border-indigo-400 focus:outline-none" name="phrase" autocomplete="off" bind:value={phrase} />
+        <input name="section" type="hidden" value={section} />
+        <div class="mt-5 flex gap-3">
+          <button class="btn btn-error" type="submit" disabled={phrase !== 'unlink'}>Отвязать</button>
+          <button class="btn btn-ghost" type="button" onclick={() => openUnlink = false}>Закрыть</button>
+        </div>
+      </form>
+    </div>
+    <button class="modal-backdrop" type="button" aria-label="Закрыть" onclick={() => openUnlink = false}></button>
+  </dialog>
 {/if}

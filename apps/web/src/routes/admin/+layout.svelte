@@ -30,7 +30,7 @@ const current = (href: string) => {
       <nav class="mt-6 flex flex-col gap-1">
         {#each items as item}
           <a
-            class="rounded-xl px-3 py-2 text-sm {current(item.href) ? 'bg-white/10 text-white' : 'text-zinc-400'}"
+            class="rounded-xl px-3 py-2 text-sm transition hover:bg-white/5 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 {current(item.href) ? 'bg-white/10 text-white' : 'text-zinc-400'}"
             href={item.href}
           >{item.label}</a>
         {/each}
@@ -39,7 +39,13 @@ const current = (href: string) => {
     <div>
       <p class="text-sm text-zinc-300">{data.login}</p>
       <form class="mt-3" method="POST" action="/logout">
-        <button class="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-white/40 hover:bg-white/10" type="submit">Выйти</button>
+        <button class="grid size-9 place-items-center rounded-lg text-zinc-400 transition hover:bg-white/10 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400" type="submit" title="Выйти" aria-label="Выйти">
+          <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M10 7V5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-2" />
+            <path d="M4 12h10" />
+            <path d="m11 9 3 3-3 3" />
+          </svg>
+        </button>
       </form>
     </div>
   </aside>
