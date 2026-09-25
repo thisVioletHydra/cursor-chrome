@@ -64,12 +64,12 @@ function queueSave(event: Event) {
   }}
 >
   <button class="hidden" type="submit" tabindex="-1" aria-hidden="true"></button>
-  <div class="mb-5 flex items-end justify-between gap-4">
-    <p class="text-sm text-zinc-500">{status || 'Пишется само. Пустое поле не затирает сохранённое.'}</p>
-    {#if undoLeft > 0}
-      <button class="rounded-full border border-white/10 px-4 py-2 text-sm" type="submit" formaction="?/undo">Откатить {undoLeft} с</button>
-    {/if}
-  </div>
+  <p class="mb-5 text-sm text-zinc-500">{status || 'Пишется само. Пустое поле не затирает сохранённое.'}</p>
+  {#if undoLeft > 0}
+    <div class="fixed top-4 right-4 z-20">
+      <button class="rounded-xl border border-white/10 bg-[#1c212b]/95 px-3 py-2 text-sm text-zinc-300 shadow-lg" type="submit" formaction="?/undo">Откатить · {undoLeft}</button>
+    </div>
+  {/if}
   <div class="grid gap-5">
     {#each fields as field}
       <label class="flex flex-col gap-2 text-sm text-zinc-400">
