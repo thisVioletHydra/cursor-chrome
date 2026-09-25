@@ -3,15 +3,27 @@ let { text, copy = false, icon = false }: { text: string; copy?: boolean; icon?:
 let done = $state(false);
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-function put() {
-  navigator.clipboard.writeText(text).then(() => {
-    done = true;
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      done = false;
-    }, 1200);
-  }).catch(() => {
+function copied() {
+  done = true;
+  clearTimeout(timer);
+  timer = setTimeout(() => {
     done = false;
+  }, 1200);
+}
+
+function put() {
+  navigator.clipboard.writeText(text).then(copied).catch(() => {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.left = '-9999px';
+    document.body.append(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    if (ok)
+      copied();
   });
 }
 </script>
@@ -24,7 +36,7 @@ function put() {
     onclick={put}
   >
     {#if icon === false}
-      <span class="min-w-0 font-mono text-[0.92em] break-all">{text}</span>
+      <span class="min-w-0 font-mono text-[0.92em]">{text}</span>
     {/if}
     {#if done}
       <svg class="size-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
