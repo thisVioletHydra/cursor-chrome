@@ -3,35 +3,12 @@ import { enhance } from '$app/forms';
 import Out from '$lib/Out.svelte';
 
 let { data } = $props();
-const link = $derived(data.links.find(item => item.name === 'HeadHunter'));
-let step = $state(0);
 let openUnlink = $state(false);
 let phrase = $state('');
 let resumeOpen = $state(false);
 let resumeDraft = $state('');
 let resumePhase = $state<'idle' | 'checking' | 'error'>('idle');
 let resumeMessage = $state('');
-let booted = false;
-
-
-$effect(() => {
-  if (booted || typeof sessionStorage === 'undefined')
-    return;
-
-  booted = true;
-  const saved = sessionStorage.getItem('hh-step');
-  if (saved === '0' || saved === '1')
-    step = Number(saved);
-  else
-    step = data.resumeId ? 1 : 0;
-});
-
-$effect(() => {
-  if (booted === false || typeof sessionStorage === 'undefined')
-    return;
-
-  sessionStorage.setItem('hh-step', String(step));
-});
 
 function openResume() {
   resumeOpen = true;
@@ -60,35 +37,10 @@ function openResume() {
       <button class="ml-auto cursor-pointer rounded-lg px-3 py-1.5 text-sm text-rose-400 transition hover:bg-rose-500 hover:text-white focus-visible:bg-rose-500 focus-visible:text-white focus-visible:outline-none" type="button" onclick={() => { phrase = ''; openUnlink = true; }}>Отвязать</button>
     </div>
   {/if}
-  {#if link?.ok}
-    <div class="flex items-center gap-3 rounded-2xl border border-emerald-400/30 bg-[#151922] px-4 py-3">
-      <span class="size-1.5 shrink-0 rounded-full bg-emerald-400"></span>
-      <p class="text-sm text-zinc-200">{link.detail || 'Токен активирован'}</p>
-    </div>
-  {/if}
 </div>
 
 <section class="rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
-  <div class="mb-4 flex items-center gap-2">
-    <button
-      class="btn btn-ghost btn-sm"
-      type="button"
-      aria-label="Назад"
-      disabled={step === 0}
-      onclick={() => step = 0}
-    >←</button>
-    <span class="text-xs text-zinc-500">{step + 1} / 2</span>
-    <button
-      class="btn btn-ghost btn-sm"
-      type="button"
-      aria-label="Дальше"
-      disabled={step === 1 || data.resumeId.length === 0}
-      onclick={() => step = 1}
-    >→</button>
-  </div>
-
-  {#if step === 0}
-    <h2 class="text-base font-semibold text-white">Введите ссылку на резюме</h2>
+  <h2 class="text-base font-semibold text-white">Введите ссылку на резюме</h2>
     {#if data.resumeId && resumeOpen === false}
       <div class="mt-4 flex items-end gap-3">
         <div class="flex h-11 min-w-0 flex-1 items-center rounded-lg border border-white/10 bg-black/30 px-3 text-sm">
@@ -116,7 +68,6 @@ function openResume() {
           return async ({ result, update }) => {
             const body = result.type === 'success' ? result.data : null;
             if (body?.ok === true) {
-              step = 1;
               resumeOpen = false;
               await update();
               return;
@@ -140,10 +91,6 @@ function openResume() {
         </button>
       </form>
     {/if}
-  {:else}
-    <h2 class="text-base font-semibold text-white">Токен не делаем</h2>
-    <p class="mt-3 text-sm leading-6 text-zinc-300">Заявку на приложение не отправляй. HH закрыл API для соискателей 15 декабря 2025. Эта форма только для сотрудников работодателя, отклик с такого токена не уйдёт.</p>
-  {/if}
 </section>
 
 {#if openUnlink}
