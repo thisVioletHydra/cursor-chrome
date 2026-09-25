@@ -5,12 +5,27 @@ import Out from '$lib/Out.svelte';
 
 let { data } = $props();
 const link = $derived(data.links.find(item => item.name === 'HeadHunter'));
+let ask = $state(false);
 </script>
 
-<header class="mb-8">
+<header class="mb-5">
   <p class="text-xs tracking-wide text-zinc-500 uppercase">HeadHunter</p>
-  <h1 class="mt-2 text-3xl font-semibold tracking-tight">Отклики</h1>
+  <h1 class="mt-1 text-3xl font-semibold tracking-tight">Отклики</h1>
 </header>
+
+{#if link?.ok && data.resumeId}
+  <div class="flex items-center gap-3 rounded-2xl border border-white/8 bg-[#151922] px-4 py-3">
+    <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-[#d6001c] text-sm font-semibold text-white">hh</span>
+    <div class="min-w-0">
+      <a class="block truncate text-sm text-indigo-300 underline-offset-4 hover:underline" href="https://hh.ru/resume/{data.resumeId}" target="_blank" rel="noreferrer">{data.resumeId}</a>
+      <p class="mt-0.5 flex items-center gap-1.5 text-xs text-zinc-500">
+        <span class="size-1.5 rounded-full bg-emerald-400"></span>
+        активирован
+      </p>
+    </div>
+    <button class="ml-auto cursor-pointer rounded-lg px-3 py-1.5 text-sm text-rose-400 transition hover:bg-rose-500 hover:text-white focus-visible:bg-rose-500 focus-visible:text-white focus-visible:outline-none" type="button" onclick={() => ask = true}>Отвязать</button>
+  </div>
+{/if}
 
 <KeyConnect
   section="hh"
@@ -22,9 +37,11 @@ const link = $derived(data.links.find(item => item.name === 'HeadHunter'));
     { name: 'hhAccessToken', label: 'Access token', secret: true },
     { name: 'hhResumeId', label: 'Резюме', secret: false, url: true },
   ]}
+  showActive={false}
+  bind:ask
 />
 
-<section class="mt-8 rounded-2xl border border-white/8 bg-[#151922] p-7 text-sm leading-7 text-zinc-300">
+<section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4 text-sm leading-6 text-zinc-300">
   <h2 class="text-base font-semibold text-white">Резюме</h2>
   <ol class="mt-4 list-decimal space-y-4 pl-5">
     <li>Жми <Out href="https://hh.ru/applicant/resumes" text="свои резюме" /> и открой Fullstack.</li>
