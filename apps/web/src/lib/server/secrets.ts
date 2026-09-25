@@ -23,6 +23,7 @@ export type Account = Stored & {
 
 export const CREATOR = 'thisVioletHydra';
 export const VACANCY_RUB = 1;
+export const GUEST_BALANCE = 200;
 
 const empty = (): Account => ({
   telegramToken: '',

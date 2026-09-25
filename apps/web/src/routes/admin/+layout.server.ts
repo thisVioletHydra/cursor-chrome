@@ -3,8 +3,8 @@ import type { LayoutServerLoad } from './$types';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { redirect } from '@sveltejs/kit';
 import { coolLeft } from '$lib/server/admin-actions';
-import { storedLinks } from '$lib/server/checks';
-import { isCreator, readAccount, VACANCY_RUB } from '$lib/server/secrets';
+import { guestLinks, storedLinks } from '$lib/server/checks';
+import { GUEST_BALANCE, isCreator, readAccount, VACANCY_RUB } from '$lib/server/secrets';
 import { allowedLogins, readSession } from '$lib/server/session';
 
 export const load: LayoutServerLoad = async ({ cookies }) => {
@@ -12,15 +12,19 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
   if (session === null || allowedLogins().includes(session.login) === false)
     redirect(303, '/');
 
+  const creator = isCreator(session.login);
+  const preview = creator && cookies.get('preview') === 'guest';
   const account = await readAccount(session.login);
-  const links = await storedLinks(session.login);
+  const links = preview ? guestLinks() : await storedLinks(session.login);
   return {
-    login: session.login,
+    login: preview ? 'гость' : session.login,
+    preview,
+    canPreview: creator,
     links,
-    polling: telegramOn(),
+    polling: preview ? false : telegramOn(),
     billing: {
-      infinite: isCreator(session.login),
-      balance: account.balance,
+      infinite: preview ? false : creator,
+      balance: preview ? GUEST_BALANCE : account.balance,
       vacancyRub: VACANCY_RUB,
     },
     locks: {

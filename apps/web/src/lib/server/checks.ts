@@ -15,6 +15,14 @@ export type Probe = {
 
 const TIMEOUT = 8_000;
 
+export function guestLinks(): LinkStatus[] {
+  return [
+    { name: 'Телега', set: false, ok: false, detail: 'токена нет' },
+    { name: 'Mistral', set: false, ok: false, detail: 'ключа нет' },
+    { name: 'HeadHunter', set: false, ok: false, detail: 'токена нет' },
+  ];
+}
+
 export async function storedLinks(login: string): Promise<LinkStatus[]> {
   const saved = await readAccount(login);
   const telegram = saved.telegramToken;

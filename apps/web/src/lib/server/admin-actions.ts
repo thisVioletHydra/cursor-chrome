@@ -3,7 +3,7 @@ import type { Stored } from './secrets';
 
 import { error } from '@sveltejs/kit';
 import { probeHh, probeMistral, probeTelegram } from './checks';
-import { publishSecrets, readAccount, writeAccount } from './secrets';
+import { isCreator, publishSecrets, readAccount, writeAccount } from './secrets';
 import { allowedLogins, readSession } from './session';
 
 const sections = ['telegram', 'mistral', 'hh'] as const;
@@ -44,8 +44,14 @@ function hold(section: Section, retryAfter: number): number {
   return retryAfter;
 }
 
+function viewingGuest(cookies: RequestEvent['cookies'], login: string): boolean {
+  return isCreator(login) && cookies.get('preview') === 'guest';
+}
+
 export async function verifyAdmin({ request, cookies }: RequestEvent) {
   const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
   const form = await request.formData();
   const section = sectionOf(form);
   if (section === null)
@@ -102,6 +108,9 @@ function applyProbe(section: Section, next: Stored, form: FormData, detail: stri
 
 export async function unlinkAdmin({ request, cookies }: RequestEvent) {
   const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false };
+
   const form = await request.formData();
   if (String(form.get('phrase') ?? '') !== 'unlink')
     return { ok: false };
