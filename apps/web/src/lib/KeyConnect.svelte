@@ -28,7 +28,6 @@ let openUnlink = $state(false);
 let phrase = $state('');
 let tick: ReturnType<typeof setInterval> | undefined;
 let armed = false;
-let restored = $state(false);
 
 const hints: Record<string, string> = {
   telegramToken: '7123456789:AAHxx...',
@@ -59,6 +58,11 @@ function armWait(seconds: number) {
   }, 1000);
 }
 
+function rememberField(name: string, value: string) {
+  const kept = memory.get(section) ?? { draft: {}, message };
+  memory.set(section, { draft: { ...kept.draft, [name]: value }, message });
+}
+
 $effect(() => {
   if (active)
     return;
@@ -70,14 +74,6 @@ $effect(() => {
     if (kept.message.length > 0)
       phase = 'error';
   }
-  restored = true;
-});
-
-$effect(() => {
-  if (restored === false || active)
-    return;
-
-  memory.set(section, { draft: $state.snapshot(draft), message });
 });
 
 $effect(() => {
@@ -107,6 +103,7 @@ $effect(() => {
 
       phase = 'error';
       message = typeof data?.detail === 'string' ? data.detail : 'не вышло';
+      memory.set(section, { draft: $state.snapshot(draft), message });
       const nextWait = typeof data?.wait === 'number' ? data.wait : 0;
       if (nextWait > 0)
         armWait(nextWait);
@@ -139,6 +136,13 @@ $effect(() => {
               readonly={phase === 'checking'}
               disabled={active}
               bind:value={draft[field.name]}
+              oninput={(event) => {
+                const input = event.currentTarget;
+                if ((input instanceof HTMLInputElement) === false)
+                  return;
+
+                rememberField(field.name, input.value);
+              }}
             />
             {#if active}
               <span class="absolute inset-0 rounded-lg bg-black/55"></span>
