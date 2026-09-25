@@ -20,13 +20,13 @@ let offset = 0;
 let stopScan: AbortController | null = null;
 let started = false;
 let polling = false;
-let onApply: (() => Promise<boolean>) | null = null;
+let onApply: ((item: { id: string; company: string; url: string }) => Promise<boolean>) | null = null;
 
 export function telegramOn(): boolean {
   return polling;
 }
 
-export function setApplyGate(gate: () => Promise<boolean>): void {
+export function setApplyGate(gate: (item: { id: string; company: string; url: string }) => Promise<boolean>): void {
   onApply = gate;
 }
 
@@ -138,9 +138,12 @@ async function run(chatId: number): Promise<void> {
   });
   stopScan = null;
   for (const report of reports) {
-    if (report.verdict === 'apply' && onApply !== null && await onApply() === false) {
-      await send(chatId, 'Баланс кончился. Вакансия стоит 1 ₽.');
-      break;
+    if (report.verdict === 'apply' && live && onApply !== null) {
+      const paid = await onApply({ id: report.id, company: report.company, url: report.url });
+      if (paid === false) {
+        await send(chatId, 'Баланс кончился. Вакансия стоит 1 ₽.');
+        break;
+      }
     }
 
     await send(chatId, report.line);

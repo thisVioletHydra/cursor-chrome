@@ -26,6 +26,12 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
       infinite: preview ? false : creator,
       balance: preview ? GUEST_BALANCE : account.balance,
       vacancyRub: VACANCY_RUB,
+      history: creator && preview === false ? account.history.map(row => ({
+        company: row.company,
+        url: row.url,
+        rub: row.rub,
+        when: new Intl.DateTimeFormat('ru-RU', { timeZone: 'Asia/Bishkek', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(row.at),
+      })) : [],
     },
     locks: {
       telegram: coolLeft('telegram'),

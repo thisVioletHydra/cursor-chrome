@@ -17,8 +17,16 @@ export type Labels = {
 
 export type Stored = Secrets & Labels;
 
+export type Charge = {
+  at: number;
+  company: string;
+  url: string;
+  rub: number;
+};
+
 export type Account = Stored & {
   balance: number;
+  history: Charge[];
 };
 
 export const CREATOR = 'thisVioletHydra';
@@ -34,6 +42,7 @@ const empty = (): Account => ({
   mistralLabel: '',
   hhLabel: '',
   balance: 0,
+  history: [],
 });
 
 export function isCreator(login: string): boolean {
@@ -65,7 +74,12 @@ export async function readAccount(login: string): Promise<Account> {
   try {
     const raw = JSON.parse(await fsPromises.readFile(accountPath(login), 'utf8')) as Partial<Account>;
 
-    return { ...empty(), ...raw, balance: typeof raw.balance === 'number' ? raw.balance : 0 };
+    return {
+      ...empty(),
+      ...raw,
+      balance: typeof raw.balance === 'number' ? raw.balance : 0,
+      history: chargesOf(raw.history),
+    };
   }
   catch {
     return empty();
@@ -105,15 +119,37 @@ export function publishSecrets(login: string, next: Secrets): void {
   }
 }
 
-export async function takeVacancy(login: string): Promise<boolean> {
-  if (isCreator(login))
-    return true;
+function chargesOf(value: unknown): Charge[] {
+  if (Array.isArray(value) === false)
+    return [];
 
+  return value.flatMap((item) => {
+    if (typeof item !== 'object' || item === null)
+      return [];
+
+    const row = item as Partial<Charge>;
+    if (typeof row.at !== 'number' || typeof row.company !== 'string' || typeof row.url !== 'string')
+      return [];
+
+    return [{ at: row.at, company: row.company, url: row.url, rub: typeof row.rub === 'number' ? row.rub : 0 }];
+  }).slice(0, 80);
+}
+
+export async function takeVacancy(login: string, item: { company: string; url: string }): Promise<boolean> {
   const account = await readAccount(login);
-  if (account.balance < VACANCY_RUB)
+  const creator = isCreator(login);
+  if (creator === false && account.balance < VACANCY_RUB)
     return false;
 
-  account.balance -= VACANCY_RUB;
+  if (creator === false)
+    account.balance -= VACANCY_RUB;
+
+  account.history = [{
+    at: Date.now(),
+    company: item.company,
+    url: item.url,
+    rub: creator ? 0 : VACANCY_RUB,
+  }, ...account.history].slice(0, 80);
   await writeAccount(login, account);
 
   return true;
