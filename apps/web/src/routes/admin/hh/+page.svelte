@@ -17,9 +17,10 @@ const link = $derived(data.links.find(item => item.name === 'HeadHunter'));
   active={link?.ok === true}
   detail={link?.detail ?? ''}
   wait={data.locks.hh}
+  resumeId={data.resumeId}
   fields={[
     { name: 'hhAccessToken', label: 'Access token', secret: true },
-    { name: 'hhResumeId', label: 'Resume id', secret: false },
+    { name: 'hhResumeId', label: 'Резюме', secret: false, url: true },
   ]}
 />
 
@@ -27,7 +28,7 @@ const link = $derived(data.links.find(item => item.name === 'HeadHunter'));
   <h2 class="text-base font-semibold text-white">Resume id</h2>
   <ol class="mt-4 list-decimal space-y-4 pl-5">
     <li>Жми <Out href="https://hh.ru/applicant/resumes" text="свои резюме" /> и открой Fullstack.</li>
-    <li>Из адреса скопируй кусок после <Mark text="/resume/" /> и вставь в поле.</li>
+    <li>Скопируй адресную строку и вставь в поле.</li>
   </ol>
   <h2 class="mt-8 text-base font-semibold text-white">Access token</h2>
   <ol class="mt-4 list-decimal space-y-4 pl-5">

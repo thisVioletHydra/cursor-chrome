@@ -63,6 +63,12 @@ export async function verifyAdmin({ request, cookies }: RequestEvent) {
 
   const saved = await readAccount(login);
   const next = { ...saved };
+  if (section === 'hh') {
+    const token = String(form.get('hhAccessToken') ?? '').trim() || saved.hhAccessToken;
+    const rawResume = String(form.get('hhResumeId') ?? '').trim();
+    form.set('hhAccessToken', token);
+    form.set('hhResumeId', resumeIdOf(rawResume || saved.hhResumeId));
+  }
   const probe = await probeSection(section, form);
   const wait = probe.ok ? 0 : hold(section, probe.retryAfter);
   if (probe.ok === false)
@@ -84,8 +90,16 @@ async function probeSection(section: Section, form: FormData) {
 
   return probeHh(
     String(form.get('hhAccessToken') ?? '').trim(),
-    String(form.get('hhResumeId') ?? '').trim(),
+    resumeIdOf(String(form.get('hhResumeId') ?? '').trim()),
   );
+}
+
+function resumeIdOf(raw: string): string {
+  const found = raw.match(/\/resume\/([A-Za-z0-9]+)/);
+  if (found)
+    return found[1];
+
+  return raw;
 }
 
 function applyProbe(section: Section, next: Stored, form: FormData, detail: string) {
@@ -101,8 +115,8 @@ function applyProbe(section: Section, next: Stored, form: FormData, detail: stri
     return;
   }
 
-  next.hhAccessToken = String(form.get('hhAccessToken') ?? '').trim();
-  next.hhResumeId = String(form.get('hhResumeId') ?? '').trim();
+  next.hhAccessToken = String(form.get('hhAccessToken') ?? '').trim() || next.hhAccessToken;
+  next.hhResumeId = resumeIdOf(String(form.get('hhResumeId') ?? '').trim());
   next.hhLabel = detail;
 }
 

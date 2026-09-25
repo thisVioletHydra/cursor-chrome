@@ -38,5 +38,6 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
       mistral: coolLeft('mistral'),
       hh: coolLeft('hh'),
     },
+    resumeId: preview ? '' : account.hhResumeId,
   };
 };
