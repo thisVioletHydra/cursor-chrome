@@ -11,6 +11,8 @@ type Overlay = {
 
 let overlay: Overlay | null = null;
 let guarded = false;
+let refreshing = false;
+let paintKey = '';
 
 export function mountOverlay(): void {
   paintOverlayCss();
@@ -31,7 +33,6 @@ export function mountOverlay(): void {
 
     existing.setAttribute('popover', 'manual');
 
-    raiseOverlay(existing);
     guardPage();
     void refreshOverlay();
 
@@ -74,7 +75,6 @@ export function mountOverlay(): void {
     </div>
   `;
   document.documentElement.append(host);
-  raiseOverlay(host);
   overlay = { host, shadow };
   guardPage();
   void refreshOverlay();
@@ -104,10 +104,34 @@ export async function toggleOverlayHistory(): Promise<void> {
 type HistoryRow = ApplyPayload & { sentAt: number; status?: string; hints?: string[] };
 
 export async function refreshOverlay(): Promise<void> {
+  if (overlay === null || refreshing)
+    return;
+
+  refreshing = true;
+  try {
+    await paintOverlay();
+  }
+  finally {
+    refreshing = false;
+  }
+}
+
+async function paintOverlay(): Promise<void> {
   if (overlay === null)
     return;
 
-  raiseOverlay(overlay.host);
+  const flags = await ask<{ hideJunk?: boolean; showPop?: boolean }>({ type: 'get-flags' });
+  const status = await ask<{ connected?: boolean }>({ type: 'get-status' });
+  if (status === null)
+    return;
+
+  const visible = status.connected === true && flags?.showPop !== false;
+  const changed = setPopVisible(overlay.host, visible);
+  if (changed)
+    paintKey = '';
+
+  if (visible === false)
+    return;
 
   const root = overlay.shadow;
   const todayEl = root.querySelector('[data-cc-today]');
@@ -119,7 +143,6 @@ export async function refreshOverlay(): Promise<void> {
     return;
 
   const data = await ask<{ today?: number; log?: HistoryRow[]; waiting?: HistoryRow[] }>({ type: 'apply-history' });
-  const flags = await ask<{ hideJunk?: boolean }>({ type: 'get-flags' });
   if (data === null) {
     todayEl.textContent = '?';
     if (waitN)
@@ -143,6 +166,18 @@ export async function refreshOverlay(): Promise<void> {
   }
 
   const waiting = labeledApplies(data.waiting || []);
+  const log = labeledApplies((data.log || []).filter(item => item.status !== 'needsHuman'));
+  const listOpen = list !== null && list.hidden === false;
+  const nextKey = [
+    data.today ?? 0,
+    flags?.hideJunk === true,
+    waiting.map(rowKey).join('\n'),
+    listOpen ? log.map(rowKey).join('\n') : 'shut',
+  ].join('\u0001');
+  if (nextKey === paintKey)
+    return;
+
+  paintKey = nextKey;
   todayEl.textContent = String(data.today ?? 0);
   if (waitN)
     waitN.textContent = String(waiting.length);
@@ -159,7 +194,6 @@ export async function refreshOverlay(): Promise<void> {
   if (list === null || list.hidden)
     return;
 
-  const log = labeledApplies((data.log || []).filter(item => item.status !== 'needsHuman'));
   const key = localDay(Date.now());
   const fresh = log.filter(item => localDay(item.sentAt) === key);
   const older = log.filter(item => localDay(item.sentAt) !== key);
@@ -186,6 +220,10 @@ function paintOverlayCss(): void {
   document.documentElement.append(css);
 }
 
+function rowKey(item: HistoryRow): string {
+  return `${item.vacancyId}|${item.title}|${item.company}|${item.hints?.[0] || ''}|${item.sentAt}`;
+}
+
 function raiseOverlay(host: HTMLElement): void {
   try {
     if (host.matches(':popover-open') === false)
@@ -193,6 +231,29 @@ function raiseOverlay(host: HTMLElement): void {
   }
   catch {
   }
+}
+
+function setPopVisible(host: HTMLElement, visible: boolean): boolean {
+  const open = host.hidden === false && host.matches(':popover-open');
+  if (visible === open)
+    return false;
+
+  if (visible) {
+    host.hidden = false;
+    raiseOverlay(host);
+
+    return true;
+  }
+
+  host.hidden = true;
+  try {
+    if (host.matches(':popover-open'))
+      host.hidePopover();
+  }
+  catch {
+  }
+
+  return true;
 }
 
 function guardPage(): void {

@@ -113,12 +113,15 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
     return true;
   },
   'set-flags': (message, reply) => {
-    const patch: { hideJunk?: boolean; keepSession?: boolean } = {};
+    const patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean } = {};
     if ('hideJunk' in message)
       patch.hideJunk = message.hideJunk === true;
 
     if ('keepSession' in message)
       patch.keepSession = message.keepSession === true;
+
+    if ('showPop' in message)
+      patch.showPop = message.showPop === true;
 
     replyJob(reply, setFlags(patch));
 

@@ -47,6 +47,7 @@ const navs: Record<ViewName, HTMLElement | null> = {
 };
 const syncEl = document.getElementById('sync-url') as HTMLInputElement | null;
 const hideJunkEl = document.getElementById('flag-hide-junk') as HTMLInputElement | null;
+const showPopEl = document.getElementById('flag-show-pop') as HTMLInputElement | null;
 const keepSessionEl = document.getElementById('flag-keep-session') as HTMLInputElement | null;
 const workerUrlForm = document.getElementById('worker-url-form') as HTMLFormElement | null;
 
@@ -94,6 +95,10 @@ reportEl?.addEventListener('click', () => {
 
 hideJunkEl?.addEventListener('change', () => {
   void browser.runtime.sendMessage({ type: 'set-flags', hideJunk: hideJunkEl.checked === true });
+});
+
+showPopEl?.addEventListener('change', () => {
+  void browser.runtime.sendMessage({ type: 'set-flags', showPop: showPopEl.checked === true });
 });
 
 keepSessionEl?.addEventListener('change', () => {
@@ -242,10 +247,12 @@ async function bootSettings(): Promise<void> {
   const flags = await browser.runtime.sendMessage({ type: 'get-flags' }) as {
     hideJunk?: boolean;
     keepSession?: boolean;
+    showPop?: boolean;
   };
   const boxes: Array<[HTMLInputElement | null, boolean]> = [
     [hideJunkEl, flags?.hideJunk === true],
     [keepSessionEl, flags?.keepSession === true],
+    [showPopEl, flags?.showPop !== false],
   ];
   for (const [element, on] of boxes) {
     if (element)
