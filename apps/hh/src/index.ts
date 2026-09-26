@@ -10,4 +10,5 @@ export { splitQueries, suggestQueries } from './queries.ts';
 export { markDone, pending, readQueue } from './queue.ts';
 export type { QueueItem, QueueStatus } from './queue.ts';
 export { scan } from './scan.ts';
+export { parseJsonLoose, writeJsonAtomic } from './store.ts';
 export type { Report, Vacancy } from './rules.ts';

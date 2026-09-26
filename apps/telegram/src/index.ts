@@ -1,4 +1,4 @@
-import { pingReasons, scan } from '@cursor-chrome/hh';
+import { pingReasons, scan, writeJsonAtomic } from '@cursor-chrome/hh';
 
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -203,8 +203,7 @@ async function readOwner(): Promise<number | null> {
 }
 
 async function writeOwner(chatId: number): Promise<void> {
-  await fsPromises.mkdir(path.dirname(ownerFile), { recursive: true });
-  await fsPromises.writeFile(ownerFile, JSON.stringify({ chatId }));
+  await writeJsonAtomic(ownerFile, { chatId });
 }
 
 async function send(chatId: number, text: string, keys = false): Promise<void> {

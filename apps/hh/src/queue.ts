@@ -1,4 +1,5 @@
 import { storePath } from './memory.ts';
+import { parseJsonLoose, writeJsonAtomic } from './store.ts';
 
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -24,22 +25,23 @@ export function queuePath(): string {
 }
 
 export async function readQueue(): Promise<QueueItem[]> {
+  let text: string;
   try {
-    const raw = JSON.parse(await fsPromises.readFile(queuePath(), 'utf8')) as unknown;
-    if (Array.isArray(raw) === false)
-      return [];
-
-    return raw.filter(isItem);
+    text = await fsPromises.readFile(queuePath(), 'utf8');
   }
   catch {
     return [];
   }
+
+  const parsed = parseJsonLoose(text);
+  if (parsed === null || Array.isArray(parsed.value) === false)
+    return [];
+
+  return parsed.value.filter(isItem);
 }
 
 export async function writeQueue(items: QueueItem[]): Promise<void> {
-  const file = queuePath();
-  await fsPromises.mkdir(path.dirname(file), { recursive: true });
-  await fsPromises.writeFile(file, JSON.stringify(items.slice(0, MAX)));
+  await writeJsonAtomic(queuePath(), items.slice(0, MAX));
 }
 
 export async function enqueue(item: Omit<QueueItem, 'at' | 'status'>): Promise<boolean> {

@@ -1,6 +1,6 @@
 import type { Provider } from '@cursor-chrome/hh';
 
-import { parseChain } from '@cursor-chrome/hh';
+import { parseChain, parseJsonLoose, writeJsonAtomic } from '@cursor-chrome/hh';
 import crypto from 'node:crypto';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -82,31 +82,40 @@ function accountPath(login: string): string {
 }
 
 export async function readAccount(login: string): Promise<Account> {
+  let text: string;
   try {
-    const raw = JSON.parse(await fsPromises.readFile(accountPath(login), 'utf8')) as Partial<Account> & { mistralKey?: string };
-    const { mistralKey, ...rest } = raw;
-
-    return {
-      ...empty(),
-      ...rest,
-      modelChain: migrateChain(raw.modelChain, mistralKey),
-      balance: typeof raw.balance === 'number' ? raw.balance : 0,
-      history: chargesOf(raw.history),
-    };
+    text = await fsPromises.readFile(accountPath(login), 'utf8');
   }
-  catch (error) {
-    const code = (error as NodeJS.ErrnoException).code ?? '';
-    if (code !== 'ENOENT')
-      console.error(`account ${login}: ${error instanceof Error ? error.message : String(error)}`);
+  catch {
+    return empty();
+  }
+
+  const parsed = parseJsonLoose(text);
+  if (parsed === null) {
+    console.error(`account ${login}: файл не разобрать`);
 
     return empty();
   }
+
+  const raw = parsed.value as Partial<Account> & { mistralKey?: string };
+  const { mistralKey, ...rest } = raw;
+  const account: Account = {
+    ...empty(),
+    ...rest,
+    modelChain: migrateChain(raw.modelChain, mistralKey),
+    balance: typeof raw.balance === 'number' ? raw.balance : 0,
+    history: chargesOf(raw.history),
+  };
+  if (parsed.salvaged) {
+    console.error(`account ${login}: восстановил из битого файла, перезаписал`);
+    await writeAccount(login, account);
+  }
+
+  return account;
 }
 
 export async function writeAccount(login: string, next: Account): Promise<void> {
-  const file = accountPath(login);
-  await fsPromises.mkdir(path.dirname(file), { recursive: true });
-  await fsPromises.writeFile(file, JSON.stringify(next));
+  await writeJsonAtomic(accountPath(login), next);
 }
 
 function migrateChain(chain: unknown, mistralKey: unknown): string {

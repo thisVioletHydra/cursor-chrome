@@ -1,4 +1,5 @@
 import { SEND_PER_DAY } from './limits.ts';
+import { parseJsonLoose, writeJsonAtomic } from './store.ts';
 
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -30,23 +31,26 @@ export function moscowDay(now = new Date()): string {
 }
 
 export async function readMemory(): Promise<Memory> {
+  const day = moscowDay();
+  let text: string;
   try {
-    const raw = JSON.parse(await fsPromises.readFile(storePath(), 'utf8')) as Memory;
-    const day = moscowDay();
-    if (raw.day !== day)
-      return { seen: raw.seen ?? [], day, sent: 0 };
-
-    return { seen: raw.seen ?? [], day, sent: raw.sent ?? 0 };
+    text = await fsPromises.readFile(storePath(), 'utf8');
   }
   catch {
-    return { seen: [], day: moscowDay(), sent: 0 };
+    return { seen: [], day, sent: 0 };
   }
+
+  const parsed = parseJsonLoose(text);
+  const raw = parsed && typeof parsed.value === 'object' && parsed.value !== null ? parsed.value as Partial<Memory> : {};
+  const seen = Array.isArray(raw.seen) ? raw.seen.filter((id): id is string => typeof id === 'string') : [];
+  if (raw.day !== day)
+    return { seen, day, sent: 0 };
+
+  return { seen, day, sent: typeof raw.sent === 'number' ? raw.sent : 0 };
 }
 
 export async function writeMemory(memory: Memory): Promise<void> {
-  const file = storePath();
-  await fsPromises.mkdir(path.dirname(file), { recursive: true });
-  await fsPromises.writeFile(file, JSON.stringify(memory));
+  await writeJsonAtomic(storePath(), memory);
 }
 
 export function canSend(memory: Memory, sentThisStart: number, perStart: number): boolean {
