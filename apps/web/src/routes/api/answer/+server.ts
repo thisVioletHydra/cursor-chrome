@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { answerQuestion, asQuestion } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
-import { readAccount } from '$lib/server/secrets';
+import { chainOf, readAccount } from '$lib/server/secrets';
 
 export const POST: RequestHandler = async ({ request }) => {
   const login = await extLogin(request);
@@ -14,14 +14,14 @@ export const POST: RequestHandler = async ({ request }) => {
   if (question === null)
     return json({ human: true, reason: 'вопрос не разобран' });
 
-  const account = await readAccount(login);
-  if (account.mistralKey.length === 0)
-    return json({ human: true, reason: 'нет ключа mistral' });
+  const chain = chainOf(await readAccount(login));
+  if (chain.length === 0)
+    return json({ human: true, reason: 'нет ключа модели' });
 
   try {
-    return json(await answerQuestion(account.mistralKey, question));
+    return json(await answerQuestion(chain, question));
   }
   catch (err) {
-    return json({ human: true, reason: err instanceof Error ? err.message : 'mistral не ответил' });
+    return json({ human: true, reason: err instanceof Error ? err.message : 'модель не ответила' });
   }
 };

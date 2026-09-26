@@ -44,7 +44,7 @@ let {
   note = $bindable(''),
   ask = $bindable(false),
 }: {
-  section: 'telegram' | 'mistral' | 'hh';
+  section: 'telegram' | 'hh';
   active: boolean;
   detail: string;
   wait: number;
@@ -71,7 +71,6 @@ let resumeOpen = $state(false);
 
 const hints: Record<string, string> = {
   telegramToken: '7123456789:AAHxx...',
-  mistralKey: 'abcdef0123456789...',
   hhAccessToken: 'USER...',
   hhResumeId: 'https://hh.ru/resume/...',
 };

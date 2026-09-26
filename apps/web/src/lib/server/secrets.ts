@@ -1,3 +1,6 @@
+import type { Provider } from '@cursor-chrome/hh';
+
+import { parseChain } from '@cursor-chrome/hh';
 import crypto from 'node:crypto';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -5,7 +8,7 @@ import process from 'node:process';
 
 export type Secrets = {
   telegramToken: string;
-  mistralKey: string;
+  modelChain: string;
   hhAccessToken: string;
   hhResumeId: string;
   hhQuery: string;
@@ -14,7 +17,6 @@ export type Secrets = {
 
 export type Labels = {
   telegramLabel: string;
-  mistralLabel: string;
   hhLabel: string;
 };
 
@@ -42,13 +44,12 @@ export const GUEST_BALANCE = 200;
 
 const empty = (): Account => ({
   telegramToken: '',
-  mistralKey: '',
+  modelChain: '',
   hhAccessToken: '',
   hhResumeId: '',
   hhQuery: '',
   extToken: '',
   telegramLabel: '',
-  mistralLabel: '',
   hhLabel: '',
   coverLetter: '',
   balance: 0,
@@ -82,11 +83,13 @@ function accountPath(login: string): string {
 
 export async function readAccount(login: string): Promise<Account> {
   try {
-    const raw = JSON.parse(await fsPromises.readFile(accountPath(login), 'utf8')) as Partial<Account>;
+    const raw = JSON.parse(await fsPromises.readFile(accountPath(login), 'utf8')) as Partial<Account> & { mistralKey?: string };
+    const { mistralKey, ...rest } = raw;
 
     return {
       ...empty(),
-      ...raw,
+      ...rest,
+      modelChain: migrateChain(raw.modelChain, mistralKey),
       balance: typeof raw.balance === 'number' ? raw.balance : 0,
       history: chargesOf(raw.history),
     };
@@ -102,9 +105,27 @@ export async function writeAccount(login: string, next: Account): Promise<void> 
   await fsPromises.writeFile(file, JSON.stringify(next));
 }
 
+function migrateChain(chain: unknown, mistralKey: unknown): string {
+  if (typeof chain === 'string' && chain.length > 0)
+    return chain;
+
+  if (typeof mistralKey === 'string' && mistralKey.length > 0)
+    return JSON.stringify([{ id: 'mistral', key: mistralKey }]);
+
+  return '';
+}
+
+export function chainOf(account: Pick<Account, 'modelChain'>): Provider[] {
+  return parseChain(account.modelChain);
+}
+
+export function withChain(account: Account, chain: Provider[]): Account {
+  return { ...account, modelChain: chain.length > 0 ? JSON.stringify(chain) : '' };
+}
+
 const envKeys: Record<keyof Secrets, string> = {
   telegramToken: 'TELEGRAM_BOT_TOKEN',
-  mistralKey: 'MISTRAL_API_KEY',
+  modelChain: 'MODEL_CHAIN',
   hhAccessToken: 'HH_ACCESS_TOKEN',
   hhResumeId: 'HH_RESUME_ID',
   hhQuery: 'HH_QUERY',

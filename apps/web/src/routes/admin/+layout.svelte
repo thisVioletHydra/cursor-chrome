@@ -7,7 +7,7 @@ let accountOpen = $state(false);
 const items = [
   { href: '/admin', label: 'Главная', exact: true },
   { href: '/admin/telegram', label: 'Telegram', exact: false },
-  { href: '/admin/mistral', label: 'Mistral', exact: false },
+  { href: '/admin/model', label: 'Модель', exact: false },
   { href: '/admin/hh', label: 'HeadHunter', exact: false },
   { href: '/admin/letter', label: 'Сопроводительное', exact: false },
   { href: '/admin/billing', label: 'Billing', exact: false },

@@ -1,13 +1,13 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import type { Stored } from './secrets';
 
-import { COVER_LETTER, splitQueries, suggestQueries } from '@cursor-chrome/hh';
+import { asProvider, COVER_LETTER, splitQueries, suggestQueries } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
-import { probeHh, probeMistral, probeTelegram } from './checks';
-import { isCreator, newExtToken, publishSecrets, readAccount, writeAccount } from './secrets';
+import { probeHh, probeModel, probeTelegram } from './checks';
+import { chainOf, isCreator, newExtToken, publishSecrets, readAccount, withChain, writeAccount } from './secrets';
 import { allowedLogins, readSession } from './session';
 
-const sections = ['telegram', 'mistral', 'hh'] as const;
+const sections = ['telegram', 'model', 'hh'] as const;
 type Section = typeof sections[number];
 
 const coolUntil = new Map<Section, number>();
@@ -55,7 +55,7 @@ export async function verifyAdmin({ request, cookies }: RequestEvent) {
     return { ok: false, detail: 'это просмотр', wait: 0 };
   const form = await request.formData();
   const section = sectionOf(form);
-  if (section === null)
+  if (section === null || section === 'model')
     return { ok: false, detail: 'раздел не тот', wait: 0 };
 
   const left = cooling(section);
@@ -104,9 +104,6 @@ async function probeSection(section: Section, form: FormData) {
   if (section === 'telegram')
     return probeTelegram(String(form.get('telegramToken') ?? '').trim());
 
-  if (section === 'mistral')
-    return probeMistral(String(form.get('mistralKey') ?? '').trim());
-
   return probeHh(
     String(form.get('hhAccessToken') ?? '').trim(),
     resumeIdOf(String(form.get('hhResumeId') ?? '').trim()),
@@ -125,12 +122,6 @@ function applyProbe(section: Section, next: Stored, form: FormData, detail: stri
   if (section === 'telegram') {
     next.telegramToken = String(form.get('telegramToken') ?? '').trim();
     next.telegramLabel = detail;
-    return;
-  }
-
-  if (section === 'mistral') {
-    next.mistralKey = String(form.get('mistralKey') ?? '').trim();
-    next.mistralLabel = detail;
     return;
   }
 
@@ -162,18 +153,19 @@ export async function suggestQueryAdmin({ cookies }: RequestEvent) {
     return { ok: false, detail: 'это просмотр', wait: 0 };
 
   const saved = await readAccount(login);
-  if (saved.mistralKey.length === 0)
-    return { ok: false, detail: 'нет ключа mistral', wait: 0 };
+  const chain = chainOf(saved);
+  if (chain.length === 0)
+    return { ok: false, detail: 'нет ключа модели', wait: 0 };
 
   try {
-    const queries = await suggestQueries(saved.mistralKey, saved.coverLetter || COVER_LETTER);
+    const queries = await suggestQueries(chain, saved.coverLetter || COVER_LETTER);
 
     return { ok: true, detail: queries.join('\n'), wait: 0 };
   }
   catch (err) {
     const why = err instanceof Error ? err.message : 'без ответа';
 
-    return { ok: false, detail: `mistral: ${why}`, wait: 0 };
+    return { ok: false, detail: `модель: ${why}`, wait: 0 };
   }
 }
 
@@ -205,6 +197,74 @@ export async function issueExtTokenAdmin({ cookies }: RequestEvent) {
   return { ok: true, detail: next.extToken, wait: 0 };
 }
 
+export async function addProviderAdmin({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const form = await request.formData();
+  const provider = asProvider({
+    id: String(form.get('provider') ?? ''),
+    key: String(form.get('key') ?? '').trim(),
+    model: String(form.get('model') ?? '').trim(),
+    url: String(form.get('url') ?? '').trim(),
+  });
+  if (provider === null)
+    return { ok: false, detail: 'не хватает ключа, модели или адреса', wait: 0 };
+
+  const probe = await probeModel(provider);
+  if (probe.ok === false)
+    return { ok: false, detail: probe.detail, wait: probe.retryAfter };
+
+  const saved = await readAccount(login);
+  const chain = chainOf(saved).filter(item => item.url !== provider.url || item.model !== provider.model);
+  const next = withChain(saved, [...chain, provider]);
+  await writeAccount(login, next);
+  publishSecrets(login, next);
+
+  return { ok: true, detail: probe.detail, wait: 0 };
+}
+
+export async function removeProviderAdmin({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const form = await request.formData();
+  const index = Number(form.get('index'));
+  const saved = await readAccount(login);
+  const chain = chainOf(saved);
+  if (Number.isInteger(index) === false || index < 0 || index >= chain.length)
+    return { ok: false, detail: 'нет такого', wait: 0 };
+
+  const next = withChain(saved, chain.filter((_, position) => position !== index));
+  await writeAccount(login, next);
+  publishSecrets(login, next);
+
+  return { ok: true, detail: 'убрал', wait: 0 };
+}
+
+export async function raiseProviderAdmin({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const form = await request.formData();
+  const index = Number(form.get('index'));
+  const saved = await readAccount(login);
+  const chain = chainOf(saved);
+  if (Number.isInteger(index) === false || index < 1 || index >= chain.length)
+    return { ok: false, detail: 'уже первый', wait: 0 };
+
+  const reordered = [...chain];
+  [reordered[index - 1], reordered[index]] = [reordered[index], reordered[index - 1]];
+  const next = withChain(saved, reordered);
+  await writeAccount(login, next);
+  publishSecrets(login, next);
+
+  return { ok: true, detail: 'поднял', wait: 0 };
+}
+
 export async function unlinkAdmin({ request, cookies }: RequestEvent) {
   const login = guard(cookies);
   if (viewingGuest(cookies, login))
@@ -233,9 +293,8 @@ function clearSection(section: Section, next: Stored) {
     return;
   }
 
-  if (section === 'mistral') {
-    next.mistralKey = '';
-    next.mistralLabel = '';
+  if (section === 'model') {
+    next.modelChain = '';
     return;
   }
 

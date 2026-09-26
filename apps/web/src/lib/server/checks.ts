@@ -1,5 +1,7 @@
-import { mistralStatus } from '@cursor-chrome/hh';
-import { readAccount } from './secrets';
+import type { Provider } from '@cursor-chrome/hh';
+
+import { probeProvider, providerName } from '@cursor-chrome/hh';
+import { chainOf, readAccount } from './secrets';
 
 export type LinkStatus = {
   name: string;
@@ -19,15 +21,26 @@ const TIMEOUT = 8_000;
 export function guestLinks(): LinkStatus[] {
   return [
     { name: 'Телега', set: false, ok: false, detail: 'токена нет' },
-    { name: 'Mistral', set: false, ok: false, detail: 'ключа нет' },
+    { name: 'Модель', set: false, ok: false, detail: 'ключей нет' },
     { name: 'HeadHunter', set: false, ok: false, detail: 'резюме нет' },
   ];
+}
+
+function chainDetail(chain: Provider[]): string {
+  if (chain.length === 0)
+    return 'ключей нет';
+
+  const names = chain.map(providerName);
+  if (names.length === 1)
+    return names[0];
+
+  return `${names[0]} · запасных ${names.length - 1}`;
 }
 
 export async function storedLinks(login: string): Promise<LinkStatus[]> {
   const saved = await readAccount(login);
   const telegram = saved.telegramToken;
-  const mistral = saved.mistralKey;
+  const chain = chainOf(saved);
   const hhOn = saved.hhResumeId.length > 0;
 
   return [
@@ -38,10 +51,10 @@ export async function storedLinks(login: string): Promise<LinkStatus[]> {
       detail: telegram.length > 0 ? (saved.telegramLabel || 'Токен активирован') : 'токена нет',
     },
     {
-      name: 'Mistral',
-      set: mistral.length > 0,
-      ok: mistral.length > 0,
-      detail: mistral.length > 0 ? (saved.mistralLabel || 'Ключ активирован') : 'ключа нет',
+      name: 'Модель',
+      set: chain.length > 0,
+      ok: chain.length > 0,
+      detail: chainDetail(chain),
     },
     {
       name: 'HeadHunter',
@@ -85,21 +98,10 @@ export async function probeTelegram(token: string): Promise<Probe> {
   return { ok: true, detail: `активирован · @${username}`, retryAfter: 0 };
 }
 
-export async function probeMistral(key: string): Promise<Probe> {
-  if (key.length === 0)
-    return { ok: false, detail: 'ключа нет', retryAfter: 0 };
+export async function probeModel(provider: Provider): Promise<Probe> {
+  const probe = await probeProvider(provider, TIMEOUT);
 
-  const status = await mistralStatus(key, TIMEOUT).catch(() => 0);
-  if (status === 0)
-    return { ok: false, detail: 'нет ответа', retryAfter: 0 };
-
-  if (status === 429)
-    return { ok: false, detail: 'mistral 429: у ключа нет плана или кончилась квота', retryAfter: 5 };
-
-  if (status >= 400)
-    return { ok: false, detail: `mistral ${status}`, retryAfter: 0 };
-
-  return { ok: true, detail: 'Ключ активирован', retryAfter: 0 };
+  return { ok: probe.ok, detail: probe.detail, retryAfter: probe.status === 429 ? 5 : 0 };
 }
 
 const hhHeaders = (token: string) => ({

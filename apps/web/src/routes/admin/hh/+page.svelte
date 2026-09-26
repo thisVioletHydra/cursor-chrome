@@ -107,7 +107,7 @@ function openResume() {
 
 <section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Что искать</h2>
-  <p class="mt-2 text-sm text-zinc-400">Один запрос на строку, бот ищет по каждому. «Подобрать» — Mistral соберёт запросы из фактов о тебе и сопроводительного, потом правишь и сохраняешь.</p>
+  <p class="mt-2 text-sm text-zinc-400">Один запрос на строку, бот ищет по каждому. «Подобрать» — модель соберёт запросы из фактов о тебе и сопроводительного, потом правишь и сохраняешь.</p>
   {#if queryMessage}
     <p class="mt-3 font-mono text-xs {queryOk ? 'text-emerald-300' : 'text-rose-300'}">{queryMessage}</p>
   {/if}
@@ -146,7 +146,7 @@ function openResume() {
     <div class="flex items-center gap-3">
       <button class="btn btn-primary h-11 min-h-11 px-4" type="submit" disabled={queryDraft.trim().length === 0 || queryDraft.trim() === data.hhQuery}>Сохранить</button>
       <button class="btn btn-ghost h-11 min-h-11 px-4" type="submit" formaction="?/suggest" disabled={suggesting} onclick={() => { suggesting = true; }}>
-        {suggesting ? 'Mistral думает' : 'Подобрать'}
+        {suggesting ? 'Модель думает' : 'Подобрать'}
       </button>
     </div>
   </form>

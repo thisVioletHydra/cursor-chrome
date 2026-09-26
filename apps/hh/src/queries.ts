@@ -1,14 +1,16 @@
+import type { Provider } from './model.ts';
+
 import { FACTS } from './copy.ts';
-import { mistralText } from './mistral.ts';
+import { askChain } from './model.ts';
 
 const MAX_QUERIES = 5;
 const SUGGEST_MS = 25_000;
 
-export async function suggestQueries(key: string, letter: string): Promise<string[]> {
-  const raw = await mistralText(key, queriesPrompt(letter), SUGGEST_MS);
-  const queries = parseQueries(raw);
+export async function suggestQueries(chain: Provider[], letter: string): Promise<string[]> {
+  const { text } = await askChain(chain, queriesPrompt(letter), SUGGEST_MS);
+  const queries = parseQueries(text);
   if (queries.length === 0)
-    throw new Error(`ответ без списка: ${raw.slice(0, 80)}`);
+    throw new Error(`ответ без списка: ${text.slice(0, 80)}`);
 
   return queries;
 }

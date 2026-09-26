@@ -1,8 +1,7 @@
-import type { Actions } from './$types';
+import type { PageServerLoad } from './$types';
 
-import { unlinkAdmin, verifyAdmin } from '$lib/server/admin-actions';
+import { redirect } from '@sveltejs/kit';
 
-export const actions: Actions = {
-  verify: verifyAdmin,
-  unlink: unlinkAdmin,
+export const load: PageServerLoad = () => {
+  redirect(301, '/admin/model');
 };

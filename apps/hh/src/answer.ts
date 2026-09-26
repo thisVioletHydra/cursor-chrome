@@ -1,5 +1,7 @@
+import type { Provider } from './model.ts';
+
 import { FACTS } from './copy.ts';
-import { mistralText } from './mistral.ts';
+import { askChain } from './model.ts';
 
 export type QuestionKind = 'text' | 'number' | 'choice';
 
@@ -15,10 +17,10 @@ export type Answer = { answer: string } | { human: true; reason: string };
 const ANSWER_MS = 20_000;
 const MAX_TEXT = 400;
 
-export async function answerQuestion(key: string, question: Question): Promise<Answer> {
-  const raw = await mistralText(key, answerPrompt(question), ANSWER_MS);
+export async function answerQuestion(chain: Provider[], question: Question): Promise<Answer> {
+  const { text } = await askChain(chain, answerPrompt(question), ANSWER_MS);
 
-  return checkAnswer(question, parseAnswer(raw));
+  return checkAnswer(question, parseAnswer(text));
 }
 
 export function answerPrompt(question: Question): string {

@@ -3,7 +3,7 @@ let { data } = $props();
 
 const cards = $derived([
   { href: '/admin/telegram', light: data.links.find(item => item.name === 'Телега') },
-  { href: '/admin/mistral', light: data.links.find(item => item.name === 'Mistral') },
+  { href: '/admin/model', light: data.links.find(item => item.name === 'Модель') },
   { href: '/admin/hh', light: data.links.find(item => item.name === 'HeadHunter') },
 ].flatMap(card => (card.light ? [{ href: card.href, light: card.light }] : [])));
 

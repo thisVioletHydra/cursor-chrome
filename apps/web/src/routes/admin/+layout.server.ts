@@ -1,11 +1,11 @@
 import type { LayoutServerLoad } from './$types';
 
-import { COVER_LETTER, moscowDay, readMemory, readQueue } from '@cursor-chrome/hh';
+import { COVER_LETTER, moscowDay, PRESETS, providerName, readMemory, readQueue } from '@cursor-chrome/hh';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { redirect } from '@sveltejs/kit';
 import { coolLeft } from '$lib/server/admin-actions';
 import { guestLinks, storedLinks } from '$lib/server/checks';
-import { DEFAULT_QUERY, GUEST_BALANCE, isCreator, readAccount, VACANCY_RUB } from '$lib/server/secrets';
+import { chainOf, DEFAULT_QUERY, GUEST_BALANCE, isCreator, readAccount, VACANCY_RUB } from '$lib/server/secrets';
 
 const when = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Asia/Bishkek', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -62,9 +62,16 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
     },
     locks: {
       telegram: coolLeft('telegram'),
-      mistral: coolLeft('mistral'),
       hh: coolLeft('hh'),
     },
+    providers: preview ? [] : chainOf(account).map(provider => ({
+      id: provider.id,
+      name: providerName(provider),
+      model: provider.model,
+      host: new URL(provider.url).host,
+      keyTail: provider.key.slice(-4),
+    })),
+    presets: PRESETS.map(preset => ({ id: preset.id, name: preset.name, model: preset.model, keysUrl: preset.keysUrl, free: preset.free })),
     resumeId: preview ? '' : account.hhResumeId,
     hhQuery: preview ? '' : (account.hhQuery || DEFAULT_QUERY),
     hasExtToken: preview ? false : account.extToken.length > 0,

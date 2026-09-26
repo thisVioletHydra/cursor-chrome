@@ -1,7 +1,8 @@
+import type { Provider } from './model.ts';
+
 import { FACTS } from './copy.ts';
 import { PING_MS } from './limits.ts';
-
-import process from 'node:process';
+import { askChain, chainFromEnv } from './model.ts';
 
 export type FormQuestion = {
   entry: string;
@@ -35,7 +36,7 @@ export function questionsFrom(html: string): FormQuestion[] {
   return questions;
 }
 
-export async function answerForm(key: string, questions: FormQuestion[]): Promise<Record<string, string> | null> {
+export async function answerForm(chain: Provider[], questions: FormQuestion[]): Promise<Record<string, string> | null> {
   const list = questions.map(q => `${q.entry}: ${q.label}`).join('\n');
   const prompt = [
     'Ответь на вопросы формы только из фактов. Если факта нет, верни null целиком.',
@@ -43,32 +44,21 @@ export async function answerForm(key: string, questions: FormQuestion[]): Promis
     list,
     'JSON объект entry -> короткий ответ, или null.',
   ].join('\n');
-  const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
-    method: 'POST',
-    signal: AbortSignal.timeout(PING_MS),
-    headers: {
-      authorization: `Bearer ${key}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: process.env.MISTRAL_MODEL ?? 'mistral-small-latest',
-      temperature: 0,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
-  if (res.ok === false)
-    return null;
-
-  const body = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
-  const raw = body.choices?.[0]?.message?.content ?? '';
-  if (raw.includes('null'))
+  const raw = await askChain(chain, prompt).then(reply => reply.text, () => '');
+  if (raw.length === 0 || raw.includes('null'))
     return null;
 
   const match = raw.match(/\{[\s\S]*\}/);
   if (match === null)
     return null;
 
-  const parsed = JSON.parse(match[0]) as Record<string, unknown>;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(match[0]) as Record<string, unknown>;
+  }
+  catch {
+    return null;
+  }
   const answers: Record<string, string> = {};
   for (const question of questions) {
     const value = parsed[question.entry];
@@ -94,12 +84,12 @@ export async function submitForm(url: string, answers: Record<string, string>): 
 }
 
 export async function fillKnownForm(url: string): Promise<'sent' | 'human'> {
-  const key = process.env.MISTRAL_API_KEY ?? '';
+  const chain = chainFromEnv();
   const form = await readForm(url);
-  if (form.blocked || form.questions.length === 0 || key.length === 0)
+  if (form.blocked || form.questions.length === 0 || chain.length === 0)
     return 'human';
 
-  const answers = await answerForm(key, form.questions);
+  const answers = await answerForm(chain, form.questions);
   if (answers === null)
     return 'human';
 

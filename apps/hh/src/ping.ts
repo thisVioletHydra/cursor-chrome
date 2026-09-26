@@ -1,10 +1,10 @@
 import { HH_API, HH_USER_AGENT, PING_MS } from './limits.ts';
-import { mistralStatus } from './mistral.ts';
+import { chainFromEnv, pingChain } from './model.ts';
 
 import process from 'node:process';
 
 export async function pingReasons(): Promise<string[]> {
-  const checks = [pingHh(), pingTelegram(), pingMistral()];
+  const checks = [pingHh(), pingTelegram(), pingModel()];
   const results = await Promise.all(checks.map(check => check.then(() => '', (error: unknown) => (error instanceof Error ? error.message : String(error)))));
 
   return results.filter(item => item.length > 0);
@@ -51,18 +51,8 @@ async function pingTelegram(): Promise<void> {
     throw new Error(`telegram ${res.status}`);
 }
 
-async function pingMistral(): Promise<void> {
-  const key = process.env.MISTRAL_API_KEY ?? '';
-  if (key.length === 0)
-    throw new Error('нет ключа mistral');
-
-  const status = await mistralStatus(key).catch(() => 0);
-  if (status === 0)
-    throw new Error('mistral не ответил');
-
-  if (status === 429)
-    throw new Error('mistral 429, у ключа нет плана или кончилась квота');
-
-  if (status >= 400)
-    throw new Error(`mistral ${status}`);
+async function pingModel(): Promise<void> {
+  const reasons = await pingChain(chainFromEnv());
+  if (reasons.length > 0)
+    throw new Error(reasons.join('; '));
 }

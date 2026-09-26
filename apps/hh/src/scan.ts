@@ -6,7 +6,7 @@ import { judge } from './judge.ts';
 import { searchVacancies } from './hh-api.ts';
 import { APPLY_PAUSE_MS, LOOK_PER_START, MODEL_PER_START, SEND_PER_START } from './limits.ts';
 import { canSend, readMemory, remember, writeMemory } from './memory.ts';
-import { mistralFromEnv } from './mistral.ts';
+import { modelFromEnv } from './model.ts';
 import { lineOf } from './rules.ts';
 
 export type ScanOpts = {
@@ -21,7 +21,7 @@ export type ScanOpts = {
 export async function scan(opts: ScanOpts): Promise<Report[]> {
   const load = opts.load ?? searchVacancies;
   const vacancies = await load(opts.query, LOOK_PER_START);
-  const model = opts.model === undefined ? mistralFromEnv() : opts.model;
+  const model = opts.model === undefined ? modelFromEnv() : opts.model;
   let modelUsed = 0;
   const memory = opts.live ? await readMemory() : null;
   let sentThisStart = 0;
