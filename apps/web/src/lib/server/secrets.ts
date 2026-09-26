@@ -94,7 +94,11 @@ export async function readAccount(login: string): Promise<Account> {
       history: chargesOf(raw.history),
     };
   }
-  catch {
+  catch (error) {
+    const code = (error as NodeJS.ErrnoException).code ?? '';
+    if (code !== 'ENOENT')
+      console.error(`account ${login}: ${error instanceof Error ? error.message : String(error)}`);
+
     return empty();
   }
 }
