@@ -1,5 +1,6 @@
 export { answerQuestion, asQuestion } from './answer.ts';
 export type { Answer, Question } from './answer.ts';
+export { corpusOn, corpusState, distillCorpus, keepVacancy } from './corpus.ts';
 export { COVER_LETTER, FACTS } from './copy.ts';
 export { MAX_ATTEMPTS, QUEUE_TARGET, SCAN_EVERY_MS, SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from './limits.ts';
 export { countSent, dayOpen, moscowDay, moscowHour, readMemory, remember, roomToday, workHours, writeMemory } from './memory.ts';

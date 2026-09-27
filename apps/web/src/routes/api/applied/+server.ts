@@ -1,7 +1,7 @@
 import type { RequestHandler } from './$types';
 
 import { countSent, markDone, markFailed, readMemory, readQueue, remember, writeMemory } from '@cursor-chrome/hh';
-import { notifyOwner } from '@cursor-chrome/telegram';
+import { notifyDigest, notifyOwner } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { takeVacancy } from '$lib/server/secrets';
@@ -38,13 +38,15 @@ export const POST: RequestHandler = async ({ request }) => {
   if (status === 'failed') {
     const prior = (await readQueue()).find(row => row.id === id);
     const failed = await markFailed(id, reason);
+    const company = failed?.company || String(body?.company ?? '').trim() || 'без компании';
+    const url = failed?.url || String(body?.url ?? '').trim() || `https://hh.ru/vacancy/${id}`;
     if (prior?.status === 'pending' && failed !== null && failed.status === 'dropped') {
-      const company = failed.company || String(body?.company ?? '').trim() || 'без компании';
       const why = failed.lastError || reason;
-      const url = failed.url || String(body?.url ?? '').trim() || `https://hh.ru/vacancy/${id}`;
       const tail = why.length > 0 ? `${why} ` : '';
       await notifyOwner(`${company}. Снял после 3 попыток. ${tail}${url}`);
     }
+    else
+      notifyDigest('miss', `• ${company} — мимо${reason.length > 0 ? `, ${reason}` : ''}\n  ${url}`);
 
     return json({ ok: true, queued: failed !== null });
   }
@@ -58,7 +60,8 @@ export const POST: RequestHandler = async ({ request }) => {
 
   if (status === 'sent') {
     await takeVacancy(login, { company, url });
-    await notifyOwner(`${company}. Откликнулся. ${url}`);
+    const title = done?.title || String(body?.title ?? '').trim();
+    notifyDigest('sent', `• ${company}${title.length > 0 ? ` — ${title}` : ''}\n  ${url}`);
   }
   else {
     const tail = hints.length > 0 ? ` ${hints.join('; ')}` : '';

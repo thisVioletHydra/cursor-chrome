@@ -3,6 +3,7 @@ import type { Model, Report, Vacancy } from './rules.ts';
 import type { Rules } from './score.ts';
 
 import { sendApply } from './apply.ts';
+import { keepVacancy } from './corpus.ts';
 import { fillKnownForm } from './form.ts';
 import { judge, packReport } from './judge.ts';
 import { searchVacancies } from './hh-api.ts';
@@ -10,7 +11,10 @@ import { LOOK_PER_START, MODEL_PER_START, QUEUE_TARGET, SEND_PER_DAY } from './l
 import { readMemory, remember, writeMemory } from './memory.ts';
 import { modelFromEnv } from './model.ts';
 import { pendingCount } from './queue.ts';
+import { hardSkip } from './rules.ts';
 import { byScore, ruleSkip, rulesFromEnv, scoreOf } from './score.ts';
+
+export type ScanRun = { reports: Report[]; already: number };
 
 export type ScanOpts = {
   query: string;
@@ -22,7 +26,7 @@ export type ScanOpts = {
   signal?: AbortSignal;
 };
 
-export async function scan(opts: ScanOpts): Promise<Report[]> {
+export async function scan(opts: ScanOpts): Promise<ScanRun> {
   const load = opts.load ?? searchVacancies;
   const rules = opts.rules ?? rulesFromEnv();
   const model = opts.model === undefined ? modelFromEnv() : opts.model;
@@ -33,6 +37,8 @@ export async function scan(opts: ScanOpts): Promise<Report[]> {
   const reports: Report[] = [];
 
   const found = await load(opts.query, LOOK_PER_START);
+  const seen = memory?.seen;
+  const already = seen === undefined ? 0 : found.filter(vacancy => seen.includes(vacancy.id)).length;
   const fresh = found.filter(vacancy => memory?.seen.includes(vacancy.id) !== true).sort(byScore(rules));
 
   for (const vacancy of fresh) {
@@ -46,6 +52,8 @@ export async function scan(opts: ScanOpts): Promise<Report[]> {
     }
 
     const ruled = ruleSkip(vacancy, rules);
+    if (hardSkip(vacancy) === null && ruled === null)
+      await keepVacancy(vacancy);
     const report = ruled
       ? packReport(vacancy, 'skip', ruled, dry)
       : await judge(vacancy, {
@@ -73,7 +81,7 @@ export async function scan(opts: ScanOpts): Promise<Report[]> {
   if (memory)
     await writeMemory(memory);
 
-  return reports;
+  return { reports, already };
 }
 
 async function queueRoom(memory: Memory): Promise<number> {

@@ -47,12 +47,50 @@ function delay(ms: number): Promise<void> {
 
 const ownerFile = path.join(path.dirname(process.env.HH_STORE ?? path.join(process.cwd(), 'data', 'seen.json')), 'owner.json');
 
+const QUIET_MS = 90_000;
+
+type DigestRow = { kind: 'sent' | 'miss'; line: string };
+
+const digest: DigestRow[] = [];
+let quiet: ReturnType<typeof setTimeout> | undefined;
+
+export function notifyDigest(kind: DigestRow['kind'], line: string): void {
+  const text = line.trim();
+  if (text.length === 0)
+    return;
+
+  digest.push({ kind, line: text });
+  if (quiet)
+    clearTimeout(quiet);
+
+  quiet = setTimeout(() => {
+    quiet = undefined;
+    void flushDigest();
+  }, QUIET_MS);
+  quiet.unref?.();
+}
+
 export function startTelegram(): void {
   if (started)
     return;
 
   started = true;
   void loop();
+}
+
+async function flushDigest(): Promise<void> {
+  if (digest.length === 0)
+    return;
+
+  const rows = digest.splice(0, digest.length);
+  if (rows.length === 1) {
+    await notifyOwner(rows[0].line);
+    return;
+  }
+
+  const sent = rows.filter(row => row.kind === 'sent').length;
+  const miss = rows.length - sent;
+  await notifyOwner(`Откликов ${sent}, мимо ${miss}\n${rows.map(row => row.line).join('\n')}`);
 }
 
 async function loop(): Promise<void> {
@@ -172,9 +210,9 @@ async function run(chatId: number): Promise<void> {
   stopScan = new AbortController();
   const live = process.env.HH_LIVE === '1';
   const query = process.env.HH_QUERY || 'typescript react nestjs';
-  let reports: Awaited<ReturnType<typeof scan>>;
+  let run: Awaited<ReturnType<typeof scan>>;
   try {
-    reports = await scan({
+    run = await scan({
       query,
       dry: live === false,
       live,
@@ -187,15 +225,13 @@ async function run(chatId: number): Promise<void> {
     return;
   }
   stopScan = null;
-  if (reports.length === 0) {
+  const reports = run.reports;
+  if (reports.length === 0 && run.already === 0) {
     await send(chatId, 'Пусто, свежих вакансий по запросам нет.');
     return;
   }
 
   for (const report of reports) {
-    if (report.verdict !== 'apply' && report.verdict !== 'human')
-      continue;
-
     if (report.verdict === 'apply' && live && onApply !== null) {
       const paid = await onApply({ id: report.id, company: report.company, url: report.url });
       if (paid === false) {
@@ -204,18 +240,19 @@ async function run(chatId: number): Promise<void> {
       }
     }
 
-    await send(chatId, report.line);
+    if (report.verdict === 'human')
+      await send(chatId, report.line);
   }
 
   const queued = await pendingCount();
-  await send(chatId, summaryOf(reports, live, queued));
+  await send(chatId, summaryOf(reports, live, queued, run.already));
 }
 
-function summaryOf(reports: Report[], live: boolean, queued: number): string {
+function summaryOf(reports: Report[], live: boolean, queued: number, already: number): string {
   const count = (verdict: Report['verdict']) => reports.filter(report => report.verdict === verdict).length;
   const head = live ? 'Добавил' : 'Откликнулся бы';
 
-  return `${head} ${count('apply')}, мимо ${count('skip')}, ждут ${count('human')}, смотрел ${reports.length}, в очереди ${queued}.`;
+  return `${head} ${count('apply')}, мимо ${count('skip')}, уже было ${already}, ждут ${count('human')}, смотрел ${reports.length}, в очереди ${queued}.`;
 }
 
 async function allow(chatId: number, username: string): Promise<boolean> {

@@ -1,7 +1,7 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import type { Stored } from './secrets';
 
-import { asProvider, COVER_LETTER, parseRules, splitQueries, splitWords, suggestQueries } from '@cursor-chrome/hh';
+import { asProvider, COVER_LETTER, distillCorpus, parseRules, splitQueries, splitWords, suggestQueries } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
 import { chainOf, isCreator, newExtToken, publishSecrets, readAccount, withChain, writeAccount } from './secrets';
@@ -174,6 +174,45 @@ function salaryMinOf(raw: string): number {
   const value = Number(text);
 
   return Number.isFinite(value) ? value : 0;
+}
+
+export async function saveCorpusAdmin({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const form = await request.formData();
+  const hhCorpus = form.get('hhCorpus') === '1' ? '1' : '';
+  const next = { ...await readAccount(login), hhCorpus };
+  await writeAccount(login, next);
+  publishSecrets(login, next);
+
+  return { ok: true, detail: hhCorpus === '1' ? 'Коплю тексты' : 'Выключено', wait: 0 };
+}
+
+export async function distillAdmin({ cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const saved = await readAccount(login);
+  if (saved.hhCorpus !== '1')
+    return { ok: false, detail: 'сбор выключен', wait: 0 };
+
+  const chain = chainOf(saved);
+  if (chain.length === 0)
+    return { ok: false, detail: 'нет ключа модели', wait: 0 };
+
+  try {
+    const brief = await distillCorpus(chain);
+
+    return { ok: true, detail: brief, wait: 0 };
+  }
+  catch (error) {
+    const detail = error instanceof Error ? error.message : 'не вышло';
+
+    return { ok: false, detail, wait: 0 };
+  }
 }
 
 export async function suggestQueryAdmin({ cookies }: RequestEvent) {

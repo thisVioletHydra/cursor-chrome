@@ -21,7 +21,7 @@ async function dryScan(): Promise<void> {
   const query = process.argv.slice(3).find(part => part !== '--')
     ?? process.env.HH_QUERY
     ?? 'typescript react nestjs';
-  const reports = await scan({ query, dry: true, live: false });
+  const { reports } = await scan({ query, dry: true, live: false });
   for (const report of reports)
     console.log(report.line);
 }

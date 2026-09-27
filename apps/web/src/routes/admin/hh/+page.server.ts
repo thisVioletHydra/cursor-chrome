@@ -1,7 +1,7 @@
 import type { Actions, PageServerLoad } from './$types';
 
-import { parseRules } from '@cursor-chrome/hh';
-import { issueExtTokenAdmin, saveQueryAdmin, saveResumeAdmin, saveRulesAdmin, suggestQueryAdmin, unlinkAdmin, verifyAdmin } from '$lib/server/admin-actions';
+import { corpusState, parseRules } from '@cursor-chrome/hh';
+import { distillAdmin, issueExtTokenAdmin, saveCorpusAdmin, saveQueryAdmin, saveResumeAdmin, saveRulesAdmin, suggestQueryAdmin, unlinkAdmin, verifyAdmin } from '$lib/server/admin-actions';
 import { isCreator, readAccount } from '$lib/server/secrets';
 import { allowedLogins, readSession } from '$lib/server/session';
 
@@ -10,6 +10,9 @@ const emptyRules = {
   mustWords: '',
   salaryMin: '',
   blacklist: '',
+  corpusOn: false,
+  corpusCount: 0,
+  corpusBrief: '',
 };
 
 export const load: PageServerLoad = async ({ cookies }) => {
@@ -21,8 +24,14 @@ export const load: PageServerLoad = async ({ cookies }) => {
     return emptyRules;
 
   const account = await readAccount(session.login);
+  const corpus = await corpusState();
 
-  return ruleFields(account.hhRules);
+  return {
+    ...ruleFields(account.hhRules),
+    corpusOn: account.hhCorpus === '1',
+    corpusCount: corpus.count,
+    corpusBrief: corpus.brief,
+  };
 };
 
 function ruleFields(raw: string) {
@@ -53,6 +62,8 @@ export const actions: Actions = {
   resume: saveResumeAdmin,
   query: saveQueryAdmin,
   rules: saveRulesAdmin,
+  corpus: saveCorpusAdmin,
+  distill: distillAdmin,
   suggest: suggestQueryAdmin,
   extToken: issueExtTokenAdmin,
   unlink: unlinkAdmin,
