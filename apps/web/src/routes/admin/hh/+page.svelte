@@ -10,11 +10,28 @@ let queryDraft = $state('');
 let queryMessage = $state('');
 let queryOk = $state(false);
 let suggesting = $state(false);
+let stopDraft = $state('');
+let mustDraft = $state('');
+let salaryDraft = $state('');
+let blackDraft = $state('');
+let rulesMessage = $state('');
+let rulesOk = $state(false);
 let extToken = $state('');
 const connectLink = $derived(`${page.url.origin}/connect#${extToken}`);
 
+const rulesSame = $derived(
+  stopDraft === data.stopWords
+  && mustDraft === data.mustWords
+  && salaryDraft === data.salaryMin
+  && blackDraft === data.blacklist,
+);
+
 $effect(() => {
   queryDraft = data.hhQuery;
+  stopDraft = data.stopWords;
+  mustDraft = data.mustWords;
+  salaryDraft = data.salaryMin;
+  blackDraft = data.blacklist;
 });
 let phrase = $state('');
 let resumeOpen = $state(false);
@@ -148,6 +165,75 @@ function openResume() {
       <button class="btn btn-ghost h-11 min-h-11 px-4" type="submit" formaction="?/suggest" disabled={suggesting} onclick={() => { suggesting = true; }}>
         {suggesting ? 'Модель думает' : 'Подобрать'}
       </button>
+    </div>
+  </form>
+</section>
+
+<section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+  <h2 class="text-base font-semibold text-white">Фильтр до модели</h2>
+  <p class="mt-2 text-sm text-zinc-400">Стоп-слова и чёрный список отсекают до модели. Обязательные — хотя бы одно в названии или тексте. Зарплата скипается только если она указана и потолок ниже порога. Слова — по одному в строке или через запятую.</p>
+  {#if rulesMessage}
+    <p class="mt-3 font-mono text-xs {rulesOk ? 'text-emerald-300' : 'text-rose-300'}">{rulesMessage}</p>
+  {/if}
+  <form
+    class="mt-4 grid gap-3"
+    method="POST"
+    action="?/rules"
+    use:enhance={() => {
+      rulesMessage = '';
+      return async ({ result, update }) => {
+        const body = result.type === 'success' ? result.data : null;
+        const detail = typeof body?.detail === 'string' ? body.detail : 'не вышло';
+        rulesOk = body?.ok === true;
+        rulesMessage = rulesOk ? 'Сохранено' : detail;
+        if (rulesOk)
+          await update({ reset: false });
+      };
+    }}
+  >
+    <label class="grid gap-1.5">
+      <span class="text-sm text-zinc-300">Стоп-слова</span>
+      <textarea
+        class="textarea textarea-bordered min-h-20 w-full border-white/10 bg-black/30 text-sm leading-6 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
+        name="stopWords"
+        autocomplete="off"
+        placeholder={'стажировка\nгалера'}
+        bind:value={stopDraft}
+      ></textarea>
+    </label>
+    <label class="grid gap-1.5">
+      <span class="text-sm text-zinc-300">Обязательные слова</span>
+      <textarea
+        class="textarea textarea-bordered min-h-20 w-full border-white/10 bg-black/30 text-sm leading-6 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
+        name="mustWords"
+        autocomplete="off"
+        placeholder={'typescript\nnestjs'}
+        bind:value={mustDraft}
+      ></textarea>
+    </label>
+    <label class="grid gap-1.5">
+      <span class="text-sm text-zinc-300">Минимальная зарплата</span>
+      <input
+        class="input input-bordered h-11 w-full border-white/10 bg-black/30 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
+        name="salaryMin"
+        inputmode="numeric"
+        autocomplete="off"
+        placeholder="150000"
+        bind:value={salaryDraft}
+      />
+    </label>
+    <label class="grid gap-1.5">
+      <span class="text-sm text-zinc-300">Чёрный список компаний</span>
+      <textarea
+        class="textarea textarea-bordered min-h-20 w-full border-white/10 bg-black/30 text-sm leading-6 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
+        name="blacklist"
+        autocomplete="off"
+        placeholder={'Рога и копыта'}
+        bind:value={blackDraft}
+      ></textarea>
+    </label>
+    <div class="flex items-center gap-3">
+      <button class="btn btn-primary h-11 min-h-11 px-4" type="submit" disabled={rulesSame}>Сохранить</button>
     </div>
   </form>
 </section>

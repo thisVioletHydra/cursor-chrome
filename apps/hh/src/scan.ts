@@ -1,118 +1,100 @@
+import type { Memory } from './memory.ts';
 import type { Model, Report, Vacancy } from './rules.ts';
+import type { Rules } from './score.ts';
 
 import { sendApply } from './apply.ts';
 import { fillKnownForm } from './form.ts';
-import { judge } from './judge.ts';
+import { judge, packReport } from './judge.ts';
 import { searchVacancies } from './hh-api.ts';
-import { APPLY_PAUSE_MS, LOOK_PER_START, MODEL_PER_START, SEND_PER_START } from './limits.ts';
-import { canSend, readMemory, remember, writeMemory } from './memory.ts';
+import { LOOK_PER_START, MODEL_PER_START, QUEUE_TARGET, SEND_PER_DAY } from './limits.ts';
+import { readMemory, remember, writeMemory } from './memory.ts';
 import { modelFromEnv } from './model.ts';
-import { lineOf } from './rules.ts';
+import { pendingCount } from './queue.ts';
+import { byScore, ruleSkip, rulesFromEnv, scoreOf } from './score.ts';
 
 export type ScanOpts = {
   query: string;
   dry: boolean;
   live: boolean;
   model?: Model | null;
+  rules?: Rules;
   load?: (query: string, limit: number) => Promise<Vacancy[]>;
   signal?: AbortSignal;
 };
 
 export async function scan(opts: ScanOpts): Promise<Report[]> {
   const load = opts.load ?? searchVacancies;
-  const vacancies = await load(opts.query, LOOK_PER_START);
+  const rules = opts.rules ?? rulesFromEnv();
   const model = opts.model === undefined ? modelFromEnv() : opts.model;
+  const dry = opts.dry || opts.live === false;
+  let memory: Memory | null = opts.live ? await readMemory() : null;
+  let room = opts.live ? await queueRoom(memory as Memory) : Number.POSITIVE_INFINITY;
   let modelUsed = 0;
-  const memory = opts.live ? await readMemory() : null;
-  let sentThisStart = 0;
   const reports: Report[] = [];
 
-  for (const vacancy of vacancies) {
+  const found = await load(opts.query, LOOK_PER_START);
+  const fresh = found.filter(vacancy => memory?.seen.includes(vacancy.id) !== true).sort(byScore(rules));
+
+  for (const vacancy of fresh) {
     if (opts.signal?.aborted)
       break;
 
-    if (memory?.seen.includes(vacancy.id))
-      continue;
-
-    const report = await judge(vacancy, {
-      dry: opts.dry || opts.live === false,
-      model,
-      modelLeft: () => modelUsed < MODEL_PER_START,
-      takeModel: () => {
-        modelUsed += 1;
-      },
-    });
-
-    const next = await finish(vacancy, report, {
-      live: opts.live,
-      memory,
-      sentThisStart,
-    });
-    sentThisStart = next.sentThisStart;
-    if (next.memory)
-      await writeMemory(next.memory);
-
-    reports.push(next.report);
-    if (next.stop)
+    if (room <= 0) {
+      const why = memory !== null && memory.sent >= SEND_PER_DAY ? 'потолок на сегодня' : 'очередь полная';
+      reports.push(packReport(vacancy, 'human', why, dry));
       break;
+    }
 
-    if (opts.live && next.report.verdict === 'apply')
-      await pause(opts.signal);
+    const ruled = ruleSkip(vacancy, rules);
+    const report = ruled
+      ? packReport(vacancy, 'skip', ruled, dry)
+      : await judge(vacancy, {
+          dry,
+          model,
+          modelLeft: () => modelUsed < MODEL_PER_START,
+          takeModel: () => {
+            modelUsed += 1;
+          },
+        });
+
+    const final = opts.live && report.verdict === 'apply'
+      ? await finish(vacancy, report, scoreOf(vacancy, rules))
+      : report;
+
+    if (memory)
+      memory = remember(memory, vacancy.id);
+
+    if (final.verdict === 'apply' && opts.live)
+      room -= 1;
+
+    reports.push(final);
   }
+
+  if (memory)
+    await writeMemory(memory);
 
   return reports;
 }
 
-async function finish(
-  vacancy: Vacancy,
-  report: Report,
-  state: { live: boolean; memory: Awaited<ReturnType<typeof readMemory>> | null; sentThisStart: number },
-): Promise<{ report: Report; memory: typeof state.memory; sentThisStart: number; stop: boolean }> {
-  if (state.live === false || report.verdict !== 'apply')
-    return { report, memory: state.memory, sentThisStart: state.sentThisStart, stop: false };
+async function queueRoom(memory: Memory): Promise<number> {
+  const queued = await pendingCount();
 
-  const memory = state.memory ?? await readMemory();
-  if (canSend(memory, state.sentThisStart, SEND_PER_START) === false) {
-    const capped = rewrite(report, 'human', 'потолок на сегодня');
+  return Math.min(QUEUE_TARGET - queued, SEND_PER_DAY - memory.sent - queued);
+}
 
-    return { report: capped, memory: remember(memory, vacancy.id, false), sentThisStart: state.sentThisStart, stop: true };
-  }
-
+async function finish(vacancy: Vacancy, report: Report, score: number): Promise<Report> {
   if (vacancy.formUrl.length > 0) {
     const form = await fillKnownForm(vacancy.formUrl);
     if (form === 'human')
-      return { report: rewrite(report, 'human', 'форма'), memory: remember(memory, vacancy.id, false), sentThisStart: state.sentThisStart, stop: false };
+      return packReport(vacancy, 'human', 'форма', false);
   }
 
-  const sent = await sendApply(vacancy, report.reason);
+  const sent = await sendApply(vacancy, report.reason, score);
   if (sent === 'human')
-    return { report: rewrite(report, 'human', 'нет резюме'), memory: remember(memory, vacancy.id, false), sentThisStart: state.sentThisStart, stop: false };
+    return packReport(vacancy, 'human', 'нет резюме', false);
 
-  const applied = rewrite(report, 'apply', report.reason);
+  if (sent === 'again')
+    return packReport(vacancy, 'skip', 'уже в очереди', false);
 
-  return {
-    report: { ...applied, line: lineOf(vacancy.company, 'apply', report.reason, vacancy.url, false) },
-    memory: remember(memory, vacancy.id, sent === 'queued'),
-    sentThisStart: state.sentThisStart + (sent === 'queued' ? 1 : 0),
-    stop: false,
-  };
-}
-
-function rewrite(report: Report, verdict: Report['verdict'], reason: string): Report {
-  return {
-    ...report,
-    verdict,
-    reason,
-    line: lineOf(report.company, verdict, reason, report.url, false),
-  };
-}
-
-function pause(signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, APPLY_PAUSE_MS);
-    signal?.addEventListener('abort', () => {
-      clearTimeout(timer);
-      resolve();
-    }, { once: true });
-  });
+  return packReport(vacancy, 'apply', report.reason, false);
 }

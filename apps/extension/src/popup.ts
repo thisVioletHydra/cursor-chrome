@@ -55,6 +55,9 @@ const connectLineEl = document.getElementById('connect-line') as HTMLElement | n
 const hideJunkEl = document.getElementById('flag-hide-junk') as HTMLInputElement | null;
 const showPopEl = document.getElementById('flag-show-pop') as HTMLInputElement | null;
 const keepSessionEl = document.getElementById('flag-keep-session') as HTMLInputElement | null;
+const autoQueueBox = document.getElementById('auto-queue') as HTMLElement | null;
+const autoQueueEl = document.getElementById('flag-auto-queue') as HTMLInputElement | null;
+const autoLineEl = document.getElementById('auto-line') as HTMLElement | null;
 const workerUrlForm = document.getElementById('worker-url-form') as HTMLFormElement | null;
 
 if (verEl)
@@ -110,6 +113,11 @@ showPopEl?.addEventListener('change', () => {
 
 keepSessionEl?.addEventListener('change', () => {
   void browser.runtime.sendMessage({ type: 'set-flags', keepSession: keepSessionEl.checked === true });
+});
+
+autoQueueEl?.addEventListener('change', () => {
+  void browser.runtime.sendMessage({ type: 'set-flags', autoQueue: autoQueueEl.checked === true })
+    .then(() => paintAutoLine());
 });
 
 workerUrlForm?.addEventListener('submit', (event) => {
@@ -302,6 +310,9 @@ async function paintConnect(): Promise<void> {
   if (queueBtn)
     queueBtn.hidden = on === false;
 
+  if (autoQueueBox)
+    autoQueueBox.hidden = on === false;
+
   if (connectLineEl) {
     connectLineEl.hidden = on === false;
     connectLineEl.textContent = on ? `Админка: ${hostOf(url)}` : '';
@@ -321,6 +332,25 @@ function hostOf(url: string): string {
   catch {
     return url;
   }
+}
+
+async function paintAutoLine(): Promise<void> {
+  if (autoLineEl === null)
+    return;
+
+  const state = await browser.runtime.sendMessage({ type: 'get-paused' }) as { pausedUntil?: number | null };
+  const until = typeof state?.pausedUntil === 'number' ? state.pausedUntil : 0;
+  const paused = until > Date.now();
+  autoLineEl.classList.toggle('paused', paused);
+  autoLineEl.textContent = paused ? `Пауза до ${clockOf(until)}` : 'Каждые 15 мин, до 3 откликов за раз';
+}
+
+function clockOf(ms: number): string {
+  const date = new Date(ms);
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+
+  return `${hours}:${minutes}`;
 }
 
 type QueueRun = {
@@ -366,6 +396,7 @@ async function runQueue(): Promise<void> {
 
   queueBtn.disabled = false;
   queueBtn.textContent = 'Разобрать очередь';
+  await paintAutoLine();
   await renderHistory();
 }
 
@@ -374,11 +405,13 @@ async function bootSettings(): Promise<void> {
     hideJunk?: boolean;
     keepSession?: boolean;
     showPop?: boolean;
+    autoQueue?: boolean;
   };
   const boxes: Array<[HTMLInputElement | null, boolean]> = [
     [hideJunkEl, flags?.hideJunk === true],
     [keepSessionEl, flags?.keepSession === true],
     [showPopEl, flags?.showPop !== false],
+    [autoQueueEl, flags?.autoQueue === true],
   ];
   for (const [element, on] of boxes) {
     if (element)
@@ -386,6 +419,7 @@ async function bootSettings(): Promise<void> {
   }
 
   await paintConnect();
+  await paintAutoLine();
 
   const hist = await browser.runtime.sendMessage({ type: 'apply-history' }) as { today?: number };
   if (todayEl)

@@ -1,4 +1,6 @@
-import { pingReasons, scan, writeJsonAtomic } from '@cursor-chrome/hh';
+import type { Report } from '@cursor-chrome/hh';
+
+import { pendingCount, pingReasons, readMemory, readState, scan, scanBlock, SCAN_EVERY_MS, SEND_PER_DAY, startTicker, WORK_FROM_HOUR, WORK_TO_HOUR, writeJsonAtomic, writeState } from '@cursor-chrome/hh';
 
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -19,6 +21,7 @@ type Update = {
 let offset = 0;
 let stopScan: AbortController | null = null;
 let started = false;
+let ticking = false;
 let polling = false;
 let onApply: ((item: { id: string; company: string; url: string }) => Promise<boolean>) | null = null;
 
@@ -99,14 +102,15 @@ async function onUpdate(update: Update): Promise<void> {
 
   const text = (message.text ?? '').trim().toLowerCase();
   if (text === '/start' || text.startsWith('/start ')) {
-    await send(message.chat.id, 'Чат открыт. Кнопки снизу: старт начинает, стоп останавливает.', true);
+    await send(message.chat.id, 'Чат открыт. Кнопки снизу: старт включает автопилот, стоп выключает.', true);
     return;
   }
 
   if (text === 'стоп') {
     stopScan?.abort();
     stopScan = null;
-    await send(message.chat.id, 'Стоп.');
+    await writeState({ auto: false });
+    await send(message.chat.id, 'Стоп. Автопилот выключен, очередь расширение дорабатывает само.');
 
     return;
   }
@@ -114,10 +118,40 @@ async function onUpdate(update: Update): Promise<void> {
   if (text !== 'старт')
     return;
 
-  if (stopScan)
+  await writeState({ auto: true });
+  if (stopScan) {
+    await send(message.chat.id, 'Автопилот включён, скан уже идёт.');
+    return;
+  }
+
+  await send(message.chat.id, `Автопилот включён: скан каждые ${SCAN_EVERY_MS / 60_000} мин с ${WORK_FROM_HOUR}:00 до ${WORK_TO_HOUR}:00 МСК, до ${SEND_PER_DAY} откликов в день.`);
+  await run(message.chat.id);
+}
+
+export function startAutopilot(): void {
+  if (ticking)
     return;
 
-  await run(message.chat.id);
+  ticking = true;
+  startTicker(tick);
+}
+
+async function tick(): Promise<void> {
+  const chatId = await readOwner();
+  if (chatId === null || token().length === 0)
+    return;
+
+  const [state, memory, queued] = await Promise.all([readState(), readMemory(), pendingCount()]);
+  const block = scanBlock({ state, memory, pendingCount: queued, scanning: stopScan !== null });
+  if (block !== null) {
+    if (block !== state.lastNote)
+      await writeState({ lastNote: block });
+
+    return;
+  }
+
+  await writeState({ lastScanAt: Date.now(), lastNote: '' });
+  await run(chatId);
 }
 
 export async function notifyOwner(text: string): Promise<void> {
@@ -153,7 +187,15 @@ async function run(chatId: number): Promise<void> {
     return;
   }
   stopScan = null;
+  if (reports.length === 0) {
+    await send(chatId, 'Пусто, свежих вакансий по запросам нет.');
+    return;
+  }
+
   for (const report of reports) {
+    if (report.verdict !== 'apply' && report.verdict !== 'human')
+      continue;
+
     if (report.verdict === 'apply' && live && onApply !== null) {
       const paid = await onApply({ id: report.id, company: report.company, url: report.url });
       if (paid === false) {
@@ -165,14 +207,15 @@ async function run(chatId: number): Promise<void> {
     await send(chatId, report.line);
   }
 
-  if (reports.length === 0) {
-    await send(chatId, 'Пусто.');
-    return;
-  }
+  const queued = await pendingCount();
+  await send(chatId, summaryOf(reports, live, queued));
+}
 
-  const queued = reports.filter(report => report.verdict === 'apply').length;
-  if (live && queued > 0)
-    await send(chatId, `В очереди ${queued}. Открой Chrome с hh.ru и нажми «Разобрать очередь» в расширении.`);
+function summaryOf(reports: Report[], live: boolean, queued: number): string {
+  const count = (verdict: Report['verdict']) => reports.filter(report => report.verdict === verdict).length;
+  const head = live ? 'Добавил' : 'Откликнулся бы';
+
+  return `${head} ${count('apply')}, мимо ${count('skip')}, ждут ${count('human')}, смотрел ${reports.length}, в очереди ${queued}.`;
 }
 
 async function allow(chatId: number, username: string): Promise<boolean> {
@@ -223,5 +266,7 @@ async function send(chatId: number, text: string, keys = false): Promise<void> {
 }
 
 const entry = process.argv[1];
-if (entry !== undefined && import.meta.url === url.pathToFileURL(entry).href)
+if (entry !== undefined && import.meta.url === url.pathToFileURL(entry).href) {
   startTelegram();
+  startAutopilot();
+}

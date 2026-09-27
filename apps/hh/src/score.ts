@@ -1,0 +1,103 @@
+import type { Vacancy } from './rules.ts';
+
+import process from 'node:process';
+
+export type Rules = {
+  stopWords: string[];
+  mustWords: string[];
+  salaryMin: number;
+  blacklist: string[];
+};
+
+export const EMPTY_RULES: Rules = { stopWords: [], mustWords: [], salaryMin: 0, blacklist: [] };
+
+const STACK = [/nestjs|nest\.js/i, /node\.?js|\bnode\b/i, /typescript/i, /\bvue\b/i, /svelte/i, /\breact\b/i];
+const RUB = /^(RUR|RUB)?$/i;
+
+export function splitWords(text: string): string[] {
+  return [...new Set(
+    text
+      .split(/[\n,;]+/)
+      .map(word => word.trim())
+      .filter(word => word.length > 0),
+  )].slice(0, 60);
+}
+
+export function parseRules(raw: unknown): Rules {
+  if (typeof raw !== 'object' || raw === null)
+    return EMPTY_RULES;
+
+  const rec = raw as Partial<Record<keyof Rules, unknown>>;
+
+  return {
+    stopWords: wordList(rec.stopWords),
+    mustWords: wordList(rec.mustWords),
+    salaryMin: typeof rec.salaryMin === 'number' && rec.salaryMin > 0 ? Math.floor(rec.salaryMin) : 0,
+    blacklist: wordList(rec.blacklist),
+  };
+}
+
+export function rulesFromEnv(): Rules {
+  const raw = process.env.HH_RULES ?? '';
+  if (raw.length === 0)
+    return EMPTY_RULES;
+
+  try {
+    return parseRules(JSON.parse(raw));
+  }
+  catch {
+    return EMPTY_RULES;
+  }
+}
+
+export function ruleSkip(vacancy: Vacancy, rules: Rules): string | null {
+  const blob = `${vacancy.title}\n${vacancy.text}`.toLowerCase();
+  const company = vacancy.company.toLowerCase();
+
+  const banned = rules.blacklist.find(name => name === vacancy.employerId || company.includes(name.toLowerCase()));
+  if (banned !== undefined)
+    return 'компания в чёрном списке';
+
+  const stop = rules.stopWords.find(word => blob.includes(word.toLowerCase()));
+  if (stop !== undefined)
+    return `стоп-слово «${stop}»`;
+
+  if (rules.mustWords.length > 0 && rules.mustWords.some(word => blob.includes(word.toLowerCase())) === false)
+    return 'нет нужных слов';
+
+  const top = salaryTop(vacancy);
+  if (rules.salaryMin > 0 && top !== null && top < rules.salaryMin)
+    return `зарплата ниже ${rules.salaryMin}`;
+
+  return null;
+}
+
+export function scoreOf(vacancy: Vacancy, rules: Rules): number {
+  const blob = `${vacancy.title}\n${vacancy.text}`;
+  const stack = STACK.filter(re => re.test(blob)).length;
+  const top = salaryTop(vacancy);
+  const paid = rules.salaryMin > 0 && top !== null && top >= rules.salaryMin ? 2 : 0;
+  const senior = vacancy.experience === 'moreThan6' ? -2 : 0;
+
+  return (vacancy.remote ? 3 : 0) + paid + stack + senior;
+}
+
+export function byScore(rules: Rules): (left: Vacancy, right: Vacancy) => number {
+  return (left, right) => scoreOf(right, rules) - scoreOf(left, rules);
+}
+
+function salaryTop(vacancy: Vacancy): number | null {
+  if (RUB.test(vacancy.currency) === false)
+    return null;
+
+  const values = [vacancy.salaryFrom, vacancy.salaryTo].filter((value): value is number => typeof value === 'number' && value > 0);
+
+  return values.length > 0 ? Math.max(...values) : null;
+}
+
+function wordList(value: unknown): string[] {
+  if (Array.isArray(value) === false)
+    return [];
+
+  return value.filter((word): word is string => typeof word === 'string' && word.trim().length > 0).map(word => word.trim()).slice(0, 60);
+}

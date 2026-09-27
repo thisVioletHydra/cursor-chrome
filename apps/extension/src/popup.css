@@ -261,6 +261,14 @@ body {
   font-weight: 400;
 }
 
+.flag.auto-queue {
+  margin: 0 0 10px;
+}
+
+.flag.auto-queue small.paused {
+  color: #fbbf24;
+}
+
 .flag input {
   appearance: none;
   width: 36px;

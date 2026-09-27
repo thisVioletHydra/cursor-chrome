@@ -2,7 +2,8 @@ import { askCloud } from './answer';
 import { appendApply, getSyncKey, getSyncUrl, listApplies, setSyncKey, setSyncUrl, todayCount, waitingHuman } from './apply-log';
 import { getFlags, setFlags } from './flags';
 import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from './human-review';
-import { runQueue } from './queue-run';
+import { syncNegotiations } from './negotiations';
+import { readPausedUntil, runQueue } from './queue-run';
 import { checkWorker, listJobTabs, openHhBackground, pinWorker } from './worker-tab';
 import { openPinnedWorker } from './worker-open';
 
@@ -116,6 +117,16 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
 
     return true;
   },
+  'sync-negotiations': (_message, reply) => {
+    replyJob(reply, syncNegotiations());
+
+    return true;
+  },
+  'get-paused': (_message, reply) => {
+    replyJob(reply, readPausedUntil().then(pausedUntil => ({ pausedUntil })));
+
+    return true;
+  },
   'answer-question': (message, reply) => {
     const { type: _type, ...question } = message;
     replyJob(reply, askCloud(question));
@@ -128,7 +139,7 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
     return true;
   },
   'set-flags': (message, reply) => {
-    const patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean } = {};
+    const patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean } = {};
     if ('hideJunk' in message)
       patch.hideJunk = message.hideJunk === true;
 
@@ -137,6 +148,9 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
 
     if ('showPop' in message)
       patch.showPop = message.showPop === true;
+
+    if ('autoQueue' in message)
+      patch.autoQueue = message.autoQueue === true;
 
     replyJob(reply, setFlags(patch));
 

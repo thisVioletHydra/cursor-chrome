@@ -1,6 +1,6 @@
 import type { LayoutServerLoad } from './$types';
 
-import { COVER_LETTER, moscowDay, PRESETS, providerName, readMemory, readQueue } from '@cursor-chrome/hh';
+import { COVER_LETTER, moscowDay, PRESETS, providerName, readMemory, readQueue, readState } from '@cursor-chrome/hh';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { redirect } from '@sveltejs/kit';
 import { coolLeft } from '$lib/server/admin-actions';
@@ -10,10 +10,21 @@ import { chainOf, DEFAULT_QUERY, GUEST_BALANCE, isCreator, readAccount, VACANCY_
 const when = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Asia/Bishkek', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 async function statsOf(preview: boolean) {
-  if (preview)
-    return { today: 0, waiting: 0, queued: 0, judged: 0, rows: [] };
+  if (preview) {
+    return {
+      today: 0,
+      waiting: 0,
+      queued: 0,
+      judged: 0,
+      rows: [],
+      invitations: 0,
+      discards: 0,
+      waitingReply: 0,
+      autopilot: { auto: false, lastNote: '' },
+    };
+  }
 
-  const [memory, queue] = await Promise.all([readMemory(), readQueue()]);
+  const [memory, queue, state] = await Promise.all([readMemory(), readQueue(), readState()]);
   const day = moscowDay();
   const rows = queue.slice(0, 20).map(row => ({
     id: row.id,
@@ -30,6 +41,10 @@ async function statsOf(preview: boolean) {
     queued: queue.filter(row => row.status === 'pending').length,
     judged: memory.seen.length,
     rows,
+    invitations: queue.filter(row => row.outcome === 'invitation').length,
+    discards: queue.filter(row => row.outcome === 'discard').length,
+    waitingReply: queue.filter(row => row.outcome === 'response').length,
+    autopilot: { auto: state.auto, lastNote: state.lastNote },
   };
 }
 import { allowedLogins, readSession } from '$lib/server/session';

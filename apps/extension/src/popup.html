@@ -36,6 +36,13 @@
         <p id="connect-error" class="connect-error" hidden></p>
       </form>
       <button id="run-queue" class="pin-primary" type="button" title="забрать очередь из админки и откликнуться из этой вкладки" hidden>Разобрать очередь</button>
+      <label id="auto-queue" class="flag auto-queue" hidden>
+        <span>
+          <strong>Автопилот в Chrome</strong>
+          <small id="auto-line">Каждые 15 мин, до 3 откликов за раз</small>
+        </span>
+        <input id="flag-auto-queue" type="checkbox" />
+      </label>
       <p id="connect-line" class="connect-line" hidden></p>
       <p id="pill" class="status" hidden></p>
       <pre id="report" hidden></pre>

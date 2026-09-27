@@ -1,4 +1,4 @@
-import { SEND_PER_DAY } from './limits.ts';
+import { SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from './limits.ts';
 import { parseJsonLoose, writeJsonAtomic } from './store.ts';
 
 import fsPromises from 'node:fs/promises';
@@ -53,15 +53,34 @@ export async function writeMemory(memory: Memory): Promise<void> {
   await writeJsonAtomic(storePath(), memory);
 }
 
-export function canSend(memory: Memory, sentThisStart: number, perStart: number): boolean {
-  return sentThisStart < perStart && memory.sent < SEND_PER_DAY;
+export function moscowHour(now = new Date()): number {
+  const text = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Moscow', hour: '2-digit', hourCycle: 'h23' }).format(now);
+
+  return Number(text);
 }
 
-export function remember(memory: Memory, id: string, sent: boolean): Memory {
-  const seen = memory.seen.includes(id) ? memory.seen : [...memory.seen, id];
-  return {
-    seen,
-    day: memory.day,
-    sent: sent ? memory.sent + 1 : memory.sent,
-  };
+export function workHours(now = new Date()): boolean {
+  const hour = moscowHour(now);
+
+  return hour >= WORK_FROM_HOUR && hour < WORK_TO_HOUR;
+}
+
+export function dayOpen(memory: Memory): boolean {
+  return memory.sent < SEND_PER_DAY;
+}
+
+export function roomToday(memory: Memory, pendingCount: number): boolean {
+  return memory.sent + pendingCount < SEND_PER_DAY;
+}
+
+export function countSent(memory: Memory): Memory {
+  return { ...memory, sent: memory.sent + 1 };
+}
+
+export function remember(memory: Memory, ...ids: string[]): Memory {
+  const fresh = ids.filter(id => memory.seen.includes(id) === false);
+  if (fresh.length === 0)
+    return memory;
+
+  return { ...memory, seen: [...memory.seen, ...fresh] };
 }

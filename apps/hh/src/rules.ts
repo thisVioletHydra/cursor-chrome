@@ -8,6 +8,21 @@ export type Vacancy = {
   text: string;
   formUrl: string;
   formBlocked: boolean;
+  salaryFrom: number | null;
+  salaryTo: number | null;
+  currency: string;
+  remote: boolean;
+  employerId: string;
+  experience: string;
+};
+
+export const NO_META: Pick<Vacancy, 'salaryFrom' | 'salaryTo' | 'currency' | 'remote' | 'employerId' | 'experience'> = {
+  salaryFrom: null,
+  salaryTo: null,
+  currency: '',
+  remote: false,
+  employerId: '',
+  experience: '',
 };
 
 export type Report = {

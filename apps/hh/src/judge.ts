@@ -13,21 +13,21 @@ export type JudgeOpts = {
 export async function judge(vacancy: Vacancy, opts: JudgeOpts): Promise<Report> {
   const skipped = hardSkip(vacancy);
   if (skipped)
-    return pack(vacancy, 'skip', skipped, opts.dry);
+    return packReport(vacancy, 'skip', skipped, opts.dry);
 
   if (vacancy.formBlocked)
-    return pack(vacancy, 'human', 'форма без фактов', opts.dry);
+    return packReport(vacancy, 'human', 'форма без фактов', opts.dry);
 
   if (opts.model === null || opts.modelLeft() === false)
-    return pack(vacancy, 'human', 'модель не смотрела', opts.dry);
+    return packReport(vacancy, 'human', 'модель не смотрела', opts.dry);
 
   opts.takeModel();
   const answer = await opts.model(vacancy);
 
-  return pack(vacancy, answer.verdict, answer.reason, opts.dry);
+  return packReport(vacancy, answer.verdict, answer.reason, opts.dry);
 }
 
-function pack(vacancy: Vacancy, verdict: Verdict, reason: string, dry: boolean): Report {
+export function packReport(vacancy: Vacancy, verdict: Verdict, reason: string, dry: boolean): Report {
   return {
     id: vacancy.id,
     company: vacancy.company,

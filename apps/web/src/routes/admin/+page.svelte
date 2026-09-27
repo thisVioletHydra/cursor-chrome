@@ -48,6 +48,17 @@ const statusDot: Record<string, string> = {
     <p class="text-sm text-zinc-400">Ждут тебя <span class="ml-1 text-2xl font-semibold text-white">{data.stats.waiting}</span></p>
     <p class="ml-auto text-xs text-zinc-500">{data.polling ? 'Бот слушает команды.' : 'Бот молчит, пока нет токена телеги.'}</p>
   </div>
+  <div class="mt-3 flex flex-wrap items-baseline gap-x-6 gap-y-2">
+    <p class="text-sm text-zinc-400">Приглашения <span class="ml-1 text-2xl font-semibold text-white">{data.stats.invitations}</span></p>
+    <p class="text-sm text-zinc-400">Отказы <span class="ml-1 text-2xl font-semibold text-white">{data.stats.discards}</span></p>
+    <p class="text-sm text-zinc-400">Ждём <span class="ml-1 text-2xl font-semibold text-white">{data.stats.waitingReply}</span></p>
+    <p class="text-sm text-zinc-400">
+      Автопилот: <span class="font-medium text-white">{data.stats.autopilot.auto ? 'вкл' : 'выкл'}</span>
+      {#if data.stats.autopilot.lastNote}
+        <span class="ml-2 text-xs text-zinc-500">{data.stats.autopilot.lastNote}</span>
+      {/if}
+    </p>
+  </div>
 
   {#if data.stats.rows.length > 0}
     <ul class="mt-6 divide-y divide-white/6">

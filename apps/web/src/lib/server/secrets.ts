@@ -12,6 +12,7 @@ export type Secrets = {
   hhAccessToken: string;
   hhResumeId: string;
   hhQuery: string;
+  hhRules: string;
   extToken: string;
 };
 
@@ -48,6 +49,7 @@ const empty = (): Account => ({
   hhAccessToken: '',
   hhResumeId: '',
   hhQuery: '',
+  hhRules: '',
   extToken: '',
   telegramLabel: '',
   hhLabel: '',
@@ -103,6 +105,7 @@ export async function readAccount(login: string): Promise<Account> {
     ...empty(),
     ...rest,
     modelChain: migrateChain(raw.modelChain, mistralKey),
+    hhRules: typeof raw.hhRules === 'string' ? raw.hhRules : '',
     balance: typeof raw.balance === 'number' ? raw.balance : 0,
     history: chargesOf(raw.history),
   };
@@ -142,6 +145,7 @@ const envKeys: Record<keyof Secrets, string> = {
   hhAccessToken: 'HH_ACCESS_TOKEN',
   hhResumeId: 'HH_RESUME_ID',
   hhQuery: 'HH_QUERY',
+  hhRules: 'HH_RULES',
   extToken: 'EXT_TOKEN',
 };
 

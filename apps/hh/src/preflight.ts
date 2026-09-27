@@ -1,6 +1,7 @@
 import type { Model, Vacancy } from './rules.ts';
 
 import { judge } from './judge.ts';
+import { NO_META } from './rules.ts';
 
 import process from 'node:process';
 
@@ -12,6 +13,7 @@ const OFFICE: Vacancy = {
   text: 'Только офис, удалёнку не рассматриваем.',
   formUrl: '',
   formBlocked: false,
+  ...NO_META,
 };
 
 const PYTHON: Vacancy = {
@@ -22,6 +24,7 @@ const PYTHON: Vacancy = {
   text: 'Основной бэкенд Django и FastAPI.',
   formUrl: '',
   formBlocked: false,
+  ...NO_META,
 };
 
 const OURS: Vacancy = {
@@ -32,6 +35,7 @@ const OURS: Vacancy = {
   text: 'TypeScript, React, NestJS. Удалёнку не запрещали.',
   formUrl: '',
   formBlocked: false,
+  ...NO_META,
 };
 
 const FORM: Vacancy = {
@@ -42,6 +46,7 @@ const FORM: Vacancy = {
   text: 'Нужно пройти тест.',
   formUrl: 'https://docs.google.com/forms/d/e/test/viewform',
   formBlocked: true,
+  ...NO_META,
 };
 
 export async function preflight(): Promise<void> {

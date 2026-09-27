@@ -1,7 +1,7 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import type { Stored } from './secrets';
 
-import { asProvider, COVER_LETTER, splitQueries, suggestQueries } from '@cursor-chrome/hh';
+import { asProvider, COVER_LETTER, parseRules, splitQueries, splitWords, suggestQueries } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
 import { chainOf, isCreator, newExtToken, publishSecrets, readAccount, withChain, writeAccount } from './secrets';
@@ -145,6 +145,35 @@ export async function saveQueryAdmin({ request, cookies }: RequestEvent) {
   publishSecrets(login, next);
 
   return { ok: true, detail: query, wait: 0 };
+}
+
+export async function saveRulesAdmin({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const form = await request.formData();
+  const hhRules = JSON.stringify(parseRules({
+    stopWords: splitWords(String(form.get('stopWords') ?? '')),
+    mustWords: splitWords(String(form.get('mustWords') ?? '')),
+    salaryMin: salaryMinOf(String(form.get('salaryMin') ?? '')),
+    blacklist: splitWords(String(form.get('blacklist') ?? '')),
+  }));
+  const next = { ...await readAccount(login), hhRules };
+  await writeAccount(login, next);
+  publishSecrets(login, next);
+
+  return { ok: true, detail: 'Сохранено', wait: 0 };
+}
+
+function salaryMinOf(raw: string): number {
+  const text = raw.trim();
+  if (text.length === 0)
+    return 0;
+
+  const value = Number(text);
+
+  return Number.isFinite(value) ? value : 0;
 }
 
 export async function suggestQueryAdmin({ cookies }: RequestEvent) {

@@ -18,8 +18,14 @@ type VacancyCard = {
   name: string;
   alternate_url: string;
   description?: string;
-  employer?: { name?: string };
+  employer?: { id?: string; name?: string };
+  salary?: { from?: number | null; to?: number | null; currency?: string | null } | null;
+  schedule?: { id?: string } | null;
+  work_format?: { id?: string }[] | null;
+  experience?: { id?: string } | null;
 };
+
+const FRESH_DAYS = 3;
 
 const FORM = /https:\/\/docs\.google\.com\/forms\/[^\s"'<>]+/i;
 
@@ -29,7 +35,7 @@ export async function searchVacancies(query: string, limit: number): Promise<Vac
     return [];
 
   const perQuery = Math.ceil(limit / queries.length);
-  const pages = await Promise.all(queries.map(text => searchPage(text, perQuery)));
+  const pages = await Promise.all(queries.flatMap(text => [0, 1].map(page => searchPage(text, perQuery, page))));
   const unique = new Map<string, SearchItem>();
   for (const item of pages.flat()) {
     if (unique.has(item.id) === false)
@@ -39,19 +45,24 @@ export async function searchVacancies(query: string, limit: number): Promise<Vac
   return Promise.all([...unique.values()].slice(0, limit).map(item => loadCard(item)));
 }
 
-async function searchPage(text: string, limit: number): Promise<SearchItem[]> {
+async function searchPage(text: string, limit: number, page: number): Promise<SearchItem[]> {
   const url = new URL(`${HH_API}/vacancies`);
   url.searchParams.set('text', text);
-  url.searchParams.set('per_page', String(limit));
-  const page = await hhGet<SearchPage>(url);
+  url.searchParams.set('per_page', String(Math.min(limit, 100)));
+  url.searchParams.set('page', String(page));
+  url.searchParams.set('period', String(FRESH_DAYS));
+  url.searchParams.set('order_by', 'publication_time');
+  const found = await hhGet<SearchPage>(url);
 
-  return page.items ?? [];
+  return found.items ?? [];
 }
 
 async function loadCard(item: SearchItem): Promise<Vacancy> {
   const card = await hhGet<VacancyCard>(`${HH_API}/vacancies/${item.id}`);
   const text = strip(card.description || `${item.snippet?.requirement ?? ''} ${item.snippet?.responsibility ?? ''}`);
   const formUrl = text.match(FORM)?.[0] ?? '';
+  const remote = card.schedule?.id === 'remote' || (card.work_format ?? []).some(format => format.id === 'REMOTE');
+
   return {
     id: item.id,
     title: card.name || item.name,
@@ -60,6 +71,12 @@ async function loadCard(item: SearchItem): Promise<Vacancy> {
     text,
     formUrl,
     formBlocked: false,
+    salaryFrom: card.salary?.from ?? null,
+    salaryTo: card.salary?.to ?? null,
+    currency: card.salary?.currency ?? '',
+    remote,
+    employerId: card.employer?.id ?? '',
+    experience: card.experience?.id ?? '',
   };
 }
 

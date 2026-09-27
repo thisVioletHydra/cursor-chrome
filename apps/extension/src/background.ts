@@ -3,14 +3,21 @@ import type { CommandName, WsRequest } from '@cursor-chrome/protocol';
 import { NATIVE_HOST_NAME } from '@cursor-chrome/protocol';
 import { pageInfo, runCommand } from './chrome/commands';
 import { installFocusLock } from './chrome/focus-lock';
+import { getFlags } from './chrome/flags';
 import { runMakeGood } from './chrome/make-good';
 import { postNative as sendNative } from './chrome/native-post';
+import { syncNegotiations } from './chrome/negotiations';
 import { ensureOffscreen, setBadge, waitOffscreen } from './chrome/offscreen-ctl';
+import { isPaused, runQueue } from './chrome/queue-run';
 import { rpc } from './chrome/rpc';
 import { closePinnedHh } from './chrome/worker-tab';
 import { browser } from './browser-host';
 
 const ALARM = 'cc-keepalive';
+const QUEUE_ALARM = 'cc-queue';
+const QUEUE_PERIOD_MIN = 15;
+const NEGOTIATIONS_AT_KEY = 'negotiationsAt';
+const NEGOTIATIONS_EVERY_MS = 60 * 60_000;
 const HOST_MISSING = /native messaging host not found|forbidden|does not exist/i;
 
 type Transport = 'native' | 'offscreen' | 'none';
@@ -40,6 +47,12 @@ browser.storage.onChanged.addListener((changes, area) => {
 });
 
 browser.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === QUEUE_ALARM) {
+    void onQueueAlarm();
+
+    return;
+  }
+
   if (alarm.name !== ALARM)
     return;
 
@@ -170,8 +183,31 @@ async function hangUp(): Promise<{ ok: true }> {
   return { ok: true };
 }
 
+async function onQueueAlarm(): Promise<void> {
+  const flags = await getFlags();
+  if (flags.autoQueue !== true)
+    return;
+
+  await syncNegotiationsIfDue();
+  if (await isPaused())
+    return;
+
+  void runQueue();
+}
+
+async function syncNegotiationsIfDue(): Promise<void> {
+  const stored = await browser.storage.local.get(NEGOTIATIONS_AT_KEY);
+  const at = stored[NEGOTIATIONS_AT_KEY];
+  if (typeof at === 'number' && Date.now() - at < NEGOTIATIONS_EVERY_MS)
+    return;
+
+  await browser.storage.local.set({ [NEGOTIATIONS_AT_KEY]: Date.now() });
+  await syncNegotiations().catch(() => {});
+}
+
 async function boot(): Promise<void> {
   await browser.alarms.create(ALARM, { periodInMinutes: 0.5 });
+  await browser.alarms.create(QUEUE_ALARM, { periodInMinutes: QUEUE_PERIOD_MIN });
   const offscreenFail = await ensureOffscreen();
   if (offscreenFail)
     detail = offscreenFail;
