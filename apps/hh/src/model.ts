@@ -5,7 +5,7 @@ import { PING_MS } from './limits.ts';
 
 import process from 'node:process';
 
-export type ProviderId = 'groq' | 'gemini' | 'zai' | 'openrouter' | 'deepseek' | 'mistral' | 'custom';
+export type ProviderId = 'groq' | 'gemini' | 'zai' | 'openrouter' | 'cohere' | 'deepseek' | 'mistral' | 'custom';
 
 export type Provider = {
   id: ProviderId;
@@ -28,6 +28,7 @@ export const PRESETS: Preset[] = [
   { id: 'gemini', name: 'Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-3.8-flash', keysUrl: 'https://aistudio.google.com/apikey', free: true },
   { id: 'zai', name: 'Z.ai', url: 'https://api.z.ai/api/paas/v4/chat/completions', model: 'glm-4.5-flash', keysUrl: 'https://z.ai/manage-apikey/apikey-list', free: true },
   { id: 'openrouter', name: 'OpenRouter', url: 'https://openrouter.ai/api/v1/chat/completions', model: 'deepseek/deepseek-chat-v3-0324:free', keysUrl: 'https://openrouter.ai/settings/keys', free: true },
+  { id: 'cohere', name: 'Cohere', url: 'https://api.cohere.ai/compatibility/v1/chat/completions', model: 'command-a-plus-05-2026', keysUrl: 'https://dashboard.cohere.com/api-keys', free: true },
   { id: 'deepseek', name: 'DeepSeek', url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', keysUrl: 'https://platform.deepseek.com/api_keys', free: false },
   { id: 'mistral', name: 'Mistral', url: 'https://api.mistral.ai/v1/chat/completions', model: 'mistral-small-latest', keysUrl: 'https://console.mistral.ai/api-keys', free: false },
   { id: 'custom', name: 'Свой', url: '', model: '', keysUrl: '', free: false },

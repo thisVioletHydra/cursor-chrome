@@ -1,6 +1,8 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import type { Stored } from './secrets';
 
+import type { Provider } from '@cursor-chrome/hh';
+
 import { asProvider, COVER_LETTER, distillCorpus, parseRules, splitQueries, splitWords, suggestQueries } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
@@ -282,34 +284,51 @@ export async function importSetupAdmin({ request, cookies }: RequestEvent) {
   if (telegram.ok === false)
     return { ok: false, detail: telegram.detail, wait: 0 };
 
-  const provider = asProvider(setup.gemini);
-  if (provider === null)
+  const listed = setup.providers.length > 0 ? setup.providers : [setup.gemini];
+  const candidates = listed.flatMap(item => {
+    const provider = asProvider(item);
+
+    return provider === null ? [] : [provider];
+  });
+  if (candidates.length === 0)
     return { ok: false, detail: 'в конфиге нет модели', wait: 0 };
 
-  const model = await probeModel(provider);
-  if (model.ok === false)
-    return { ok: false, detail: model.detail, wait: 0 };
+  const accepted: Provider[] = [];
+  let fail = 'модель не ответила';
+  for (const provider of candidates) {
+    const model = await probeModel(provider);
+    if (model.ok)
+      accepted.push(provider);
+    else
+      fail = model.detail;
+  }
+  if (accepted.length === 0)
+    return { ok: false, detail: fail, wait: 0 };
 
   const resumeId = resumeIdOf(setup.hhResumeId);
   if (/^[A-Za-z0-9]{8,}$/.test(resumeId) === false)
     return { ok: false, detail: 'в конфиге кривое резюме', wait: 0 };
 
   const saved = await readAccount(login);
-  const chain = chainOf(saved).filter(item => item.url !== provider.url || item.model !== provider.model);
+  let chain = chainOf(saved);
+  for (const provider of accepted) {
+    chain = chain.filter(item => item.url !== provider.url || item.model !== provider.model);
+    chain = [...chain, provider];
+  }
   const next = withChain({
     ...saved,
     telegramToken: setup.telegramToken,
     telegramLabel: telegram.detail,
     hhResumeId: resumeId,
     hhLabel: resumeId,
-  }, [...chain, provider]);
+  }, chain);
   await writeAccount(login, next);
   publishSecrets(login, next);
 
   return { ok: true, detail: 'Перенесено', wait: 0 };
 }
 
-function parseSetup(value: unknown): { expiresAt: number; telegramToken: string; gemini: unknown; hhResumeId: string } | null {
+function parseSetup(value: unknown): { expiresAt: number; telegramToken: string; gemini: unknown; providers: unknown[]; hhResumeId: string } | null {
   if (typeof value !== 'object' || value === null)
     return null;
 
@@ -324,6 +343,7 @@ function parseSetup(value: unknown): { expiresAt: number; telegramToken: string;
     expiresAt: row.expiresAt,
     telegramToken: row.telegramToken.trim(),
     gemini: row.gemini,
+    providers: Array.isArray(row.providers) ? row.providers : [],
     hhResumeId: row.hhResumeId.trim(),
   };
 }
