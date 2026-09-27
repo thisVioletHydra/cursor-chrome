@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>local-debug</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 15px/1.45 ui-sans-serif, system-ui, sans-serif; background: #0b0d12; color: #eceff4; }
+      main { max-width: 720px; margin: 0 auto; padding: 28px 20px 64px; }
+      h1 { margin: 0; font-size: 28px; letter-spacing: -0.03em; }
+      .lead { color: #8b93a7; margin: 8px 0 22px; }
+      .card { background: #151922; border: 1px solid rgba(255,255,255,.08); border-radius: 16px; padding: 16px 18px; margin-top: 12px; }
+      .row { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+      h2 { margin: 0; font-size: 16px; }
+      .hint { color: #8b93a7; font-size: 13px; margin: 8px 0 12px; }
+      label { display: block; font-size: 12px; color: #a1a8b8; margin: 10px 0 4px; }
+      input { width: 100%; height: 42px; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); background: #0b0d12; color: inherit; padding: 0 12px; }
+      .actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+      button { height: 40px; border: 0; border-radius: 10px; padding: 0 14px; background: #3b6cff; color: white; font: inherit; cursor: pointer; }
+      button.ghost { background: transparent; color: #c5cad6; border: 1px solid rgba(255,255,255,.12); }
+      button:disabled { opacity: .45; cursor: not-allowed; }
+      .badge { font-size: 12px; font-weight: 700; letter-spacing: .04em; padding: 4px 8px; border-radius: 999px; background: #2a2f3a; color: #8b93a7; }
+      .badge.pass { background: #123524; color: #3dd68c; }
+      .badge.fail { background: #3a1720; color: #ff8b9a; }
+      .detail { margin: 8px 0 0; font-family: ui-monospace, monospace; font-size: 12px; color: #c5cad6; }
+      #export:not(:disabled) { background: #14804a; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>local-debug</h1>
+      <p class="lead">Заполни три поля и нажми «Проверить». Когда все три PASS, скачай конфиг. Он живёт 2 часа. На проде: главная админки → «Импорт» → выбери файл.</p>
+
+      <section class="card" data-test="telegram">
+        <div class="row"><h2>1. Telegram</h2><span class="badge" data-badge>ЖДЁТ</span></div>
+        <p class="hint">Открой Telegram → @BotFather → /mybots → свой бот → API Token. Скопируй токен целиком, он вида 123456:AA...</p>
+        <label>Токен бота</label>
+        <input name="token" type="password" autocomplete="off" placeholder="123456:AA..." />
+        <div class="actions"><button type="button" data-check="telegram">Проверить</button></div>
+        <p class="detail" data-detail></p>
+      </section>
+
+      <section class="card" data-test="gemini">
+        <div class="row"><h2>2. Gemini</h2><span class="badge" data-badge>ЖДЁТ</span></div>
+        <p class="hint">Google AI Studio → API Keys → Copy key. Это строка AQ..., не номер проекта. В модели оставь gemini-3.8-flash. Имя gemini-2.5-flash новым ключам не подходит.</p>
+        <label>Ключ</label>
+        <input name="key" type="password" autocomplete="off" placeholder="AQ...." />
+        <label>Модель</label>
+        <input name="model" autocomplete="off" value="gemini-3.8-flash" />
+        <div class="actions"><button type="button" data-check="gemini">Проверить</button></div>
+        <p class="detail" data-detail></p>
+      </section>
+
+      <section class="card" data-test="resume">
+        <div class="row"><h2>3. Резюме hh</h2><span class="badge" data-badge>ЖДЁТ</span></div>
+        <p class="hint">В браузере открой hh.ru/applicant/resumes, кликни резюме и скопируй адресную строку. Нужна ссылка https://hh.ru/resume/...</p>
+        <label>Ссылка</label>
+        <input name="resume" autocomplete="off" placeholder="https://hh.ru/resume/..." />
+        <div class="actions"><button type="button" data-check="resume">Проверить</button></div>
+        <p class="detail" data-detail></p>
+      </section>
+
+      <section class="card">
+        <div class="row">
+          <h2>Конфиг</h2>
+          <span class="badge" id="all">ЖДЁТ</span>
+        </div>
+        <p class="hint">Кнопка включится только после трёх живых PASS. Мок их не заменяет. Файл не сохраняется в проект, только скачивается.</p>
+        <div class="actions">
+          <button id="export" type="button" disabled>Скачать конфиг</button>
+          <button id="mock" class="ghost" type="button">Показать мок</button>
+        </div>
+        <p class="detail" id="export-detail"></p>
+      </section>
+    </main>
+    <script>
+      const state = { telegram: null, gemini: null, resume: null };
+      const hours = 2;
+
+      document.querySelectorAll('[data-check]').forEach((button) => {
+        button.addEventListener('click', () => check(button.dataset.check));
+      });
+      document.getElementById('export').addEventListener('click', download);
+      document.getElementById('mock').addEventListener('click', mock);
+
+      async function check(name) {
+        const card = document.querySelector(`[data-test="${name}"]`);
+        paint(card, 'wait', 'ПРОВЕРЯЮ');
+        const body = payload(name);
+        if (name === 'resume') {
+          const id = resumeId(body.resume);
+          const ok = /^[A-Za-z0-9]{8,}$/.test(id);
+          state.resume = ok ? { ok: true, id, raw: body.resume } : { ok: false };
+          paint(card, ok ? 'pass' : 'fail', ok ? 'PASS' : 'FAIL', ok ? id : 'это не ссылка на резюме');
+          tally();
+          return;
+        }
+
+        const res = await fetch('/api/check', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        }).catch(() => null);
+        const data = res ? await res.json().catch(() => null) : null;
+        const ok = data?.ok === true;
+        state[name] = ok ? { ...body, ok: true, detail: data.detail } : { ok: false };
+        paint(card, ok ? 'pass' : 'fail', ok ? 'PASS' : 'FAIL', data?.detail || 'сервер проверки не запущен');
+        tally();
+      }
+
+      function payload(name) {
+        const card = document.querySelector(`[data-test="${name}"]`);
+        const value = (field) => card.querySelector(`[name="${field}"]`).value.trim();
+        if (name === 'telegram')
+          return { what: 'telegram', token: value('token') };
+        if (name === 'gemini')
+          return { what: 'gemini', key: value('key'), model: value('model') };
+        return { resume: value('resume') };
+      }
+
+      function resumeId(raw) {
+        return raw.match(/\/resume\/([A-Za-z0-9]+)/)?.[1] || raw;
+      }
+
+      function paint(card, kind, label, detail) {
+        const badge = card.querySelector('[data-badge]');
+        badge.textContent = label;
+        badge.className = `badge ${kind === 'pass' ? 'pass' : kind === 'fail' ? 'fail' : ''}`;
+        card.querySelector('[data-detail]').textContent = detail || '';
+      }
+
+      function ready() {
+        return state.telegram?.ok === true && state.gemini?.ok === true && state.resume?.ok === true;
+      }
+
+      function tally() {
+        const all = document.getElementById('all');
+        const button = document.getElementById('export');
+        if (ready()) {
+          all.textContent = 'PASS';
+          all.className = 'badge pass';
+          button.disabled = false;
+          document.getElementById('export-detail').textContent = '';
+          return;
+        }
+        all.textContent = 'ЖДЁТ';
+        all.className = 'badge';
+        button.disabled = true;
+      }
+
+      function download() {
+        if (ready() === false)
+          return;
+        const now = Date.now();
+        const config = {
+          kind: 'cursor-chrome-setup',
+          exportedAt: now,
+          expiresAt: now + hours * 60 * 60 * 1000,
+          telegramToken: state.telegram.token,
+          gemini: {
+            id: 'gemini',
+            key: state.gemini.key,
+            model: state.gemini.model,
+            url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+          },
+          hhResumeId: state.resume.id,
+        };
+        const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'cursor-chrome-setup.json';
+        link.click();
+        URL.revokeObjectURL(link.href);
+        document.getElementById('export-detail').textContent = 'Файл скачан. Через 2 часа прод его не примет.';
+      }
+
+      function mock() {
+        document.querySelectorAll('[data-test]').forEach((card) => paint(card, 'pass', 'PASS', 'мок, в файл не идёт'));
+        document.getElementById('all').textContent = 'МОК';
+        document.getElementById('all').className = 'badge';
+        document.getElementById('export').disabled = true;
+        document.getElementById('export-detail').textContent = 'Мок только показывает зелёное. Для файла нажми «Проверить» на каждом блоке.';
+        state.telegram = null;
+        state.gemini = null;
+        state.resume = null;
+      }
+    </script>
+  </body>
+</html>

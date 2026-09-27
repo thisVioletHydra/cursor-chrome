@@ -8,7 +8,8 @@
   "scripts": {
     "scan": "node --experimental-strip-types src/cli.ts scan",
     "preflight": "node --experimental-strip-types src/cli.ts preflight",
-    "ping": "node --experimental-strip-types src/cli.ts ping"
+    "ping": "node --experimental-strip-types src/cli.ts ping",
+    "probe": "node --experimental-strip-types src/cli.ts probe"
   },
   "devDependencies": {
     "@types/node": "catalog:",

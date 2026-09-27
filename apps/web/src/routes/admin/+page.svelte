@@ -1,5 +1,9 @@
 <script lang="ts">
+import { enhance } from '$app/forms';
+
 let { data } = $props();
+let importMessage = $state('');
+let importOk = $state(false);
 
 const cards = $derived([
   { href: '/admin/telegram', light: data.links.find(item => item.name === 'Телега') },
@@ -30,6 +34,33 @@ const statusBadge: Record<string, string> = {
   dropped: 'badge-ghost',
 };
 </script>
+
+<section class="mb-8 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+  <h2 class="text-base font-semibold">Импорт</h2>
+  <p class="mt-2 text-sm text-zinc-400">Файл из local-debug. Живёт 2 часа, потом прод его не примет.</p>
+  {#if importMessage}
+    <p class="mt-3 font-mono text-xs {importOk ? 'text-emerald-300' : 'text-rose-300'}">{importMessage}</p>
+  {/if}
+  <form
+    class="mt-4 flex flex-wrap items-center gap-3"
+    method="POST"
+    action="?/import"
+    enctype="multipart/form-data"
+    use:enhance={() => {
+      importMessage = '';
+      return async ({ result, update }) => {
+        const body = result.type === 'success' ? result.data : null;
+        importOk = body?.ok === true;
+        importMessage = typeof body?.detail === 'string' ? body.detail : 'не вышло';
+        if (importOk)
+          await update();
+      };
+    }}
+  >
+    <input class="text-sm text-zinc-300" name="config" type="file" accept="application/json,.json" required />
+    <button class="btn btn-primary h-11 min-h-11 px-4" type="submit">Импортировать</button>
+  </form>
+</section>
 
 <header class="mb-8">
   <p class="text-xs tracking-wide text-zinc-500 uppercase">Обзор</p>

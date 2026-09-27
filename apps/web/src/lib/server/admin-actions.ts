@@ -253,6 +253,81 @@ export async function saveLetterAdmin({ request, cookies }: RequestEvent) {
   return { ok: true, detail: 'Сохранено', wait: 0 };
 }
 
+export async function importSetupAdmin({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const form = await request.formData();
+  const file = form.get('config');
+  if (file instanceof File === false)
+    return { ok: false, detail: 'нет файла', wait: 0 };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await file.text());
+  }
+  catch {
+    return { ok: false, detail: 'это не json', wait: 0 };
+  }
+
+  const setup = parseSetup(parsed);
+  if (setup === null)
+    return { ok: false, detail: 'конфиг не тот', wait: 0 };
+
+  if (setup.expiresAt < Date.now())
+    return { ok: false, detail: 'конфиг протух, собери заново', wait: 0 };
+
+  const telegram = await probeTelegram(setup.telegramToken);
+  if (telegram.ok === false)
+    return { ok: false, detail: telegram.detail, wait: 0 };
+
+  const provider = asProvider(setup.gemini);
+  if (provider === null)
+    return { ok: false, detail: 'в конфиге нет модели', wait: 0 };
+
+  const model = await probeModel(provider);
+  if (model.ok === false)
+    return { ok: false, detail: model.detail, wait: 0 };
+
+  const resumeId = resumeIdOf(setup.hhResumeId);
+  if (/^[A-Za-z0-9]{8,}$/.test(resumeId) === false)
+    return { ok: false, detail: 'в конфиге кривое резюме', wait: 0 };
+
+  const saved = await readAccount(login);
+  const chain = chainOf(saved).filter(item => item.url !== provider.url || item.model !== provider.model);
+  const next = withChain({
+    ...saved,
+    telegramToken: setup.telegramToken,
+    telegramLabel: telegram.detail,
+    hhResumeId: resumeId,
+    hhLabel: resumeId,
+  }, [...chain, provider]);
+  await writeAccount(login, next);
+  publishSecrets(login, next);
+
+  return { ok: true, detail: 'Перенесено', wait: 0 };
+}
+
+function parseSetup(value: unknown): { expiresAt: number; telegramToken: string; gemini: unknown; hhResumeId: string } | null {
+  if (typeof value !== 'object' || value === null)
+    return null;
+
+  const row = value as Record<string, unknown>;
+  if (row.kind !== 'cursor-chrome-setup' || typeof row.expiresAt !== 'number')
+    return null;
+
+  if (typeof row.telegramToken !== 'string' || typeof row.hhResumeId !== 'string')
+    return null;
+
+  return {
+    expiresAt: row.expiresAt,
+    telegramToken: row.telegramToken.trim(),
+    gemini: row.gemini,
+    hhResumeId: row.hhResumeId.trim(),
+  };
+}
+
 export async function issueExtTokenAdmin({ cookies }: RequestEvent) {
   const login = guard(cookies);
   if (viewingGuest(cookies, login))
