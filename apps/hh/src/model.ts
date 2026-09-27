@@ -25,7 +25,7 @@ export type Preset = {
 
 export const PRESETS: Preset[] = [
   { id: 'groq', name: 'Groq', url: 'https://api.groq.com/openai/v1/chat/completions', model: 'llama-3.3-70b-versatile', keysUrl: 'https://console.groq.com/keys', free: true },
-  { id: 'gemini', name: 'Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-2.5-flash', keysUrl: 'https://aistudio.google.com/apikey', free: true },
+  { id: 'gemini', name: 'Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-3.8-flash', keysUrl: 'https://aistudio.google.com/apikey', free: true },
   { id: 'zai', name: 'Z.ai', url: 'https://api.z.ai/api/paas/v4/chat/completions', model: 'glm-4.5-flash', keysUrl: 'https://z.ai/manage-apikey/apikey-list', free: true },
   { id: 'openrouter', name: 'OpenRouter', url: 'https://openrouter.ai/api/v1/chat/completions', model: 'deepseek/deepseek-chat-v3-0324:free', keysUrl: 'https://openrouter.ai/settings/keys', free: true },
   { id: 'deepseek', name: 'DeepSeek', url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', keysUrl: 'https://platform.deepseek.com/api_keys', free: false },
