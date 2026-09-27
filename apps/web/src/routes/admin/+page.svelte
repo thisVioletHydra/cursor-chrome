@@ -7,16 +7,27 @@ const cards = $derived([
   { href: '/admin/hh', light: data.links.find(item => item.name === 'HeadHunter') },
 ].flatMap(card => (card.light ? [{ href: card.href, light: card.light }] : [])));
 
+const figures = $derived([
+  { label: 'Сегодня', value: data.stats.today },
+  { label: 'В очереди', value: data.stats.queued },
+  { label: 'Ждут тебя', value: data.stats.waiting },
+  { label: 'Приглашения', value: data.stats.invitations },
+  { label: 'Отказы', value: data.stats.discards },
+  { label: 'Ждём', value: data.stats.waitingReply },
+]);
+
 const statusText: Record<string, string> = {
   pending: 'в очереди',
   sent: 'откликнулся',
   needsHuman: 'ждёт тебя',
+  dropped: 'снял',
 };
 
-const statusDot: Record<string, string> = {
-  pending: 'bg-indigo-400',
-  sent: 'bg-emerald-400',
-  needsHuman: 'bg-amber-400',
+const statusBadge: Record<string, string> = {
+  pending: 'badge-primary',
+  sent: 'badge-success',
+  needsHuman: 'badge-warning',
+  dropped: 'badge-ghost',
 };
 </script>
 
@@ -41,37 +52,49 @@ const statusDot: Record<string, string> = {
   {/each}
 </div>
 
-<section class="mt-8 rounded-2xl border border-white/8 bg-[#151922] p-6">
-  <div class="flex flex-wrap items-baseline gap-x-6 gap-y-2">
-    <p class="text-sm text-zinc-400">Сегодня <span class="ml-1 text-2xl font-semibold text-white">{data.stats.today}</span></p>
-    <p class="text-sm text-zinc-400">В очереди <span class="ml-1 text-2xl font-semibold text-white">{data.stats.queued}</span></p>
-    <p class="text-sm text-zinc-400">Ждут тебя <span class="ml-1 text-2xl font-semibold text-white">{data.stats.waiting}</span></p>
-    <p class="ml-auto text-xs text-zinc-500">{data.polling ? 'Бот слушает команды.' : 'Бот молчит, пока нет токена телеги.'}</p>
+<section class="mt-8">
+  <div class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+    <h2 class="text-lg font-semibold">Очередь</h2>
+    <span class="badge badge-sm {data.stats.autopilot.auto ? 'badge-success' : 'badge-ghost'}">
+      Автопилот {data.stats.autopilot.auto ? 'вкл' : 'выкл'}
+    </span>
+    <p class="text-xs text-zinc-500">{data.polling ? 'Бот слушает команды.' : 'Бот молчит, пока нет токена телеги.'}</p>
+    {#if data.stats.autopilot.lastNote}
+      <p class="text-xs text-zinc-500">{data.stats.autopilot.lastNote}</p>
+    {/if}
   </div>
-  <div class="mt-3 flex flex-wrap items-baseline gap-x-6 gap-y-2">
-    <p class="text-sm text-zinc-400">Приглашения <span class="ml-1 text-2xl font-semibold text-white">{data.stats.invitations}</span></p>
-    <p class="text-sm text-zinc-400">Отказы <span class="ml-1 text-2xl font-semibold text-white">{data.stats.discards}</span></p>
-    <p class="text-sm text-zinc-400">Ждём <span class="ml-1 text-2xl font-semibold text-white">{data.stats.waitingReply}</span></p>
-    <p class="text-sm text-zinc-400">
-      Автопилот: <span class="font-medium text-white">{data.stats.autopilot.auto ? 'вкл' : 'выкл'}</span>
-      {#if data.stats.autopilot.lastNote}
-        <span class="ml-2 text-xs text-zinc-500">{data.stats.autopilot.lastNote}</span>
-      {/if}
-    </p>
+  <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
+    {#each figures as figure}
+      <div class="stat rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+        <div class="stat-title text-xs text-zinc-500">{figure.label}</div>
+        <div class="stat-value text-3xl font-semibold text-white">{figure.value}</div>
+      </div>
+    {/each}
   </div>
-
-  {#if data.stats.rows.length > 0}
-    <ul class="mt-6 divide-y divide-white/6">
-      {#each data.stats.rows as row (row.id)}
-        <li class="flex items-center gap-3 py-3 text-sm">
-          <span class="size-2 shrink-0 rounded-full {statusDot[row.status] ?? 'bg-zinc-500'}"></span>
-          <a class="min-w-0 flex-1 truncate text-zinc-200 underline-offset-4 hover:underline" href={row.url} target="_blank" rel="noreferrer">{row.company} · {row.title}</a>
-          <span class="shrink-0 text-xs text-zinc-500">{statusText[row.status] ?? row.status}</span>
-          <span class="shrink-0 text-xs text-zinc-600">{row.when}</span>
-        </li>
-      {/each}
-    </ul>
-  {:else}
-    <p class="mt-6 text-sm text-zinc-500">Очередь пустая. Напиши боту «старт».</p>
-  {/if}
+  <div class="mt-3 overflow-x-auto rounded-2xl border border-white/8 bg-[#151922]">
+    {#if data.stats.rows.length > 0}
+      <table class="table">
+        <thead>
+          <tr class="text-xs text-zinc-500">
+            <th>Вакансия</th>
+            <th>Статус</th>
+            <th>Когда</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each data.stats.rows as row (row.id)}
+            <tr>
+              <td class="max-w-xs truncate">
+                <a class="text-zinc-200 underline-offset-4 hover:underline" href={row.url} target="_blank" rel="noreferrer">{row.company} · {row.title}</a>
+              </td>
+              <td><span class="badge badge-sm {statusBadge[row.status] ?? 'badge-ghost'}">{statusText[row.status] ?? row.status}</span></td>
+              <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {:else}
+      <p class="px-5 py-8 text-sm text-zinc-500">Очередь пустая. Напиши боту «старт».</p>
+    {/if}
+  </div>
 </section>
