@@ -69,6 +69,22 @@ $effect(() => {
 {/if}
 
 <section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+  <h2 class="text-base font-semibold text-white">Пробы</h2>
+  {#if data.probes.length === 0}
+    <p class="mt-2 text-sm text-zinc-500">Пока пусто. Запись появится после проверки ключа или пинга цепочки.</p>
+  {:else}
+    <ul class="mt-3 divide-y divide-white/6">
+      {#each data.probes as row, index (row.name + row.model + row.detail + index)}
+        <li class="flex items-baseline justify-between gap-3 py-2 text-sm">
+          <span class="min-w-0 truncate text-zinc-100">{row.name} <span class="text-zinc-500">· {row.model}</span></span>
+          <span class="max-w-[55%] shrink-0 truncate text-right font-mono text-xs {row.ok ? 'text-emerald-300' : 'text-rose-300'}">{row.ok ? 'ok' : 'нет'} · {row.detail}</span>
+        </li>
+      {/each}
+    </ul>
+  {/if}
+</section>
+
+<section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Добавить провайдера</h2>
   <div class="mt-3 flex flex-wrap gap-2">
     {#each data.presets as item (item.id)}

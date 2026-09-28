@@ -2,6 +2,7 @@ import type { Model, Verdict } from './rules.ts';
 
 import { modelPrompt } from './judge.ts';
 import { PING_MS } from './limits.ts';
+import { noteProbe } from './probe-log.ts';
 
 import process from 'node:process';
 
@@ -24,10 +25,10 @@ export type Preset = {
 };
 
 export const PRESETS: Preset[] = [
-  { id: 'groq', name: 'Groq', url: 'https://api.groq.com/openai/v1/chat/completions', model: 'llama-3.3-70b-versatile', keysUrl: 'https://console.groq.com/keys', free: true },
+  { id: 'groq', name: 'Groq', url: 'https://api.groq.com/openai/v1/chat/completions', model: 'openai/gpt-oss-120b', keysUrl: 'https://console.groq.com/keys', free: true },
   { id: 'gemini', name: 'Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-3.8-flash', keysUrl: 'https://aistudio.google.com/apikey', free: true },
   { id: 'zai', name: 'Z.ai', url: 'https://api.z.ai/api/paas/v4/chat/completions', model: 'glm-4.5-flash', keysUrl: 'https://z.ai/manage-apikey/apikey-list', free: true },
-  { id: 'openrouter', name: 'OpenRouter', url: 'https://openrouter.ai/api/v1/chat/completions', model: 'deepseek/deepseek-chat-v3-0324:free', keysUrl: 'https://openrouter.ai/settings/keys', free: true },
+  { id: 'openrouter', name: 'OpenRouter', url: 'https://openrouter.ai/api/v1/chat/completions', model: 'qwen/qwen3.8-27b:free', keysUrl: 'https://openrouter.ai/settings/keys', free: true },
   { id: 'cohere', name: 'Cohere', url: 'https://api.cohere.ai/compatibility/v1/chat/completions', model: 'command-a-plus-05-2026', keysUrl: 'https://dashboard.cohere.com/api-keys', free: true },
   { id: 'deepseek', name: 'DeepSeek', url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', keysUrl: 'https://platform.deepseek.com/api_keys', free: false },
   { id: 'mistral', name: 'Mistral', url: 'https://api.mistral.ai/v1/chat/completions', model: 'mistral-small-latest', keysUrl: 'https://console.mistral.ai/api-keys', free: false },
@@ -180,6 +181,21 @@ function failReason(provider: Provider, error: unknown): string {
 }
 
 export async function probeProvider(provider: Provider, timeoutMs = PING_MS): Promise<{ ok: boolean; detail: string; status: number }> {
+  const result = await runProbe(provider, timeoutMs);
+  const key = provider.key.trim();
+  noteProbe({
+    at: new Date().toISOString(),
+    name: providerName(provider),
+    model: provider.model,
+    ok: result.ok,
+    status: result.status,
+    detail: key.length > 3 ? result.detail.split(key).join('') : result.detail,
+  });
+
+  return result;
+}
+
+async function runProbe(provider: Provider, timeoutMs: number): Promise<{ ok: boolean; detail: string; status: number }> {
   let res: Response;
   try {
     res = await fetch(provider.url, {

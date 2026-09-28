@@ -6,6 +6,8 @@ export { MAX_ATTEMPTS, QUEUE_TARGET, SCAN_EVERY_MS, SEND_PER_DAY, WORK_FROM_HOUR
 export { countSent, dayOpen, moscowDay, moscowHour, readMemory, remember, roomToday, workHours, writeMemory } from './memory.ts';
 export type { Memory } from './memory.ts';
 export { asProvider, askChain, chainFromEnv, parseChain, pingChain, PRESETS, presetOf, probeProvider, providerName } from './model.ts';
+export { readProbeLog } from './probe-log.ts';
+export type { ProbeNote } from './probe-log.ts';
 export type { Preset, Provider, ProviderId } from './model.ts';
 export { ping, pingReasons } from './ping.ts';
 export { splitQueries, suggestQueries } from './queries.ts';
