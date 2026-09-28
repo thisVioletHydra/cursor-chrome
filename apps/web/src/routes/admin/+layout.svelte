@@ -1,8 +1,13 @@
 <script lang="ts">
+import { enhance } from '$app/forms';
 import { page } from '$app/stores';
+import Mark from '$lib/Mark.svelte';
 
 let { data, children } = $props();
 let accountOpen = $state(false);
+let issued = $state('');
+const token = $derived(issued || data.extToken || '');
+const connectLink = $derived(token.length > 0 ? `${$page.url.origin}/connect#${token}` : '');
 
 const items = [
   { href: '/admin', label: 'Главная', exact: true },
@@ -33,6 +38,34 @@ const current = (href: string, exact: boolean) => {
           >{item.label}</a>
         {/each}
       </nav>
+    </div>
+    <div class="flex flex-col gap-2">
+    <div class="border-t border-white/8 pt-4">
+      <p class="px-2 text-xs text-zinc-500">Расширение</p>
+      {#if connectLink}
+        <div class="mt-2 flex items-center gap-1 px-2">
+          <p class="min-w-0 flex-1 truncate font-mono text-[11px] text-zinc-300" title={connectLink}>{connectLink}</p>
+          <Mark copy icon text={connectLink} />
+        </div>
+      {/if}
+      <form
+        class="mt-2"
+        method="POST"
+        action="/admin/hh?/extToken"
+        use:enhance={() => {
+          return async ({ result, update }) => {
+            const body = result.type === 'success' ? result.data : null;
+            if (body?.ok === true && typeof body.detail === 'string')
+              issued = body.detail;
+
+            await update();
+          };
+        }}
+      >
+        <button class="w-full rounded-lg px-2 py-1.5 text-left text-xs text-zinc-400 transition hover:bg-white/5 hover:text-white" type="submit">
+          {token.length > 0 ? 'Новая ссылка' : 'Выпустить ссылку'}
+        </button>
+      </form>
     </div>
     <div class="relative">
       {#if accountOpen}
@@ -66,6 +99,7 @@ const current = (href: string, exact: boolean) => {
           <circle cx="12" cy="19" r="1.6" />
         </svg>
       </button>
+    </div>
     </div>
   </aside>
   <main class="min-h-0 overflow-y-auto px-5 py-6 lg:px-10 lg:py-8">
