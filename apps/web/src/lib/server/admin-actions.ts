@@ -217,6 +217,8 @@ export async function distillAdmin({ cookies }: RequestEvent) {
   }
 }
 
+const SUGGEST_LIMIT_MS = 30_000;
+
 export async function suggestQueryAdmin({ cookies }: RequestEvent) {
   const login = guard(cookies);
   if (viewingGuest(cookies, login))
@@ -228,15 +230,34 @@ export async function suggestQueryAdmin({ cookies }: RequestEvent) {
     return { ok: false, detail: 'нет ключа модели', wait: 0 };
 
   try {
-    const queries = await suggestQueries(chain, saved.coverLetter || COVER_LETTER);
+    const queries = await limitSuggest(suggestQueries(chain, saved.coverLetter || COVER_LETTER));
 
     return { ok: true, detail: queries.join('\n'), wait: 0 };
   }
   catch (err) {
-    const why = err instanceof Error ? err.message : 'без ответа';
-
-    return { ok: false, detail: `модель: ${why}`, wait: 0 };
+    return { ok: false, detail: suggestDetail(err), wait: 0 };
   }
+}
+
+function limitSuggest<T>(work: Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('модель не ответила, время вышло')), SUGGEST_LIMIT_MS);
+    work.then(value => {
+      clearTimeout(timer);
+      resolve(value);
+    }, (error: unknown) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+}
+
+function suggestDetail(error: unknown): string {
+  const message = error instanceof Error ? error.message.trim() : '';
+  if (message.length === 0 || /timeout|aborted/i.test(message))
+    return 'модель не ответила, время вышло';
+
+  return message;
 }
 
 export async function saveLetterAdmin({ request, cookies }: RequestEvent) {

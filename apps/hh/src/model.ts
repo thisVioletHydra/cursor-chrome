@@ -125,29 +125,58 @@ export async function completion(provider: Provider, prompt: string, opts: { tim
   return body.choices?.[0]?.message?.content ?? '';
 }
 
-export async function askChain(chain: Provider[], prompt: string, timeoutMs = PING_MS): Promise<{ text: string; provider: Provider }> {
+export async function askChain(chain: Provider[], prompt: string, timeoutMs = PING_MS, budgetMs?: number): Promise<{ text: string; provider: Provider }> {
   if (chain.length === 0)
     throw new Error('нет ключа модели');
 
+  const deadline = budgetMs === undefined ? Number.POSITIVE_INFINITY : Date.now() + budgetMs;
   const reasons: string[] = [];
-  for (const provider of chain) {
+  let timedOut = false;
+
+  for (const [index, provider] of chain.entries()) {
     if (isResting(provider))
       continue;
 
+    const left = deadline - Date.now();
+    if (left < 1_000) {
+      timedOut = true;
+      break;
+    }
+
+    const another = chain.slice(index + 1).some(item => isResting(item) === false);
+    let attempt = timeoutMs;
+    if (deadline !== Number.POSITIVE_INFINITY)
+      attempt = another ? Math.min(timeoutMs, left) : left;
+
     try {
-      const text = await completion(provider, prompt, { timeoutMs });
+      const text = await completion(provider, prompt, { timeoutMs: attempt });
 
       return { text, provider };
     }
     catch (error) {
       rest(provider);
-      const name = providerName(provider);
-      const message = error instanceof Error ? error.message : 'упал';
-      reasons.push(message.startsWith(name) ? message : `${name}: ${message}`);
+      reasons.push(failReason(provider, error));
+      if (Date.now() >= deadline) {
+        timedOut = true;
+        break;
+      }
     }
   }
 
+  if (timedOut)
+    throw new Error('модель не ответила, время вышло');
+
   throw new Error(reasons.length > 0 ? reasons.join(', ') : 'все провайдеры отдыхают');
+}
+
+function failReason(provider: Provider, error: unknown): string {
+  const name = providerName(provider);
+  if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError'))
+    return `${name} молчит`;
+
+  const message = error instanceof Error ? error.message : 'упал';
+
+  return message.startsWith(name) ? message : `${name}: ${message}`;
 }
 
 export async function probeProvider(provider: Provider, timeoutMs = PING_MS): Promise<{ ok: boolean; detail: string; status: number }> {

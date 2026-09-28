@@ -10,6 +10,7 @@ let queryDraft = $state('');
 let queryMessage = $state('');
 let queryOk = $state(false);
 let suggesting = $state(false);
+const SUGGEST_WAIT_MS = 35_000;
 let stopDraft = $state('');
 let mustDraft = $state('');
 let salaryDraft = $state('');
@@ -136,11 +137,39 @@ function openResume() {
     class="mt-4 grid gap-3"
     method="POST"
     action="?/query"
-    use:enhance={({ action }) => {
+    use:enhance={({ action, controller }) => {
       queryMessage = '';
       const suggest = action.search === '?/suggest';
+      let settled = false;
+      let timer = 0;
+      if (suggest) {
+        suggesting = true;
+        timer = window.setTimeout(() => {
+          if (settled)
+            return;
+
+          settled = true;
+          suggesting = false;
+          queryOk = false;
+          queryMessage = 'модель не ответила, попробуй ещё раз';
+          controller.abort();
+        }, SUGGEST_WAIT_MS);
+      }
       return async ({ result, update }) => {
-        suggesting = false;
+        if (suggest) {
+          if (settled)
+            return;
+
+          settled = true;
+          window.clearTimeout(timer);
+          suggesting = false;
+          if (result.type !== 'success') {
+            queryOk = false;
+            queryMessage = 'сеть отвалилась, попробуй ещё раз';
+            return;
+          }
+        }
+
         const body = result.type === 'success' ? result.data : null;
         const detail = typeof body?.detail === 'string' ? body.detail : 'не вышло';
         queryOk = body?.ok === true;
@@ -166,7 +195,7 @@ function openResume() {
     ></textarea>
     <div class="flex items-center gap-3">
       <button class="btn btn-primary h-11 min-h-11 px-4" type="submit" disabled={queryDraft.trim().length === 0 || queryDraft.trim() === data.hhQuery}>Сохранить</button>
-      <button class="btn btn-ghost h-11 min-h-11 px-4" type="submit" formaction="?/suggest" disabled={suggesting} onclick={() => { suggesting = true; }}>
+      <button class="btn btn-ghost h-11 min-h-11 px-4" type="submit" formaction="?/suggest" disabled={suggesting}>
         {suggesting ? 'Модель думает' : 'Подобрать'}
       </button>
     </div>
