@@ -11,6 +11,7 @@ let queryMessage = $state('');
 let queryOk = $state(false);
 let suggesting = $state(false);
 const SUGGEST_WAIT_MS = 35_000;
+const askName = $derived(data.providers[0]?.name ?? 'модель');
 let stopDraft = $state('');
 let mustDraft = $state('');
 let salaryDraft = $state('');
@@ -174,7 +175,8 @@ function openResume() {
         const detail = typeof body?.detail === 'string' ? body.detail : 'не вышло';
         queryOk = body?.ok === true;
         if (suggest) {
-          queryMessage = queryOk ? 'Подобрал, проверь и сохрани' : detail;
+          const via = typeof body?.via === 'string' && body.via.length > 0 ? body.via : askName;
+          queryMessage = queryOk ? `Подобрал через ${via}, проверь и сохрани` : detail;
           if (queryOk)
             queryDraft = detail;
           return;
@@ -190,13 +192,13 @@ function openResume() {
       class="textarea textarea-bordered min-h-28 w-full border-white/10 bg-black/30 text-sm leading-6 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
       name="hhQuery"
       autocomplete="off"
-      placeholder={'Frontend TypeScript Vue\nFullstack Node.js NestJS'}
+      placeholder="один запрос на строку"
       bind:value={queryDraft}
     ></textarea>
     <div class="flex items-center gap-3">
       <button class="btn btn-primary h-11 min-h-11 px-4" type="submit" disabled={queryDraft.trim().length === 0 || queryDraft.trim() === data.hhQuery}>Сохранить</button>
       <button class="btn btn-ghost h-11 min-h-11 px-4" type="submit" formaction="?/suggest" disabled={suggesting}>
-        {suggesting ? 'Модель думает' : 'Подобрать'}
+        {suggesting ? `Спрашиваю ${askName}…` : 'Подобрать'}
       </button>
     </div>
   </form>

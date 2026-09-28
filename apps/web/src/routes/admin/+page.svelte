@@ -36,6 +36,42 @@ const statusBadge: Record<string, string> = {
 </script>
 
 <section class="mb-8 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+  <h2 class="text-base font-semibold">До старта</h2>
+  <p class="mt-2 text-sm text-zinc-400">Когда всё зелёное, открой бота и напиши «старт». Chrome с запиненной вкладкой hh и включённым автопилотом расширения должен быть открыт.</p>
+  <ul class="mt-4 grid gap-2 text-sm">
+    {#each [
+      { ok: data.ready.telegram, label: 'Telegram' },
+      { ok: data.ready.model, label: 'Хотя бы одна модель' },
+      { ok: data.ready.resume, label: 'Резюме' },
+      { ok: data.ready.queries, label: 'Запросы поиска сохранены' },
+      { ok: data.ready.extension, label: 'Ссылка расширения выпущена' },
+      { ok: data.ready.live, label: 'Боевой режим' },
+    ] as row}
+      <li class="flex items-center gap-2">
+        <span class="size-2 rounded-full {row.ok ? 'bg-emerald-400' : 'bg-rose-400'}"></span>
+        <span class={row.ok ? 'text-zinc-200' : 'text-zinc-500'}>{row.label}</span>
+      </li>
+    {/each}
+  </ul>
+  <form
+    class="mt-4"
+    method="POST"
+    action="?/live"
+    use:enhance={() => {
+      return async ({ result, update }) => {
+        if (result.type === 'success')
+          await update();
+      };
+    }}
+  >
+    <input name="hhLive" type="hidden" value={data.ready.live ? '' : '1'} />
+    <button class="btn btn-ghost h-11 min-h-11 px-4" type="submit">
+      {data.ready.live ? 'Выключить боевой режим' : 'Включить боевой режим'}
+    </button>
+  </form>
+</section>
+
+<section class="mb-8 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold">Импорт</h2>
   <p class="mt-2 text-sm text-zinc-400">Файл из local-debug. Живёт 2 часа, потом прод его не примет.</p>
   {#if importMessage}

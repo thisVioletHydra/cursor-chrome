@@ -3,10 +3,10 @@ import type { Stored } from './secrets';
 
 import type { Provider } from '@cursor-chrome/hh';
 
-import { asProvider, COVER_LETTER, distillCorpus, parseRules, splitQueries, splitWords, suggestQueries } from '@cursor-chrome/hh';
+import { asProvider, COVER_LETTER, distillCorpus, parseRules, providerName, splitQueries, splitWords, suggestQueries } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
-import { chainOf, isCreator, newExtToken, publishSecrets, readAccount, withChain, writeAccount } from './secrets';
+import { chainOf, collapseChain, isCreator, newExtToken, publishSecrets, readAccount, withChain, writeAccount } from './secrets';
 import { allowedLogins, readSession } from './session';
 
 const sections = ['telegram', 'model', 'hh'] as const;
@@ -230,9 +230,9 @@ export async function suggestQueryAdmin({ cookies }: RequestEvent) {
     return { ok: false, detail: 'нет ключа модели', wait: 0 };
 
   try {
-    const queries = await limitSuggest(suggestQueries(chain, saved.coverLetter || COVER_LETTER));
+    const picked = await limitSuggest(suggestQueries(chain, saved.coverLetter || COVER_LETTER));
 
-    return { ok: true, detail: queries.join('\n'), wait: 0 };
+    return { ok: true, detail: picked.queries.join('\n'), via: providerName(picked.provider), wait: 0 };
   }
   catch (err) {
     return { ok: false, detail: suggestDetail(err), wait: 0 };
@@ -274,6 +274,20 @@ export async function saveLetterAdmin({ request, cookies }: RequestEvent) {
   await writeAccount(login, next);
 
   return { ok: true, detail: 'Сохранено', wait: 0 };
+}
+
+export async function setLiveAdmin({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const form = await request.formData();
+  const hhLive = form.get('hhLive') === '1' ? '1' : '';
+  const next = { ...await readAccount(login), hhLive };
+  await writeAccount(login, next);
+  publishSecrets(login, next);
+
+  return { ok: true, detail: hhLive === '1' ? 'Боевой режим включён' : 'Боевой режим выключен', wait: 0 };
 }
 
 export async function importSetupAdmin({ request, cookies }: RequestEvent) {
@@ -333,9 +347,10 @@ export async function importSetupAdmin({ request, cookies }: RequestEvent) {
   const saved = await readAccount(login);
   let chain = chainOf(saved);
   for (const provider of accepted) {
-    chain = chain.filter(item => item.url !== provider.url || item.model !== provider.model);
+    chain = chain.filter(item => item.id !== provider.id);
     chain = [...chain, provider];
   }
+  chain = collapseChain(chain);
   const next = withChain({
     ...saved,
     telegramToken: setup.telegramToken,
@@ -401,8 +416,11 @@ export async function addProviderAdmin({ request, cookies }: RequestEvent) {
     return { ok: false, detail: probe.detail, wait: probe.retryAfter };
 
   const saved = await readAccount(login);
-  const chain = chainOf(saved).filter(item => item.url !== provider.url || item.model !== provider.model);
-  const next = withChain(saved, [...chain, provider]);
+  const chain = collapseChain([
+    ...chainOf(saved).filter(item => item.id !== provider.id),
+    provider,
+  ]);
+  const next = withChain(saved, chain);
   await writeAccount(login, next);
   publishSecrets(login, next);
 

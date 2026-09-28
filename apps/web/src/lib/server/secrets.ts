@@ -14,6 +14,7 @@ export type Secrets = {
   hhQuery: string;
   hhRules: string;
   hhCorpus: string;
+  hhLive: string;
   extToken: string;
 };
 
@@ -52,6 +53,7 @@ const empty = (): Account => ({
   hhQuery: '',
   hhRules: '',
   hhCorpus: '',
+  hhLive: '',
   extToken: '',
   telegramLabel: '',
   hhLabel: '',
@@ -109,6 +111,7 @@ export async function readAccount(login: string): Promise<Account> {
     modelChain: migrateChain(raw.modelChain, mistralKey),
     hhRules: typeof raw.hhRules === 'string' ? raw.hhRules : '',
     hhCorpus: raw.hhCorpus === '1' ? '1' : '',
+    hhLive: raw.hhLive === '1' ? '1' : '',
     balance: typeof raw.balance === 'number' ? raw.balance : 0,
     history: chargesOf(raw.history),
   };
@@ -138,6 +141,32 @@ export function chainOf(account: Pick<Account, 'modelChain'>): Provider[] {
   return parseChain(account.modelChain);
 }
 
+/** Один провайдер на id. У Gemini остаётся 3.8, lite выкидывается. */
+export function collapseChain(chain: Provider[]): Provider[] {
+  const gemini = chain.filter(item => item.id === 'gemini');
+  const keepGemini = gemini.find(item => item.model.includes('3.8')) ?? gemini[0];
+  const seen = new Set<string>();
+  const out: Provider[] = [];
+  for (const item of chain) {
+    if (item.id === 'gemini') {
+      if (seen.has('gemini') || keepGemini === undefined || item.model !== keepGemini.model)
+        continue;
+
+      seen.add('gemini');
+      out.push(keepGemini);
+      continue;
+    }
+
+    if (seen.has(item.id))
+      continue;
+
+    seen.add(item.id);
+    out.push(item);
+  }
+
+  return out;
+}
+
 export function withChain(account: Account, chain: Provider[]): Account {
   return { ...account, modelChain: chain.length > 0 ? JSON.stringify(chain) : '' };
 }
@@ -150,6 +179,7 @@ const envKeys: Record<keyof Secrets, string> = {
   hhQuery: 'HH_QUERY',
   hhRules: 'HH_RULES',
   hhCorpus: 'HH_CORPUS',
+  hhLive: 'HH_LIVE',
   extToken: 'EXT_TOKEN',
 };
 

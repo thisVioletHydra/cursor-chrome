@@ -5,7 +5,7 @@ import { telegramOn } from '@cursor-chrome/telegram';
 import { redirect } from '@sveltejs/kit';
 import { coolLeft } from '$lib/server/admin-actions';
 import { guestLinks, storedLinks } from '$lib/server/checks';
-import { chainOf, DEFAULT_QUERY, GUEST_BALANCE, isCreator, readAccount, VACANCY_RUB } from '$lib/server/secrets';
+import { chainOf, collapseChain, DEFAULT_QUERY, GUEST_BALANCE, isCreator, publishSecrets, readAccount, VACANCY_RUB, withChain, writeAccount } from '$lib/server/secrets';
 
 const when = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Asia/Bishkek', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -57,7 +57,18 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
   const creator = isCreator(session.login);
   const preview = creator && cookies.get('preview') === 'guest';
   const account = await readAccount(session.login);
+  if (preview === false) {
+    const raw = chainOf(account);
+    const collapsed = collapseChain(raw);
+    if (JSON.stringify(raw) !== JSON.stringify(collapsed)) {
+      const next = withChain(account, collapsed);
+      await writeAccount(session.login, next);
+      publishSecrets(session.login, next);
+      account.modelChain = next.modelChain;
+    }
+  }
   const links = preview ? guestLinks() : await storedLinks(session.login);
+  const telegram = links.find(item => item.name === 'Телега');
   return {
     login: preview ? 'гость' : session.login,
     preview,
@@ -91,6 +102,14 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
     hhQuery: preview ? '' : (account.hhQuery || DEFAULT_QUERY),
     hasExtToken: preview ? false : account.extToken.length > 0,
     coverLetter: preview ? '' : (account.coverLetter || COVER_LETTER),
+    ready: {
+      telegram: preview ? false : telegram?.ok === true,
+      model: preview ? false : chainOf(account).length > 0,
+      resume: preview ? false : account.hhResumeId.length > 0,
+      queries: preview ? false : account.hhQuery.trim().length > 0,
+      extension: preview ? false : account.extToken.length > 0,
+      live: preview ? false : account.hhLive === '1',
+    },
     stats: await statsOf(preview),
   };
 };

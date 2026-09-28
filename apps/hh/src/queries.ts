@@ -7,13 +7,13 @@ const MAX_QUERIES = 5;
 const SUGGEST_TRY_MS = 9_000;
 const SUGGEST_MS = 28_000;
 
-export async function suggestQueries(chain: Provider[], letter: string): Promise<string[]> {
-  const { text } = await askChain(chain, queriesPrompt(letter), SUGGEST_TRY_MS, SUGGEST_MS);
+export async function suggestQueries(chain: Provider[], letter: string): Promise<{ queries: string[]; provider: Provider }> {
+  const { text, provider } = await askChain(chain, queriesPrompt(letter), SUGGEST_TRY_MS, SUGGEST_MS);
   const queries = parseQueries(text);
   if (queries.length === 0)
     throw new Error(`ответ без списка: ${text.slice(0, 80)}`);
 
-  return queries;
+  return { queries, provider };
 }
 
 export function queriesPrompt(letter: string): string {
