@@ -1,4 +1,5 @@
-import { HH_API, HH_USER_AGENT, PING_MS } from './limits.ts';
+import { appToken, vacancyPing } from './hh-token.ts';
+import { PING_MS } from './limits.ts';
 import { chainFromEnv, pingChain } from './model.ts';
 
 import process from 'node:process';
@@ -22,18 +23,11 @@ export async function ping(): Promise<void> {
 }
 
 async function pingHh(): Promise<void> {
-  const url = new URL(`${HH_API}/vacancies`);
-  url.searchParams.set('text', 'react');
-  url.searchParams.set('per_page', '1');
-  const res = await fetch(url, {
-    signal: AbortSignal.timeout(PING_MS),
-    headers: { 'user-agent': HH_USER_AGENT, accept: 'application/json' },
-  }).catch(() => null);
-  if (res === null)
-    throw new Error('hh не ответил');
+  const token = await appToken();
+  if (token.length === 0)
+    throw new Error('нет токена приложения hh');
 
-  if (res.ok === false)
-    throw new Error(`hh ${res.status}`);
+  await vacancyPing(token);
 }
 
 async function pingTelegram(): Promise<void> {

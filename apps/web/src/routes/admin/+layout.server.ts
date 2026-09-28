@@ -107,6 +107,7 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
       telegram: preview ? false : telegram?.ok === true,
       model: preview ? false : chainOf(account).length > 0,
       resume: preview ? false : account.hhResumeId.length > 0,
+      hhApp: preview ? false : account.hhClientId.length > 0 && account.hhClientSecret.length > 0,
       queries: preview ? false : account.hhQuery.trim().length > 0,
       extension: preview ? false : account.extToken.length > 0,
       live: preview ? false : account.hhLive === '1',

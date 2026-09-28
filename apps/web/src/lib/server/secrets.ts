@@ -10,6 +10,8 @@ export type Secrets = {
   telegramToken: string;
   modelChain: string;
   hhAccessToken: string;
+  hhClientId: string;
+  hhClientSecret: string;
   hhResumeId: string;
   hhQuery: string;
   hhRules: string;
@@ -49,6 +51,8 @@ const empty = (): Account => ({
   telegramToken: '',
   modelChain: '',
   hhAccessToken: '',
+  hhClientId: '',
+  hhClientSecret: '',
   hhResumeId: '',
   hhQuery: '',
   hhRules: '',
@@ -175,6 +179,8 @@ const envKeys: Record<keyof Secrets, string> = {
   telegramToken: 'TELEGRAM_BOT_TOKEN',
   modelChain: 'MODEL_CHAIN',
   hhAccessToken: 'HH_ACCESS_TOKEN',
+  hhClientId: 'HH_CLIENT_ID',
+  hhClientSecret: 'HH_CLIENT_SECRET',
   hhResumeId: 'HH_RESUME_ID',
   hhQuery: 'HH_QUERY',
   hhRules: 'HH_RULES',

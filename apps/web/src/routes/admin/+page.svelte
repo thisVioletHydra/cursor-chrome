@@ -42,6 +42,7 @@ const statusBadge: Record<string, string> = {
     {#each [
       { ok: data.ready.telegram, label: 'Telegram' },
       { ok: data.ready.model, label: 'Хотя бы одна модель' },
+      { ok: data.ready.hhApp, label: 'Приложение hh (без него поиск даёт 403)' },
       { ok: data.ready.resume, label: 'Резюме' },
       { ok: data.ready.queries, label: 'Запросы поиска сохранены' },
       { ok: data.ready.extension, label: 'Ссылка расширения выпущена' },

@@ -9,6 +9,7 @@ export { asProvider, askChain, chainFromEnv, parseChain, pingChain, PRESETS, pre
 export { readProbeLog } from './probe-log.ts';
 export type { ProbeNote } from './probe-log.ts';
 export type { Preset, Provider, ProviderId } from './model.ts';
+export { connectApp } from './hh-token.ts';
 export { ping, pingReasons } from './ping.ts';
 export { splitQueries, suggestQueries } from './queries.ts';
 export { applyOutcomes, markDone, markFailed, pending, pendingCount, readQueue } from './queue.ts';
