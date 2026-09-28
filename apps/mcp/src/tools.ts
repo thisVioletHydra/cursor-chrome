@@ -46,7 +46,7 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'hh_apply',
     {
-      description: 'Apply on the pinned HH worker vacancy in the extension: click native Откликнуться, pick Fullstack-разработчик, insert the hardcoded cover letter, fill only standard screening (Бишкек / по рынку / ИП да). Do NOT click/type the form field-by-field. Navigate to the vacancy, then call this. Returns { ok, status: sent|needsHuman|skip, reason }. needsHuman = custom questions, unlabeled fields, google/typeform/test, captcha — worker leaves the form, unpinned review tab, overlay «Ждут ответа». Snapshot/click stay for debugging only.',
+      description: 'Apply on the pinned HH worker vacancy in the extension: click native Откликнуться, leave the resume the user already picked, insert the hardcoded cover letter, fill only standard screening (Бишкек / по рынку / ИП да). Do NOT click/type the form field-by-field. Navigate to the vacancy, then call this. Returns { ok, status: sent|needsHuman|skip, reason }. needsHuman = custom questions, unlabeled fields, google/typeform/test, captcha — worker leaves the form, unpinned review tab, overlay «Ждут ответа». Snapshot/click stay for debugging only.',
       inputSchema: {},
     },
     async () => {

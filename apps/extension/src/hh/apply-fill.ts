@@ -3,9 +3,8 @@ import type { ApplyBlock } from './apply-detect';
 import { typeInto } from '../page/actions';
 import { applyBlocker } from './apply-detect';
 import { ask } from './bridge';
-import { compact, sleep, until, visible } from './dom';
+import { compact, pause, until, visible } from './dom';
 import { coverLetter } from './letter';
-import { ensureFullstack } from './resume';
 import { applyRoot, isCoverLetter, isStandardQuestion, promptFields } from './screen-questions';
 
 export type FillFail = {
@@ -48,10 +47,6 @@ const CUSTOM_REASON = 'свои вопросы HH';
 const FIELD_SEL = 'textarea, input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]):not([type="file"]):not([type="submit"])';
 
 export async function fillApply(): Promise<FillFail | null> {
-  const resumeOk = await ensureFullstack();
-  if (resumeOk === false)
-    return { ok: false, status: 'skip', reason: 'нет резюме Fullstack-разработчик' };
-
   const letterOk = await insertLetter();
   if (letterOk === false)
     return { ok: false, status: 'skip', reason: 'нет поля сопроводительного' };
@@ -258,7 +253,7 @@ async function typeFirst(block: HTMLElement, text: string, re: RegExp): Promise<
     return false;
 
   typeInto(field, text, false);
-  await sleep(400);
+  await pause(280, 1_100);
   const opt = [...document.querySelectorAll<HTMLElement>('[role="option"], [data-qa*="suggest"]')]
     .find(element => re.test(element.textContent || ''));
   opt?.click();

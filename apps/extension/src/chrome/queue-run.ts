@@ -21,7 +21,8 @@ export type QueueRun = {
   lines: string[];
 };
 
-const PER_RUN = 3;
+const PER_RUN_MIN = 2;
+const PER_RUN_MAX = 3;
 const PAUSE_MIN_MS = 40_000;
 const PAUSE_MAX_MS = 90_000;
 const PAUSED_KEY = 'pausedUntil';
@@ -81,7 +82,7 @@ async function drain(): Promise<QueueRun> {
     return { ok: true, sent: 0, human: 0, skipped: 0, left: 0, reason: 'очередь пустая', lines: [] };
 
   const run: QueueRun = { ok: true, sent: 0, human: 0, skipped: 0, left: items.length, reason: '', lines: [] };
-  const batch = items.slice(0, PER_RUN);
+  const batch = items.slice(0, batchSize());
   for (const [index, item] of batch.entries()) {
     const reply = await applyOne(item);
     run.left -= 1;
@@ -119,6 +120,7 @@ async function applyOne(item: QueueItem): Promise<ApplyReply> {
   const loaded = waitTab(tabId, 15_000);
   await browser.tabs.update(tabId, { url: item.url, active: false });
   await loaded;
+  await delay(800 + Math.floor(Math.random() * 3_200));
 
   const fresh = await browser.tabs.get(tabId).catch(() => null);
   if ((fresh?.url || '').startsWith(LOGIN_URL))
@@ -202,6 +204,10 @@ function nextMorning(now = new Date()): number {
     morning.setDate(morning.getDate() + 1);
 
   return morning.getTime();
+}
+
+function batchSize(): number {
+  return PER_RUN_MIN + Math.floor(Math.random() * (PER_RUN_MAX - PER_RUN_MIN + 1));
 }
 
 function humanPause(): number {

@@ -10,6 +10,12 @@ export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+export function pause(min: number, max: number): Promise<void> {
+  const ms = min + Math.floor(Math.random() * (max - min + 1));
+
+  return sleep(ms);
+}
+
 export async function until(check: () => boolean, ms: number, step = 150): Promise<boolean> {
   const end = Date.now() + ms;
   while (Date.now() < end) {

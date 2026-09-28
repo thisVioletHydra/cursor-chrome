@@ -192,7 +192,15 @@ async function onQueueAlarm(): Promise<void> {
   if (await isPaused())
     return;
 
+  await delay(15_000 + Math.floor(Math.random() * 150_000));
+  if (await isPaused())
+    return;
+
   void runQueue();
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function syncNegotiationsIfDue(): Promise<void> {

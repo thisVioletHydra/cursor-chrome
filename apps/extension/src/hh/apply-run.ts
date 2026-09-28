@@ -4,7 +4,7 @@ import { ctaApplied, findSubmit, formErrors, freshSuccess, pageSkip, planOpen } 
 import { applyBlocker, formReady, humanPayload } from './apply-detect';
 import { asHumanBlock, fillApply } from './apply-fill';
 import { ask } from './bridge';
-import { until } from './dom';
+import { pause, until } from './dom';
 import { markReviewing, setApplyLock } from './screen-questions';
 
 export type ApplyStatus = 'sent' | 'needsHuman' | 'skip';
@@ -89,6 +89,7 @@ async function clickOpen(plan: ReturnType<typeof planOpen>): Promise<ApplyResult
   if (plan.kind !== 'click')
     return fail('нет кнопки Откликнуться');
 
+  await pause(700, 2_600);
   click(plan.el);
   const ok = await until(() => formReady() || freshSuccess(hadToast), 8000);
   if (freshSuccess(hadToast))
@@ -117,6 +118,7 @@ async function submitStep(): Promise<ApplyResult> {
   if (btn === null)
     return fail('нет кнопки отправки');
 
+  await pause(900, 3_200);
   click(btn);
   await until(() => freshSuccess(hadToast) || formErrors().length > 0, 8000);
   const errors = formErrors();
