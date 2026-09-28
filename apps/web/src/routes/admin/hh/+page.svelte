@@ -351,8 +351,8 @@ function openResume() {
       };
     }}
   >
-    <label class="flex items-center gap-2 text-sm text-zinc-300">
-      <input name="hhCorpus" type="checkbox" value="1" checked={data.corpusOn === true} />
+    <label class="flex cursor-pointer items-center gap-2 text-sm text-zinc-300">
+      <input class="checkbox checkbox-sm checkbox-primary" name="hhCorpus" type="checkbox" value="1" checked={data.corpusOn === true} />
       Копить тексты
     </label>
     <button class="btn btn-ghost h-11 min-h-11 px-4" type="submit">Сохранить</button>
