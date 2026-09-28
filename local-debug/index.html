@@ -5,186 +5,1483 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>local-debug</title>
     <style>
-      :root { color-scheme: dark; }
+      :root { color-scheme: dark; --ring: rgba(129, 140, 248, .92); }
+      html { background: #0b0d12; }
+      html:not(.booted) body { visibility: hidden; }
       * { box-sizing: border-box; }
       body { margin: 0; font: 15px/1.45 ui-sans-serif, system-ui, sans-serif; background: #0b0d12; color: #eceff4; }
       main { max-width: 720px; margin: 0 auto; padding: 28px 20px 64px; }
       h1 { margin: 0; font-size: 28px; letter-spacing: -0.03em; }
-      .lead { color: #8b93a7; margin: 8px 0 22px; }
+      .head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+      #reset { height: auto; padding: 0; border: 0; border-radius: 0; background: transparent; color: #ff5c6c; font: inherit; }
+      .lead { color: #8b93a7; margin: 8px 0 18px; font-size: 12px; }
+      .tabs { display: flex; gap: 8px; margin: 0 0 8px; }
       .card { background: #151922; border: 1px solid rgba(255,255,255,.08); border-radius: 16px; padding: 16px 18px; margin-top: 12px; }
+      .card.is-collapsed { padding: 0; }
+      .card.is-collapsed > :not(.row) { display: none !important; }
+      .card.is-collapsed .row { min-height: 44px; padding: 10px 18px; }
+      .card.is-wait { border-color: rgba(245,193,108,.75); }
+      .card.is-fail { border-color: rgba(255,139,154,.55); }
+      .is-missing { box-shadow: 0 0 0 2px #ff8b9a; }
+      .card.is-missing { animation: shake .36s ease; }
       .row { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
       h2 { margin: 0; font-size: 16px; }
       .hint { color: #8b93a7; font-size: 13px; margin: 8px 0 12px; }
+      .guide { margin: 10px 0 0; color: #a1a1aa; font-size: 14px; line-height: 1.5rem; }
+      .steps { margin: 10px 0 0; padding-left: 1.25rem; color: #d4d4d8; font-size: 14px; line-height: 1.5rem; }
+      .steps li + li { margin-top: .5rem; }
+      button.pill {
+        display: inline-flex; align-items: center; height: auto; border: 0; border-radius: 6px;
+        padding: 1px 6px; background: rgba(255,255,255,.08); color: #fdba74;
+        font-family: ui-monospace, monospace; font-size: .92em; line-height: 1.35;
+        vertical-align: baseline; white-space: nowrap;
+      }
+      button.pill:hover, button.pill:focus { background: rgba(255,255,255,.08); color: #fdba74; }
+      .card.is-pass.is-collapsed {
+        cursor: pointer;
+        outline: 1px solid transparent; outline-offset: 0;
+      }
+      .card.is-pass:not(.is-collapsed) .row {
+        cursor: pointer; border-radius: 8px;
+        outline: 1px solid transparent; outline-offset: 0;
+      }
+      a.out { display: inline-flex; align-items: center; gap: 4px; color: #a5b4fc; text-decoration: none; text-underline-offset: 4px; transition: color 160ms ease; }
+      a.out:visited { color: #a5b4fc; }
+      a.out:hover { color: #fed7aa; text-decoration: underline; }
+      a.out:focus-visible { outline: 2px solid #a5b4fc; outline-offset: 2px; }
+      .out-icon { width: 14px; height: 14px; opacity: .8; flex: none; }
+      .check-line { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+      .check-line input { flex: 1 1 auto; width: auto; min-width: 0; }
+      .check-line > button { flex: none; height: 42px; white-space: nowrap; }
       label { display: block; font-size: 12px; color: #a1a8b8; margin: 10px 0 4px; }
-      input { width: 100%; height: 42px; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); background: #0b0d12; color: inherit; padding: 0 12px; }
+      input, select { width: 100%; height: 42px; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); background: #0b0d12; color: inherit; padding: 0 12px; }
+      .field-error { margin: 6px 0 0; color: #ff8b9a; font-size: 13px; }
+      .field-error:empty { display: none; }
       .actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
       button { height: 40px; border: 0; border-radius: 10px; padding: 0 14px; background: #3b6cff; color: white; font: inherit; cursor: pointer; }
       button.ghost { background: transparent; color: #c5cad6; border: 1px solid rgba(255,255,255,.12); }
       button:disabled { opacity: .45; cursor: not-allowed; }
+      button.tab, button.chip, button.pick { height: auto; background: transparent; color: #a1a8b8; }
+      button.tab { border: 1px solid rgba(255,255,255,.1); border-radius: 999px; padding: 7px 14px; }
+      button.tab.on { border-color: #818cf8; background: rgba(99,102,241,.2); color: white; }
+      button.chip {
+        position: relative;
+        display: inline-flex; align-items: center; gap: 6px;
+        border: 1px solid rgba(255,255,255,.1); border-radius: 999px; padding: 6px 12px; font-size: 14px;
+      }
+      button.chip.on { border-color: #818cf8; background: rgba(99,102,241,.2); color: white; }
+      button.pick { border: 1px solid rgba(255,255,255,.1); border-radius: 999px; padding: 4px 10px; font-size: 12px; }
+      button.pick.on { border-color: #818cf8; background: rgba(99,102,241,.2); color: white; }
+      #recommended-models, #rest-models { margin-top: 8px; }
+      .model-table { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 1.35; }
+      .model-table th {
+        text-align: left; font-size: 10px; font-weight: 650; letter-spacing: .04em;
+        color: #8b93a7; padding: 0 8px 4px;
+      }
+      .model-table td { padding: 3px 8px; border-top: 1px solid rgba(255,255,255,.06); vertical-align: middle; }
+      .model-table td.model-name {
+        max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        font-family: ui-monospace, monospace; font-size: 11px;
+      }
+      .model-table th.price, .model-table td.price { text-align: center; padding-left: 14px; padding-right: 14px; }
+      .price-mark { font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1; }
+      .price-mark.p1 { color: #3dd68c; }
+      .price-mark.p2 { color: #f5a24a; }
+      .price-mark.p3 { color: #ff6d7d; }
+      .model-table td.ratio {
+        color: #9aa3b5; font-size: 11px; font-weight: 450;
+        font-variant-numeric: tabular-nums; letter-spacing: .02em;
+      }
+      .model-table td.score { font-variant-numeric: tabular-nums; font-weight: 700; }
+      .model-table td.who {
+        max-width: 9.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        color: #a1a8b8; font-size: 11px;
+      }
+      .model-table tbody tr { cursor: pointer; outline: 1px solid transparent; outline-offset: -1px; }
+      .model-table tbody tr.on td { background: rgba(99,102,241,.22); color: white; }
+      .model-table tbody tr.on .price-mark.p1 { color: #3dd68c; }
+      .model-table tbody tr.on .price-mark.p2 { color: #f5a24a; }
+      .model-table tbody tr.on .price-mark.p3 { color: #ff6d7d; }
+      .model-table tbody tr:hover { outline-color: var(--ring); }
+      button.more-models {
+        height: auto; margin: 0; padding: 0;
+        border: 0; border-radius: 0;
+        background: transparent; color: #8b93a7; font-size: 12px;
+      }
+      button.more-models:hover { color: #eceff4; background: transparent; }
+      button.chip.is-wait { border-color: #f5c16c; }
+      button.chip.is-pass { border-color: #3dd68c; }
+      button.chip.is-fail { border-color: #ff8b9a; }
+      button.is-pressed { transform: translateY(2px) scale(.97); filter: brightness(.72); }
+      .chip-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      .free {
+        position: absolute; top: -6px; right: 10px;
+        padding: 0 4px; background: #151922; line-height: 1;
+        font-size: 8px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6ee7b7;
+      }
+      .dot { width: 8px; height: 8px; border-radius: 99px; display: none; flex: none; }
+      .chip.is-wait .dot { display: block; background: #f5c16c; animation: pulse .7s ease infinite; }
+      .chip.is-pass .dot { display: block; background: #3dd68c; }
+      .chip.is-fail .dot { display: block; background: #ff8b9a; }
+      .mark { font-size: 10px; font-weight: 800; letter-spacing: .04em; }
+      .mark:empty { display: none; }
+      .chip.is-wait .mark { color: #f5c16c; }
+      .chip.is-pass .mark { color: #3dd68c; }
+      .chip.is-fail .mark { color: #ff8b9a; }
       .badge { font-size: 12px; font-weight: 700; letter-spacing: .04em; padding: 4px 8px; border-radius: 999px; background: #2a2f3a; color: #8b93a7; }
       .badge.pass { background: #123524; color: #3dd68c; }
       .badge.fail { background: #3a1720; color: #ff8b9a; }
+      .badge.wait { background: #3a3018; color: #f5c16c; }
       .detail { margin: 8px 0 0; font-family: ui-monospace, monospace; font-size: 12px; color: #c5cad6; }
-      #export:not(:disabled) { background: #14804a; }
+      .detail:empty { display: none; }
+      .row .detail { flex: 1; min-width: 0; margin: 0; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .detail.fail-text { color: #ff8b9a; }
+      .reason { margin: 10px 0 0; font-family: ui-monospace, monospace; font-size: 12px; }
+      .reason:empty { display: none; }
+      .reason.wait { color: #f5c16c; }
+      .reason.pass { color: #3dd68c; }
+      .reason.fail { color: #ff8b9a; }
+      .picked-line { margin: 6px 0 0; color: #a1a8b8; font-size: 12px; }
+      .picked-line:empty { display: none; }
+      .miss { margin: 8px 0 0; color: #ff8b9a; font-size: 13px; }
+      .miss:empty { display: none; }
+      #export,
+      button[data-check],
+      #model-check,
+      #check-free { background: #243056; }
+      #export:hover:not(:disabled),
+      button[data-check]:hover:not(:disabled),
+      #model-check:hover:not(:disabled),
+      #check-free:hover:not(:disabled) { background: #243056; }
+      #export.is-ready { background: #14804a; }
+      input, select, button {
+        outline: 1px solid transparent;
+        outline-offset: 0;
+      }
+      html.motion input,
+      html.motion select,
+      html.motion button,
+      html.motion .card.is-pass.is-collapsed,
+      html.motion .card.is-pass:not(.is-collapsed) .row {
+        transition: outline-color 160ms ease, outline-offset 160ms ease;
+      }
+      input:hover:not(.is-shake),
+      input:focus:not(.is-shake),
+      select:hover:not(.is-shake),
+      select:focus:not(.is-shake),
+      button:hover:not(:disabled),
+      button:focus-visible:not(:disabled),
+      .card.is-pass.is-collapsed:hover,
+      .card.is-pass:not(.is-collapsed) .row:hover {
+        outline-color: var(--ring);
+        outline-offset: 2px;
+      }
+      button:focus:not(:focus-visible):not(:hover) { outline-color: transparent; }
+      input, select { cursor: text; }
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-7px); }
+        50% { transform: translateX(7px); }
+        75% { transform: translateX(-4px); }
+      }
+      @keyframes pulse { 50% { opacity: .35; } }
+      .is-shake { animation: shake .36s ease; }
+      input.is-shake, select.is-shake { border-color: #ff8b9a; }
     </style>
   </head>
   <body>
     <main>
-      <h1>local-debug</h1>
-      <p class="lead">Заполни три поля и нажми «Проверить». Когда все три PASS, скачай конфиг. Он живёт 2 часа. На проде: главная админки → «Импорт» → выбери файл.</p>
+      <div class="head">
+        <h1>local-debug</h1>
+        <button id="reset" type="button">Сбросить</button>
+      </div>
+      <p class="lead">Телега и резюме — «Подключение», ключи — «Модели». Конфиг скачивается, когда телега, резюме и хотя бы одна модель PASS. Живёт 2 часа. На проде: главная админки → «Импорт».</p>
 
-      <section class="card" data-test="telegram">
-        <div class="row"><h2>1. Telegram</h2><span class="badge" data-badge>ЖДЁТ</span></div>
-        <p class="hint">Открой Telegram → @BotFather → /mybots → свой бот → API Token. Скопируй токен целиком, он вида 123456:AA...</p>
-        <label>Токен бота</label>
-        <input name="token" type="password" autocomplete="off" placeholder="123456:AA..." />
-        <div class="actions"><button type="button" data-check="telegram">Проверить</button></div>
-        <p class="detail" data-detail></p>
-      </section>
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab on" data-tab="link" role="tab" aria-selected="true">Подключение</button>
+        <button type="button" class="tab" data-tab="models" role="tab" aria-selected="false">Модели</button>
+      </div>
 
-      <section class="card" data-test="gemini">
-        <div class="row"><h2>2. Gemini</h2><span class="badge" data-badge>ЖДЁТ</span></div>
-        <p class="hint">Google AI Studio → API Keys → Copy key. Это строка AQ..., не номер проекта. В модели оставь gemini-3.8-flash. Имя gemini-2.5-flash новым ключам не подходит.</p>
-        <label>Ключ</label>
-        <input name="key" type="password" autocomplete="off" placeholder="AQ...." />
-        <label>Модель</label>
-        <input name="model" autocomplete="off" value="gemini-3.8-flash" />
-        <div class="actions"><button type="button" data-check="gemini">Проверить</button></div>
-        <p class="detail" data-detail></p>
-      </section>
+      <div data-panel="link">
+        <section class="card" data-test="telegram">
+          <div class="row"><h2>Telegram</h2><p class="detail" data-detail></p><span class="badge" data-badge>ЖДЁТ</span></div>
+          <div class="check-line">
+            <input name="token" type="password" autocomplete="off" placeholder="123456:AA..." />
+            <button type="button" data-check="telegram" data-label="Проверить">Проверить</button>
+          </div>
+          <p class="field-error" data-field-error></p>
+          <ol class="steps">
+            <li>Жми <a class="out" href="https://t.me/BotFather" target="_blank" rel="noreferrer">@BotFather<svg class="out-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 5h5v5" /><path d="M19 5 10 14" /><path d="M17 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h5" /></svg></a>.</li>
+            <li>Бота нет: отправь <button type="button" class="pill" data-copy="/newbot">/newbot</button>. Бот есть: <button type="button" class="pill" data-copy="/mybots">/mybots</button>, потом <button type="button" class="pill" data-copy="API Token">API Token</button>.</li>
+            <li>Скопируй токен, вставь в поле сверху, жми <button type="button" class="pill" data-copy="Проверить">Проверить</button>.</li>
+          </ol>
+        </section>
 
-      <section class="card" data-test="resume">
-        <div class="row"><h2>3. Резюме hh</h2><span class="badge" data-badge>ЖДЁТ</span></div>
-        <p class="hint">В браузере открой hh.ru/applicant/resumes, кликни резюме и скопируй адресную строку. Нужна ссылка https://hh.ru/resume/...</p>
-        <label>Ссылка</label>
-        <input name="resume" autocomplete="off" placeholder="https://hh.ru/resume/..." />
-        <div class="actions"><button type="button" data-check="resume">Проверить</button></div>
-        <p class="detail" data-detail></p>
-      </section>
+        <section class="card" data-test="resume">
+          <div class="row"><h2>Резюме hh</h2><p class="detail" data-detail></p><span class="badge" data-badge>ЖДЁТ</span></div>
+          <div class="check-line">
+            <input name="resume" autocomplete="off" placeholder="https://hh.ru/resume/..." />
+            <button type="button" data-check="resume" data-label="Проверить">Проверить</button>
+          </div>
+          <p class="field-error" data-field-error></p>
+          <p class="guide">Открой <a class="out" href="https://hh.ru/applicant/resumes" target="_blank" rel="noreferrer">hh.ru/applicant/resumes<svg class="out-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 5h5v5" /><path d="M19 5 10 14" /><path d="M17 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h5" /></svg></a>, кликни резюме и скопируй адресную строку.</p>
+        </section>
 
-      <section class="card">
-        <div class="row">
-          <h2>Конфиг</h2>
-          <span class="badge" id="all">ЖДЁТ</span>
-        </div>
-        <p class="hint">Кнопка включится только после трёх живых PASS. Мок их не заменяет. Файл не сохраняется в проект, только скачивается.</p>
-        <div class="actions">
-          <button id="export" type="button" disabled>Скачать конфиг</button>
-          <button id="mock" class="ghost" type="button">Показать мок</button>
-        </div>
-        <p class="detail" id="export-detail"></p>
-      </section>
+        <section class="card" id="export-card">
+          <div class="row">
+            <h2>Конфиг</h2>
+            <span class="badge" id="all">ЖДЁТ</span>
+          </div>
+          <p class="hint">В файл попадут телега, резюме и все модели с живым PASS. Файл не сохраняется в проект, только скачивается.</p>
+          <div class="actions">
+            <button id="export" type="button" aria-disabled="true">Скачать конфиг</button>
+          </div>
+          <p class="detail" id="export-detail"></p>
+        </section>
+      </div>
+
+      <div data-panel="models" hidden>
+        <section class="card" id="models-card">
+          <div class="chip-row">
+            <button type="button" class="chip on" data-chip="groq">
+              <span class="dot"></span>Groq<span class="free" aria-hidden="true">free</span><span class="mark" data-mark></span>
+            </button>
+            <button type="button" class="chip" data-chip="gemini">
+              <span class="dot"></span>Gemini<span class="free" aria-hidden="true">free</span><span class="mark" data-mark></span>
+            </button>
+            <button type="button" class="chip" data-chip="zai">
+              <span class="dot"></span>Z.ai<span class="free" aria-hidden="true">free</span><span class="mark" data-mark></span>
+            </button>
+            <button type="button" class="chip" data-chip="openrouter">
+              <span class="dot"></span>OpenRouter<span class="free" aria-hidden="true">free</span><span class="mark" data-mark></span>
+            </button>
+            <button type="button" class="chip" data-chip="cohere">
+              <span class="dot"></span>Cohere<span class="free" aria-hidden="true">free</span><span class="mark" data-mark></span>
+            </button>
+          </div>
+          <div class="check-line">
+            <input id="model-key" type="password" autocomplete="off" />
+            <button id="model-check" type="button" data-label="Проверить">Проверить</button>
+          </div>
+          <p class="field-error" id="key-error"></p>
+          <p class="guide" id="model-hint"></p>
+          <label>Модель</label>
+          <input id="model-text" autocomplete="off" placeholder="можно не указывать" />
+          <select id="model-list" hidden>
+            <option value="gemini-3.8-flash">gemini-3.8-flash</option>
+            <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite</option>
+          </select>
+          <p class="picked-line" id="model-picked"></p>
+          <p class="field-error" id="model-error"></p>
+          <p class="reason" id="model-reason"></p>
+          <div class="actions">
+            <button id="check-free" type="button" data-label="Проверить все бесплатные">Проверить все бесплатные</button>
+          </div>
+          <p class="miss" id="check-free-note"></p>
+        </section>
+        <section class="card" id="recommended-card" hidden>
+          <h2>Рекомендуется</h2>
+          <div id="recommended-models"></div>
+        </section>
+        <section class="card" id="rest-card" hidden>
+          <div class="row">
+            <h2>Остальные</h2>
+            <button id="rest-more" class="more-models" type="button">ещё 0</button>
+          </div>
+          <div id="rest-models" hidden></div>
+        </section>
+      </div>
     </main>
     <script>
-      const state = { telegram: null, gemini: null, resume: null };
-      const hours = 2;
+      const state = { telegram: null, resume: null, models: {} }
+      const hours = 2
+      const presets = [
+        { id: 'groq', name: 'Groq', url: 'https://api.groq.com/openai/v1/chat/completions', model: '', placeholder: 'gsk_...', keysUrl: 'https://console.groq.com/keys', hint: ' → Create API Key. Имя модели можно не знать — оставь поле пустым.' },
+        { id: 'gemini', name: 'Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-3.8-flash', placeholder: 'AQ....', keysUrl: 'https://aistudio.google.com/apikey', hint: ' → Copy key. Это строка AQ..., не номер проекта.' },
+        { id: 'zai', name: 'Z.ai', url: 'https://api.z.ai/api/paas/v4/chat/completions', model: 'glm-4.5-flash', placeholder: '', keysUrl: 'https://z.ai/manage-apikey/apikey-list', hint: '. Модель по умолчанию glm-4.5-flash.' },
+        { id: 'openrouter', name: 'OpenRouter', url: 'https://openrouter.ai/api/v1/chat/completions', model: 'qwen/qwen3.8-27b:free', placeholder: 'sk-or-...', keysUrl: 'https://openrouter.ai/settings/keys', hint: '. Бесплатная модель по умолчанию qwen/qwen3.8-27b:free.' },
+        { id: 'cohere', name: 'Cohere', url: 'https://api.cohere.ai/compatibility/v1/chat/completions', model: 'command-a-plus-05-2026', placeholder: '', keysUrl: 'https://dashboard.cohere.com/api-keys', hint: '. Trial-ключ бесплатный. Модель по умолчанию command-a-plus-05-2026.' },
+      ]
+      const drafts = Object.fromEntries(presets.map(item => [item.id, { key: '', model: item.model }]))
+      const found = Object.fromEntries(presets.map(item => [item.id, []]))
+      const geminiFallback = ['gemini-3.8-flash', 'gemini-3.5-flash-lite']
+      const resultOrder = ['groq', 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'zai', 'openrouter', 'cohere']
+      const familyBook = {
+        gemini: { who: 'шустро и сильно', price: 3, quality: 4 },
+        gpt: { who: 'дорого и сильно', price: 2, quality: 5 },
+        'gpt-oss': { who: 'ровно', price: 4, quality: 4 },
+        claude: { who: 'ровно и сильно', price: 2, quality: 5 },
+        qwen: { who: 'дёшево и шустро', price: 5, quality: 4 },
+        llama: { who: 'ровно', price: 4, quality: 3 },
+        glm: { who: 'дёшево и шустро', price: 5, quality: 3 },
+        deepseek: { who: 'дёшево и шустро', price: 5, quality: 4 },
+        grok: { who: 'дорого и сильно', price: 2, quality: 4 },
+        command: { who: 'ровно', price: 3, quality: 3 },
+        mistral: { who: 'ровно', price: 3, quality: 4 },
+      }
+      const tierBook = {
+        fable: { price: 1, quality: 5 },
+        opus: { price: 1, quality: 5 },
+        ultra: { price: 1, quality: 5 },
+        pro: { price: 2, quality: 5 },
+        sonnet: { price: 3, quality: 5 },
+        turbo: { price: 4, quality: 4 },
+        flash: { price: 5, quality: 4 },
+        haiku: { price: 5, quality: 3 },
+        mini: { price: 5, quality: 3 },
+        lite: { price: 5, quality: 3 },
+        nano: { price: 5, quality: 2 },
+      }
+      const tierOrder = ['fable', 'opus', 'ultra', 'pro', 'sonnet', 'turbo', 'flash', 'haiku', 'mini', 'lite', 'nano']
+      const claudeTokens = ['fable', 'opus', 'sonnet', 'haiku', 'claude']
+      let current = 'groq'
 
+      const keyInput = document.getElementById('model-key')
+      const modelText = document.getElementById('model-text')
+      const modelList = document.getElementById('model-list')
+      const keyError = document.getElementById('key-error')
+      const modelError = document.getElementById('model-error')
+      const modelsCard = document.getElementById('models-card')
+      const exportButton = document.getElementById('export')
+      const exportDetail = document.getElementById('export-detail')
+
+      document.querySelectorAll('[data-tab]').forEach((button) => {
+        button.addEventListener('click', () => showTab(button.dataset.tab))
+      })
+      document.querySelectorAll('button.pill').forEach((pill) => {
+        pill.addEventListener('click', () => copyPill(pill))
+      })
+      document.querySelectorAll('[data-chip]').forEach((button) => {
+        button.addEventListener('click', () => pick(button.dataset.chip))
+      })
       document.querySelectorAll('[data-check]').forEach((button) => {
-        button.addEventListener('click', () => check(button.dataset.check));
-      });
-      document.getElementById('export').addEventListener('click', download);
-      document.getElementById('mock').addEventListener('click', mock);
+        button.addEventListener('click', () => check(button.dataset.check))
+      })
+      document.querySelectorAll('[data-test]').forEach((card) => {
+        card.addEventListener('click', (event) => {
+          if (event.target.closest('button, input, label, select, a'))
+            return
+          if (!card.classList.contains('is-pass'))
+            return
+          if (!card.classList.contains('is-collapsed') && !event.target.closest('.row'))
+            return
+          card.classList.toggle('is-collapsed')
+        })
+        card.querySelectorAll('input').forEach((input) => {
+          input.addEventListener('input', () => {
+            const slot = fieldSlot(input)
+            if (slot)
+              slot.textContent = ''
+            input.classList.remove('is-shake')
+            card.classList.remove('is-missing')
+            const name = card.dataset.test
+            if (samePassValue(name, input.value))
+              return
+            const had = name === 'telegram' ? state.telegram?.ok === true : state.resume?.ok === true
+            if (had)
+              dropCardPass(name)
+            if (had)
+              void saveDraftNow()
+            else
+              scheduleSave()
+          })
+        })
+      })
+      keyInput.addEventListener('input', () => {
+        keyError.textContent = ''
+        keyInput.classList.remove('is-shake')
+        document.getElementById('check-free-note').textContent = ''
+        modelsCard.classList.remove('is-missing')
+        document.querySelector('[data-tab="models"]').classList.remove('is-missing')
+        if (sameProviderValue())
+          return
+        readForm()
+        const dropped = dropProviderPass(current)
+        if (dropped)
+          void saveDraftNow()
+        else
+          scheduleSave()
+      })
+      modelText.addEventListener('input', () => {
+        showPicked('')
+        modelError.textContent = ''
+        modelText.classList.remove('is-shake')
+        if (sameProviderValue())
+          return
+        readForm()
+        const dropped = dropProviderPass(current)
+        if (dropped)
+          void saveDraftNow()
+        else
+          scheduleSave()
+      })
+      modelList.addEventListener('change', () => {
+        showPicked('')
+        readForm()
+        modelError.textContent = ''
+        modelList.classList.remove('is-shake')
+        syncReason()
+        scheduleSave()
+      })
+      document.getElementById('model-check').addEventListener('click', checkCurrent)
+      document.querySelector('[data-panel="models"]').addEventListener('click', (event) => {
+        const button = event.target.closest('[data-model]')
+        if (!button || document.getElementById('model-check').disabled)
+          return
+        showPicked('')
+        applyModelName(button.dataset.model, current)
+        checkCurrent()
+      })
+      document.getElementById('rest-more').addEventListener('click', () => {
+        const extra = document.getElementById('rest-models')
+        extra.hidden = !extra.hidden
+      })
+      document.getElementById('check-free').addEventListener('click', checkFree)
+      document.getElementById('reset').addEventListener('click', resetPage)
+      exportButton.addEventListener('click', download)
+      boot()
 
-      async function check(name) {
-        const card = document.querySelector(`[data-test="${name}"]`);
-        paint(card, 'wait', 'ПРОВЕРЯЮ');
-        const body = payload(name);
-        if (name === 'resume') {
-          const id = resumeId(body.resume);
-          const ok = /^[A-Za-z0-9]{8,}$/.test(id);
-          state.resume = ok ? { ok: true, id, raw: body.resume } : { ok: false };
-          paint(card, ok ? 'pass' : 'fail', ok ? 'PASS' : 'FAIL', ok ? id : 'это не ссылка на резюме');
-          tally();
-          return;
+      let draftRev = 0
+      let saveTimer = 0
+
+      function nextRev() {
+        draftRev = Math.max(Date.now(), draftRev + 1)
+        return draftRev
+      }
+
+      function scheduleSave() {
+        clearTimeout(saveTimer)
+        saveTimer = setTimeout(saveDraft, 300)
+      }
+
+      function saveDraftNow() {
+        clearTimeout(saveTimer)
+        return saveDraft()
+      }
+
+      function embeddedDraft() {
+        const node = document.getElementById('draft')
+        if (!node)
+          return {}
+        try {
+          const data = JSON.parse(node.textContent)
+          return data && typeof data === 'object' ? data : {}
+        }
+        catch {
+          return {}
+        }
+      }
+
+      function boot() {
+        applyDraft(embeddedDraft())
+        document.documentElement.classList.add('booted')
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            document.documentElement.classList.add('motion')
+          })
+        })
+      }
+
+      function snapshot() {
+        readForm()
+        const tab = document.querySelector('[data-tab].on')?.dataset.tab || 'link'
+        return {
+          tab,
+          chip: current,
+          token: document.querySelector('[name="token"]').value,
+          resume: document.querySelector('[name="resume"]').value,
+          drafts,
+          passes: passSnapshot(),
+        }
+      }
+
+      function passSnapshot() {
+        const models = {}
+        for (const [id, item] of Object.entries(state.models)) {
+          if (item?.ok === true && typeof item.detail === 'string' && item.detail.length > 0)
+            models[id] = item.detail
+        }
+        return {
+          telegram: state.telegram?.ok === true && typeof state.telegram.detail === 'string' ? state.telegram.detail : '',
+          resume: state.resume?.ok === true && typeof state.resume.id === 'string' ? state.resume.id : '',
+          models,
+        }
+      }
+
+      async function saveDraft() {
+        const rev = nextRev()
+        const body = snapshot()
+        body.rev = rev
+        await fetch('/api/draft', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+          keepalive: true,
+        }).catch(() => null)
+      }
+
+      function applyDraft(data) {
+        document.querySelector('[name="token"]').value = typeof data.token === 'string' ? data.token : ''
+        document.querySelector('[name="resume"]').value = typeof data.resume === 'string' ? data.resume : ''
+        const saved = data.drafts && typeof data.drafts === 'object' ? data.drafts : {}
+        for (const preset of presets) {
+          const item = saved[preset.id]
+          if (!item || typeof item !== 'object')
+            continue
+          const model = typeof item.model === 'string' ? item.model : ''
+          if (preset.id === 'gemini' && model.length > 0)
+            ensureGeminiOption(model)
+          const known = preset.id !== 'gemini' || model.length === 0 || geminiModels().includes(model)
+          drafts[preset.id] = {
+            key: typeof item.key === 'string' ? item.key : '',
+            model: model.length > 0 && known ? model : preset.model,
+          }
+        }
+        current = presets.some(item => item.id === data.chip) ? data.chip : 'groq'
+        document.querySelectorAll('[data-chip]').forEach((button) => {
+          button.classList.toggle('on', button.dataset.chip === current)
+        })
+        writeForm()
+        showTab(data.tab === 'models' ? 'models' : 'link', false)
+        restorePasses(data.passes)
+      }
+
+      function restorePasses(passes) {
+        const saved = passes && typeof passes === 'object' ? passes : {}
+        const telegramDetail = typeof saved.telegram === 'string' ? saved.telegram.trim() : ''
+        const token = document.querySelector('[name="token"]').value.trim()
+        if (token.length > 0 && telegramDetail.length > 0) {
+          state.telegram = { ok: true, token, detail: telegramDetail }
+          paint(document.querySelector('[data-test="telegram"]'), 'pass', 'PASS', telegramDetail)
+        }
+        const resumeDetail = typeof saved.resume === 'string' ? saved.resume.trim() : ''
+        const raw = document.querySelector('[name="resume"]').value.trim()
+        const resume = resumeId(raw)
+        if (raw.length > 0 && resume === resumeDetail && /^[A-Za-z0-9]{8,}$/.test(resume)) {
+          state.resume = { ok: true, id: resume, raw }
+          paint(document.querySelector('[data-test="resume"]'), 'pass', 'PASS', resumeDetail)
+        }
+        const models = saved.models && typeof saved.models === 'object' ? saved.models : {}
+        for (const [testId, detail] of Object.entries(models)) {
+          if (typeof detail !== 'string')
+            continue
+          const text = detail.trim()
+          const preset = presetByTestId(testId)
+          if (!preset || text.length === 0)
+            continue
+          const key = drafts[preset.id].key.trim()
+          const model = preset.id === 'gemini' ? testId : drafts[preset.id].model.trim()
+          if (key.length < 8 || model.length === 0 || text !== model)
+            continue
+          state.models[testId] = { ok: true, id: preset.id, key, model, url: preset.url, detail: text }
+          markChip(preset.id, 'pass')
+        }
+        syncReason()
+        tally()
+      }
+
+      function presetByTestId(testId) {
+        const direct = presets.find(item => item.id === testId)
+        if (direct && direct.id !== 'gemini')
+          return direct
+        if (geminiModels().includes(testId) || geminiFallback.includes(testId) || /^(gemini|gemma)/.test(testId))
+          return presets.find(item => item.id === 'gemini')
+        return null
+      }
+
+      function samePassValue(name, value) {
+        const text = value.trim()
+        if (name === 'telegram')
+          return state.telegram?.ok === true && text === state.telegram.token
+        return state.resume?.ok === true && text === state.resume.raw
+      }
+
+      function sameProviderValue() {
+        const key = keyInput.value.trim()
+        const model = (current === 'gemini' ? modelList.value : modelText.value).trim()
+        let matched = false
+        for (const item of Object.values(state.models)) {
+          if (item?.ok !== true || item.id !== current)
+            continue
+          if (item.key !== key)
+            return false
+          if (current !== 'gemini' && item.model !== model)
+            return false
+          matched = true
+        }
+        return matched
+      }
+
+      function dropCardPass(name) {
+        if (name === 'telegram')
+          state.telegram = null
+        else
+          state.resume = null
+        paint(document.querySelector(`[data-test="${name}"]`), '', 'ЖДЁТ', '')
+        tally()
+      }
+
+      function dropProviderPass(presetId) {
+        let dropped = false
+        for (const [id, item] of Object.entries(state.models)) {
+          if (item?.ok !== true || item.id !== presetId)
+            continue
+          delete state.models[id]
+          dropped = true
+        }
+        if (!dropped)
+          return false
+        const chip = document.querySelector(`[data-chip="${presetId}"]`)
+        chip.classList.remove('is-wait', 'is-pass', 'is-fail')
+        chip.querySelector('[data-mark]').textContent = ''
+        syncReason()
+        tally()
+        return true
+      }
+
+      function resetPage() {
+        clearTimeout(saveTimer)
+        const rev = nextRev()
+        state.telegram = null
+        state.resume = null
+        state.models = {}
+        for (const preset of presets) {
+          drafts[preset.id] = { key: '', model: preset.model }
+          found[preset.id] = []
+        }
+        current = 'groq'
+        document.querySelector('[name="token"]').value = ''
+        document.querySelector('[name="resume"]').value = ''
+        document.querySelectorAll('[data-chip]').forEach((button) => {
+          button.classList.remove('is-wait', 'is-pass', 'is-fail', 'is-shake', 'is-missing')
+          button.classList.toggle('on', button.dataset.chip === 'groq')
+          button.querySelector('[data-mark]').textContent = ''
+        })
+        document.querySelectorAll('[data-test]').forEach((card) => {
+          card.classList.remove('is-pass', 'is-fail', 'is-wait', 'is-missing', 'is-collapsed')
+          const badge = card.querySelector('[data-badge]')
+          badge.textContent = 'ЖДЁТ'
+          badge.className = 'badge'
+          card.querySelector('[data-detail]').textContent = ''
+          card.querySelectorAll('.field-error').forEach((el) => { el.textContent = '' })
+          card.querySelectorAll('input').forEach((input) => input.classList.remove('is-shake'))
+        })
+        keyInput.classList.remove('is-shake')
+        modelText.classList.remove('is-shake')
+        modelList.classList.remove('is-shake')
+        keyError.textContent = ''
+        modelError.textContent = ''
+        setReason('', '')
+        document.getElementById('check-free-note').textContent = ''
+        exportDetail.textContent = ''
+        exportDetail.classList.remove('fail-text')
+        modelsCard.classList.remove('is-wait', 'is-missing', 'is-fail', 'is-pass')
+        document.querySelectorAll('[data-tab]').forEach((button) => {
+          button.classList.remove('is-missing', 'is-shake')
+        })
+        document.querySelectorAll('button[data-label]').forEach((button) => {
+          button.disabled = false
+          button.textContent = button.dataset.label
+        })
+        showTab('link', false)
+        writeForm()
+        tally()
+        fetch('/api/draft', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ reset: true, rev }),
+          keepalive: true,
+        }).catch(() => null)
+      }
+
+      function showTab(name, persist) {
+        document.querySelectorAll('[data-tab]').forEach((button) => {
+          const on = button.dataset.tab === name
+          button.classList.toggle('on', on)
+          button.setAttribute('aria-selected', on ? 'true' : 'false')
+        })
+        document.querySelectorAll('[data-panel]').forEach((panel) => {
+          panel.hidden = panel.dataset.panel !== name
+        })
+        if (persist !== false)
+          scheduleSave()
+      }
+
+      function pick(id) {
+        readForm()
+        current = id
+        document.querySelectorAll('[data-chip]').forEach((button) => {
+          button.classList.toggle('on', button.dataset.chip === id)
+        })
+        writeForm()
+        scheduleSave()
+      }
+
+      function readForm() {
+        drafts[current].key = keyInput.value
+        drafts[current].model = current === 'gemini' ? modelList.value : modelText.value
+      }
+
+      function writeForm() {
+        const preset = presets.find(item => item.id === current)
+        const draft = drafts[current]
+        keyInput.value = draft.key
+        keyInput.placeholder = preset.placeholder
+        paintHint(preset)
+        const gemini = current === 'gemini'
+        modelList.hidden = gemini === false
+        modelText.hidden = gemini
+        if (gemini) {
+          if (draft.model.length > 0)
+            ensureGeminiOption(draft.model)
+          modelList.value = draft.model
+        }
+        else {
+          modelText.value = draft.model
+        }
+        keyError.textContent = ''
+        modelError.textContent = ''
+        paintFound()
+        syncReason()
+        showPicked('')
+      }
+
+      function geminiModels() {
+        return [...modelList.options].map(option => option.value)
+      }
+
+      function testIdOf(preset, model) {
+        return preset.id === 'gemini' ? model : preset.id
+      }
+
+      function ensureGeminiOption(model) {
+        if (geminiModels().includes(model))
+          return
+        const option = document.createElement('option')
+        option.value = model
+        option.textContent = model
+        modelList.append(option)
+      }
+
+      function applyModelName(name, presetId) {
+        const id = presetId || current
+        if (id === 'gemini')
+          ensureGeminiOption(name)
+        drafts[id].model = name
+        if (id !== current)
+          return
+        if (id === 'gemini')
+          modelList.value = name
+        else
+          modelText.value = name
+        paintFound()
+      }
+
+      function showFound(presetId, models) {
+        found[presetId] = models
+        if (presetId === current)
+          paintFound()
+      }
+
+      function bareId(id) {
+        const tail = String(id).split('/').pop() || String(id)
+        return tail.replace(/:free$/i, '').toLowerCase()
+      }
+
+      function hasToken(bare, token) {
+        const safe = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        return new RegExp(`(?:^|[^a-z])${safe}(?:[^a-z]|$)`).test(bare)
+      }
+
+      function skippedModel(id) {
+        const bare = bareId(id)
+        const full = String(id).toLowerCase()
+        if (bare === 'auto')
+          return true
+        return /(?:^|[^a-z])(?:router|embed(?:ding)?s?|whisper|tts)(?:[^a-z]|$)/.test(full)
+      }
+
+      function versionOf(bare) {
+        const cleaned = bare.replace(/\d+(?:\.\d+)?b\b/g, ' ').replace(/\d+k\b/g, ' ')
+        const pair = cleaned.match(/(?:^|[^0-9])(\d{1,2})[.-](\d{1,2})(?![0-9])/)
+        if (pair)
+          return Number(`${Number(pair[1])}.${pair[2]}`)
+        const year = cleaned.match(/(20\d{2})/)
+        if (year)
+          return Number(year[1])
+        const first = cleaned.match(/(\d+(?:\.\d+)?)/)
+        return first ? Number(first[1]) : 0
+      }
+
+      function familyKey(bare) {
+        if (hasToken(bare, 'gpt-oss'))
+          return 'gpt-oss'
+        if (hasToken(bare, 'gemini'))
+          return 'gemini'
+        if (claudeTokens.some(token => hasToken(bare, token)))
+          return 'claude'
+        if (hasToken(bare, 'mixtral'))
+          return 'mistral'
+        for (const token of ['qwen', 'llama', 'glm', 'deepseek', 'grok', 'command', 'mistral', 'gpt']) {
+          if (hasToken(bare, token))
+            return token
+        }
+        return bare.split(/[^a-z0-9]+/).filter(Boolean)[0] || 'other'
+      }
+
+      function autoOk(bare) {
+        if (['fable', 'opus', 'ultra', 'router'].some(token => hasToken(bare, token)))
+          return false
+        if (/reasoner|thinking|pro-max/.test(bare))
+          return false
+        if (/(?:^|[^a-z0-9])r1(?:[^a-z0-9]|$)/.test(bare))
+          return false
+        if (/(?:^|[^0-9])(?:405|480)b(?:[^a-z0-9]|$)/.test(bare))
+          return false
+        if (/(?:^|[^0-9.])(?:0\.5|[13])b(?:[^a-z0-9]|$)/.test(bare))
+          return false
+        return true
+      }
+
+      function priceBand(n) {
+        if (n >= 4)
+          return 1
+        if (n <= 2)
+          return 3
+        return 2
+      }
+
+      function scoreWord(score) {
+        const n = Math.round(score * 10) / 10
+        return Number.isInteger(n) ? String(n) : n.toFixed(1)
+      }
+
+      function rankFound(models) {
+        const rows = []
+        for (const id of models) {
+          if (typeof id !== 'string' || id.length === 0)
+            continue
+          const bare = bareId(id)
+          if (skippedModel(id))
+            continue
+          const family = familyKey(bare)
+          const book = familyBook[family] || { who: 'ровно', price: 3, quality: 3 }
+          const tierName = tierOrder.find(token => hasToken(bare, token))
+          const tier = tierName ? tierBook[tierName] : null
+          const price = tier ? tier.price : book.price
+          const quality = tier ? tier.quality : book.quality
+          const score = (price + quality) / 2
+          rows.push({
+            id,
+            family,
+            version: versionOf(bare),
+            score,
+            priceMark: priceBand(price),
+            ratioText: `${quality}/5`,
+            scoreText: scoreWord(score),
+            who: book.who,
+            auto: autoOk(bare),
+          })
+        }
+        rows.sort((a, b) => {
+          if (a.score !== b.score)
+            return b.score - a.score
+          if (a.family === b.family && a.version !== b.version)
+            return b.version - a.version
+          return a.id.localeCompare(b.id)
+        })
+        return rows
+      }
+
+      function buildModelTable(rows, selected) {
+        const table = document.createElement('table')
+        table.className = 'model-table'
+        const cols = document.createElement('colgroup')
+        for (const width of ['', '52px', '52px', '48px', '28%']) {
+          const col = document.createElement('col')
+          if (width)
+            col.style.width = width
+          cols.append(col)
+        }
+        table.append(cols)
+        const head = document.createElement('thead')
+        const headRow = document.createElement('tr')
+        for (const label of ['Модель', 'Цена', 'Доля', 'Скор', 'Кто']) {
+          const th = document.createElement('th')
+          th.textContent = label
+          if (label === 'Цена')
+            th.className = 'price'
+          headRow.append(th)
+        }
+        head.append(headRow)
+        table.append(head)
+        const body = document.createElement('tbody')
+        for (const row of rows) {
+          const tr = document.createElement('tr')
+          tr.dataset.model = row.id
+          if (row.id === selected)
+            tr.className = 'on'
+          const name = document.createElement('td')
+          name.className = 'model-name'
+          name.textContent = row.id
+          name.title = row.id
+          const price = document.createElement('td')
+          price.className = 'price'
+          const mark = document.createElement('span')
+          mark.className = `price-mark p${row.priceMark}`
+          mark.textContent = String(row.priceMark)
+          price.append(mark)
+          const ratio = document.createElement('td')
+          ratio.className = 'ratio'
+          ratio.textContent = row.ratioText
+          const score = document.createElement('td')
+          score.className = 'score'
+          score.textContent = row.scoreText
+          const who = document.createElement('td')
+          who.className = 'who'
+          who.textContent = row.who
+          who.title = row.who
+          tr.append(name, price, ratio, score, who)
+          body.append(tr)
+        }
+        table.append(body)
+        return table
+      }
+
+      function paintFound() {
+        const pickCard = document.getElementById('recommended-card')
+        const restCard = document.getElementById('rest-card')
+        const pickHost = document.getElementById('recommended-models')
+        const restHost = document.getElementById('rest-models')
+        const selected = drafts[current].model.trim()
+        const rows = rankFound(found[current] || [])
+        pickHost.replaceChildren()
+        restHost.replaceChildren()
+        restHost.hidden = true
+        if (rows.length === 0) {
+          pickCard.hidden = true
+          restCard.hidden = true
+          return
+        }
+        pickCard.hidden = false
+        pickHost.append(buildModelTable(rows.slice(0, 10), selected))
+        const rest = rows.slice(10, 30)
+        if (rest.length === 0) {
+          restCard.hidden = true
+          return
+        }
+        restCard.hidden = false
+        document.getElementById('rest-more').textContent = `ещё ${rest.length}`
+        restHost.append(buildModelTable(rest, selected))
+      }
+
+      function postModel(preset, key, model) {
+        return post({ what: 'model', url: preset.url, key, model, name: preset.name })
+      }
+
+      function modelMissing(data) {
+        return data?.missing === true
+      }
+
+      async function settleModel(preset, key, model) {
+        if (preset.id === 'gemini' && model === 'gemini-2.5-flash') {
+          model = 'gemini-3.8-flash'
+          applyModelName(model, preset.id)
+        }
+        if (model.length > 0) {
+          const data = await postModel(preset, key, model)
+          if (data?.ok === true || modelMissing(data) === false)
+            return { model, data }
         }
 
+        if (preset.id === current)
+          setReason('wait', 'Ищу модели…')
+
+        const listed = await post({ what: 'list', url: preset.url, key, name: preset.name })
+        if (listed == null)
+          return { model, data: null }
+
+        const models = Array.isArray(listed.models)
+          ? listed.models.filter(item => typeof item === 'string' && item.length > 0)
+          : []
+        if (models.length > 0)
+          showFound(preset.id, models)
+
+        const denied = listed.detail === 'ключ не принят' || listed.detail === 'ключ короткий'
+        const ranked = rankFound(models)
+          .filter(row => row.auto && row.id !== model)
+          .sort((a, b) => b.score - a.score || Number(b.id.toLowerCase().endsWith(':free')) - Number(a.id.toLowerCase().endsWith(':free')) || b.version - a.version || a.id.localeCompare(b.id))
+        let queue = ranked.map(row => row.id).filter(id => id !== 'gemini-2.5-flash')
+        queue = preset.id === 'gemini' ? queue.slice(0, 6) : queue.slice(0, 1)
+        if (queue.length === 0 && preset.id === 'gemini' && denied === false)
+          queue = geminiFallback.filter(item => item !== model)
+
+        if (queue.length === 0 && model.length === 0 && listed.detail !== 'ключ короткий') {
+          const presetModel = preset.model.trim()
+          if (presetModel.length > 0)
+            queue = [presetModel]
+        }
+
+        if (queue.length === 0) {
+          if (model.length === 0 || denied)
+            return { model, data: listed.detail ? listed : { ok: false, detail: 'нет имени модели' } }
+          return { model, data: { ok: false, detail: `модель ${model} не найдена` } }
+        }
+
+        const attempts = preset.id === 'gemini' ? queue.slice(0, 6) : queue.slice(0, 1)
+        let last = { ok: false, detail: 'нет имени модели' }
+        let picked = model
+        for (const candidate of attempts) {
+          picked = candidate
+          applyModelName(candidate, preset.id)
+          if (preset.id === current) {
+            const pickedRow = ranked.find(row => row.id === candidate)
+            showPicked(pickedRow ? `взял ${candidate}, скор ${pickedRow.scoreText}` : '')
+            setReason('wait', `Проверяю ${candidate}…`)
+          }
+          last = await postModel(preset, key, candidate)
+          if (last?.ok === true || modelMissing(last) === false)
+            return { model: candidate, data: last }
+        }
+        return { model: picked, data: last }
+      }
+
+      function showPicked(text) {
+        document.getElementById('model-picked').textContent = text || ''
+      }
+
+      async function exactModel(preset, key, model) {
+        if (model.length === 0)
+          return { model, data: { ok: false, detail: 'Впиши модель' } }
+        return { model, data: await postModel(preset, key, model) }
+      }
+
+      async function check(name) {
+        const card = document.querySelector(`[data-test="${name}"]`)
+        const button = card.querySelector('[data-check]')
+        press(button)
+        if (name === 'telegram')
+          return checkTelegram(card, button)
+        if (name === 'resume')
+          return checkResume(card, button)
+      }
+
+      async function checkTelegram(card, button) {
+        const input = card.querySelector('[name="token"]')
+        const token = input.value.trim()
+        if (token.length === 0) {
+          missField(card, input, 'Впиши токен')
+          state.telegram = { ok: false }
+          tally()
+          void saveDraftNow()
+          return
+        }
+        clearFieldError(input)
+        await busy(button, async () => {
+          paint(card, 'wait', 'ПРОВЕРЯЮ', '')
+          const data = await post({ what: 'telegram', token })
+          const ok = data?.ok === true
+          state.telegram = ok ? { ok: true, token, detail: data.detail } : { ok: false, detail: data?.detail }
+          paint(card, ok ? 'pass' : 'fail', ok ? 'PASS' : 'FAIL', data?.detail || 'сервер проверки не запущен')
+          tally()
+        })
+        void saveDraftNow()
+      }
+
+      async function checkResume(card, button) {
+        const input = card.querySelector('[name="resume"]')
+        const raw = input.value.trim()
+        if (raw.length === 0) {
+          missField(card, input, 'Впиши ссылку на резюме')
+          state.resume = { ok: false }
+          tally()
+          void saveDraftNow()
+          return
+        }
+        clearFieldError(input)
+        const id = resumeId(raw)
+        const ok = /^[A-Za-z0-9]{8,}$/.test(id)
+        state.resume = ok ? { ok: true, id, raw } : { ok: false }
+        paint(card, ok ? 'pass' : 'fail', ok ? 'PASS' : 'FAIL', ok ? id : 'это не ссылка на резюме')
+        tally()
+        void saveDraftNow()
+      }
+
+      async function checkCurrent() {
+        readForm()
+        const preset = presets.find(item => item.id === current)
+        const key = drafts[current].key.trim()
+        const model = drafts[current].model.trim()
+        keyError.textContent = ''
+        modelError.textContent = ''
+        if (key.length === 0) {
+          press(document.getElementById('model-check'))
+          showError(keyError, keyInput, 'Впиши ключ')
+          markChip(current, 'fail')
+          const id = model.length > 0 ? testIdOf(preset, model) : preset.id
+          state.models[id] = { ok: false, detail: 'Впиши ключ' }
+          setReason('fail', 'Впиши ключ')
+          tally()
+          return
+        }
+        await runJobs([{ preset, key, model, fallback: true }], document.getElementById('model-check'))
+      }
+
+      function checkFree() {
+        readForm()
+        const button = document.getElementById('check-free')
+        const jobs = []
+        for (const preset of presets) {
+          const key = drafts[preset.id].key.trim()
+          if (key.length === 0)
+            continue
+          if (preset.id === 'gemini') {
+            for (const model of geminiFallback)
+              jobs.push({ preset, key, model, fallback: false })
+          }
+          else {
+            const model = drafts[preset.id].model.trim()
+            jobs.push({ preset, key, model, fallback: model.length === 0 })
+          }
+        }
+        if (jobs.length === 0) {
+          press(button)
+          const note = document.getElementById('check-free-note')
+          note.textContent = 'Нечего проверять'
+          shake(note)
+          shake(keyInput)
+          for (const preset of presets)
+            shake(document.querySelector(`[data-chip="${preset.id}"]`))
+          return
+        }
+        document.getElementById('check-free-note').textContent = ''
+        runJobs(jobs, button)
+      }
+
+      async function runJobs(jobs, button) {
+        const modelButton = document.getElementById('model-check')
+        const freeButton = document.getElementById('check-free')
+        press(button)
+        modelButton.disabled = true
+        freeButton.disabled = true
+        button.textContent = 'Проверяю…'
+        modelsCard.classList.add('is-wait')
+        try {
+          for (const job of jobs)
+            await runModel(job)
+        }
+        finally {
+          modelButton.disabled = false
+          freeButton.disabled = false
+          modelButton.textContent = modelButton.dataset.label
+          freeButton.textContent = freeButton.dataset.label
+          modelsCard.classList.remove('is-wait')
+          void saveDraftNow()
+        }
+      }
+
+      async function runModel(job) {
+        const preset = job.preset
+        const key = job.key
+        const startedId = job.model.length > 0 ? testIdOf(preset, job.model) : ''
+        markChip(preset.id, 'wait')
+        if (preset.id === current)
+          setReason('wait', job.model.length === 0 ? 'Ищу модели…' : 'Проверяю…')
+
+        const settled = job.fallback === true
+          ? await settleModel(preset, key, job.model)
+          : await exactModel(preset, key, job.model)
+        const model = settled.model
+        const data = settled.data
+        const id = model.length > 0 ? testIdOf(preset, model) : preset.id
+        if (startedId.length > 0 && startedId !== id)
+          delete state.models[startedId]
+
+        const ok = data?.ok === true && model.length > 0
+        const detail = data?.detail || 'сервер проверки не запущен'
+        state.models[id] = ok
+          ? { ok: true, id: preset.id, key, model, url: preset.url, detail }
+          : { ok: false, detail }
+        markChip(preset.id, ok ? 'pass' : 'fail')
+        if (preset.id === current) {
+          if (ok === false && (job.model.length === 0 || model.length === 0))
+            showError(modelError, preset.id === 'gemini' ? modelList : modelText, detail)
+          setReason(ok ? 'pass' : 'fail', ok && detail === model ? '' : detail)
+        }
+        tally()
+      }
+
+      function fieldSlot(input) {
+        const slot = input.closest('.check-line')?.nextElementSibling
+        return slot?.classList.contains('field-error') ? slot : null
+      }
+
+      function paintHint(preset) {
+        const hint = document.getElementById('model-hint')
+        const link = document.createElement('a')
+        link.className = 'out'
+        link.href = preset.keysUrl
+        link.target = '_blank'
+        link.rel = 'noreferrer'
+        link.append(preset.keysUrl.replace(/^https:\/\//, ''))
+        link.insertAdjacentHTML('beforeend', '<svg class="out-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 5h5v5"/><path d="M19 5 10 14"/><path d="M17 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h5"/></svg>')
+        hint.replaceChildren(link, document.createTextNode(preset.hint))
+      }
+
+      function missField(card, input, text) {
+        showError(fieldSlot(input), input, text)
+        paint(card, 'fail', 'FAIL', '')
+      }
+
+      function showError(slot, input, text) {
+        slot.textContent = text
+        shake(input)
+      }
+
+      function clearFieldError(input) {
+        const slot = fieldSlot(input)
+        if (slot)
+          slot.textContent = ''
+      }
+
+      const pillTimers = new Map()
+
+      function copyPill(pill) {
+        const text = pill.dataset.copy
+        const flash = () => {
+          pill.textContent = 'скопировано'
+          clearTimeout(pillTimers.get(pill))
+          pillTimers.set(pill, setTimeout(() => {
+            pill.textContent = text
+            pillTimers.delete(pill)
+          }, 1000))
+        }
+        const legacy = () => {
+          const area = document.createElement('textarea')
+          area.value = text
+          area.setAttribute('readonly', '')
+          area.style.position = 'fixed'
+          area.style.left = '-9999px'
+          document.body.append(area)
+          area.select()
+          const ok = document.execCommand('copy')
+          area.remove()
+          if (ok)
+            flash()
+          else
+            shake(pill)
+        }
+        if (navigator.clipboard?.writeText)
+          navigator.clipboard.writeText(text).then(flash).catch(legacy)
+        else
+          legacy()
+      }
+
+      function press(button) {
+        button.classList.remove('is-pressed')
+        void button.offsetWidth
+        button.classList.add('is-pressed')
+        setTimeout(() => button.classList.remove('is-pressed'), 180)
+      }
+
+      async function busy(button, task) {
+        button.disabled = true
+        button.textContent = 'Проверяю…'
+        try {
+          await task()
+        }
+        finally {
+          button.disabled = false
+          button.textContent = button.dataset.label
+        }
+      }
+
+      function shake(el) {
+        el.classList.remove('is-shake')
+        void el.offsetWidth
+        el.classList.add('is-shake')
+      }
+
+      function markChip(id, kind) {
+        const chip = document.querySelector(`[data-chip="${id}"]`)
+        chip.classList.remove('is-wait', 'is-pass', 'is-fail')
+        chip.classList.add(kind === 'pass' ? 'is-pass' : kind === 'fail' ? 'is-fail' : 'is-wait')
+        chip.querySelector('[data-mark]').textContent = kind === 'pass' ? '' : kind === 'fail' ? 'FAIL' : '…'
+      }
+
+      function setReason(kind, text) {
+        const el = document.getElementById('model-reason')
+        const line = text || ''
+        el.className = kind && line.length > 0 ? `reason ${kind}` : 'reason'
+        el.textContent = line
+      }
+
+      function syncReason() {
+        const preset = presets.find(item => item.id === current)
+        const model = drafts[current].model.trim()
+        const id = testIdOf(preset, model)
+        const item = state.models[id]
+        if (item?.ok === true)
+          setReason('pass', item.detail && item.detail !== model ? item.detail : '')
+        else if (item?.ok === false)
+          setReason('fail', item.detail || 'FAIL')
+        else
+          setReason('', '')
+      }
+
+      async function post(body) {
         const res = await fetch('/api/check', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(body),
-        }).catch(() => null);
-        const data = res ? await res.json().catch(() => null) : null;
-        const ok = data?.ok === true;
-        state[name] = ok ? { ...body, ok: true, detail: data.detail } : { ok: false };
-        paint(card, ok ? 'pass' : 'fail', ok ? 'PASS' : 'FAIL', data?.detail || 'сервер проверки не запущен');
-        tally();
-      }
+        }).catch(() => null)
 
-      function payload(name) {
-        const card = document.querySelector(`[data-test="${name}"]`);
-        const value = (field) => card.querySelector(`[name="${field}"]`).value.trim();
-        if (name === 'telegram')
-          return { what: 'telegram', token: value('token') };
-        if (name === 'gemini')
-          return { what: 'gemini', key: value('key'), model: value('model') };
-        return { resume: value('resume') };
+        return res ? await res.json().catch(() => null) : null
       }
 
       function resumeId(raw) {
-        return raw.match(/\/resume\/([A-Za-z0-9]+)/)?.[1] || raw;
+        return raw.match(/\/resume\/([A-Za-z0-9]+)/)?.[1] || raw
       }
 
       function paint(card, kind, label, detail) {
-        const badge = card.querySelector('[data-badge]');
-        badge.textContent = label;
-        badge.className = `badge ${kind === 'pass' ? 'pass' : kind === 'fail' ? 'fail' : ''}`;
-        card.querySelector('[data-detail]').textContent = detail || '';
+        const badge = card.querySelector('[data-badge]')
+        badge.textContent = label
+        badge.className = `badge ${kind === 'pass' ? 'pass' : kind === 'fail' ? 'fail' : kind === 'wait' ? 'wait' : ''}`
+        card.querySelector('[data-detail]').textContent = detail || ''
+        card.classList.toggle('is-pass', kind === 'pass')
+        card.classList.toggle('is-collapsed', kind === 'pass')
+        card.classList.toggle('is-wait', kind === 'wait')
+        card.classList.toggle('is-fail', kind === 'fail')
+        if (kind === 'pass')
+          card.querySelectorAll('.field-error').forEach(el => { el.textContent = '' })
+      }
+
+      function passedModels() {
+        const seen = new Set()
+        const items = []
+        for (const id of resultOrder) {
+          const item = state.models[id]
+          if (item?.ok !== true)
+            continue
+          items.push(item)
+          seen.add(id)
+        }
+        for (const [id, item] of Object.entries(state.models)) {
+          if (item?.ok === true && seen.has(id) === false)
+            items.push(item)
+        }
+        return items
+      }
+
+      function gapNames() {
+        const names = []
+        if (state.telegram?.ok !== true)
+          names.push('телега')
+        if (state.resume?.ok !== true)
+          names.push('резюме')
+        if (passedModels().length === 0)
+          names.push('хоть одна модель')
+        return names
       }
 
       function ready() {
-        return state.telegram?.ok === true && state.gemini?.ok === true && state.resume?.ok === true;
+        return gapNames().length === 0
+      }
+
+      function pointAt(el) {
+        el.classList.remove('is-missing')
+        void el.offsetWidth
+        el.classList.add('is-missing')
       }
 
       function tally() {
-        const all = document.getElementById('all');
-        const button = document.getElementById('export');
-        if (ready()) {
-          all.textContent = 'PASS';
-          all.className = 'badge pass';
-          button.disabled = false;
-          document.getElementById('export-detail').textContent = '';
-          return;
+        const all = document.getElementById('all')
+        const ok = ready()
+        exportButton.classList.toggle('is-ready', ok)
+        exportButton.setAttribute('aria-disabled', ok ? 'false' : 'true')
+        if (ok) {
+          all.textContent = 'PASS'
+          all.className = 'badge pass'
         }
-        all.textContent = 'ЖДЁТ';
-        all.className = 'badge';
-        button.disabled = true;
+        else {
+          all.textContent = 'ЖДЁТ'
+          all.className = 'badge'
+        }
+        if (state.telegram?.ok === true)
+          document.querySelector('[data-test="telegram"]').classList.remove('is-missing')
+        if (state.resume?.ok === true)
+          document.querySelector('[data-test="resume"]').classList.remove('is-missing')
+        if (passedModels().length > 0) {
+          modelsCard.classList.remove('is-missing')
+          document.querySelector('[data-tab="models"]').classList.remove('is-missing')
+        }
+        if (state.telegram?.ok === true && state.resume?.ok === true)
+          document.querySelector('[data-tab="link"]').classList.remove('is-missing')
+        if (exportDetail.classList.contains('fail-text')) {
+          const names = gapNames()
+          exportDetail.textContent = names.length === 0 ? '' : `Не хватает: ${names.join(', ')}`
+          exportDetail.classList.toggle('fail-text', names.length > 0)
+        }
       }
 
       function download() {
-        if (ready() === false)
-          return;
-        const now = Date.now();
+        press(exportButton)
+        const names = gapNames()
+        document.querySelectorAll('.is-missing').forEach(el => el.classList.remove('is-missing'))
+        if (names.length > 0) {
+          exportDetail.classList.add('fail-text')
+          exportDetail.textContent = `Не хватает: ${names.join(', ')}`
+          const linkHidden = document.querySelector('[data-panel="link"]').hidden
+          if (state.telegram?.ok !== true) {
+            pointAt(document.querySelector('[data-test="telegram"]'))
+            if (linkHidden)
+              pointAt(document.querySelector('[data-tab="link"]'))
+          }
+          if (state.resume?.ok !== true) {
+            pointAt(document.querySelector('[data-test="resume"]'))
+            if (linkHidden)
+              pointAt(document.querySelector('[data-tab="link"]'))
+          }
+          if (passedModels().length === 0) {
+            pointAt(modelsCard)
+            if (document.querySelector('[data-panel="models"]').hidden)
+              pointAt(document.querySelector('[data-tab="models"]'))
+          }
+          const visible = [...document.querySelectorAll('.is-missing')].find(el => el.offsetParent !== null)
+          visible?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+          return
+        }
+
+        const passed = passedModels()
+        const gemini = passed.find(item => item.id === 'gemini') || passed[0]
+        const now = Date.now()
         const config = {
           kind: 'cursor-chrome-setup',
           exportedAt: now,
           expiresAt: now + hours * 60 * 60 * 1000,
           telegramToken: state.telegram.token,
           gemini: {
-            id: 'gemini',
-            key: state.gemini.key,
-            model: state.gemini.model,
-            url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+            id: gemini.id,
+            key: gemini.key,
+            model: gemini.model,
+            url: gemini.url,
           },
+          providers: passed.map(item => ({
+            id: item.id,
+            key: item.key,
+            model: item.model,
+            url: item.url,
+          })),
           hhResumeId: state.resume.id,
-        };
-        const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = 'cursor-chrome-setup.json';
-        link.click();
-        URL.revokeObjectURL(link.href);
-        document.getElementById('export-detail').textContent = 'Файл скачан. Через 2 часа прод его не примет.';
-      }
-
-      function mock() {
-        document.querySelectorAll('[data-test]').forEach((card) => paint(card, 'pass', 'PASS', 'мок, в файл не идёт'));
-        document.getElementById('all').textContent = 'МОК';
-        document.getElementById('all').className = 'badge';
-        document.getElementById('export').disabled = true;
-        document.getElementById('export-detail').textContent = 'Мок только показывает зелёное. Для файла нажми «Проверить» на каждом блоке.';
-        state.telegram = null;
-        state.gemini = null;
-        state.resume = null;
+        }
+        const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' })
+        const link = document.createElement('a')
+        link.href = URL.createObjectURL(blob)
+        link.download = 'cursor-chrome-setup.json'
+        link.click()
+        URL.revokeObjectURL(link.href)
+        exportDetail.classList.remove('fail-text')
+        exportDetail.textContent = 'Файл скачан. Через 2 часа прод его не примет.'
       }
     </script>
   </body>

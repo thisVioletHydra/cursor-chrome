@@ -10,3 +10,5 @@ seen.json
 owner.json
 web-secrets.json
 local-debug/*.json
+local-debug/*.sqlite
+local-debug/*.sqlite-*
