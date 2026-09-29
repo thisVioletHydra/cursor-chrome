@@ -131,6 +131,16 @@ export async function writeAccount(login: string, next: Account): Promise<void> 
   await writeJsonAtomic(accountPath(login), next);
 }
 
+export async function accountFileStat(login: string): Promise<{ bytes: number; mtimeMs: number } | null> {
+  try {
+    const stat = await fsPromises.stat(accountPath(login));
+    return { bytes: stat.size, mtimeMs: stat.mtimeMs };
+  }
+  catch {
+    return null;
+  }
+}
+
 function migrateChain(chain: unknown, mistralKey: unknown): string {
   if (typeof chain === 'string' && chain.length > 0)
     return chain;

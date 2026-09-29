@@ -1,50 +1,8 @@
 <script lang="ts">
-import { enhance } from '$app/forms';
 import { page } from '$app/stores';
 
 let { data, children } = $props();
 let accountOpen = $state(false);
-let fileInput = $state<HTMLInputElement>();
-let fileName = $state('');
-let importMessage = $state('');
-let importOk = $state(false);
-let importing = $state(false);
-
-function openFile() {
-  if (fileInput === undefined)
-    return;
-
-  fileInput.value = '';
-  fileInput.click();
-}
-
-function chosenFile(event: Event) {
-  const input = event.currentTarget;
-  if (input instanceof HTMLInputElement === false)
-    return;
-
-  fileName = input.files?.[0]?.name ?? '';
-  importMessage = '';
-}
-
-function onImport() {
-  importing = true;
-  importMessage = '';
-  return async ({ result, update }) => {
-    const body = result.type === 'success' ? result.data : null;
-    importOk = body?.ok === true;
-    importMessage = typeof body?.detail === 'string' ? body.detail : 'не вышло';
-    try {
-      if (importOk) {
-        fileName = '';
-        await update();
-      }
-    }
-    finally {
-      importing = false;
-    }
-  };
-}
 
 const items = [
   { href: '/admin', label: 'Главная', exact: true },
@@ -54,6 +12,7 @@ const items = [
   { href: '/admin/extension', label: 'Extension', exact: false },
   { href: '/admin/letter', label: 'Сопроводительное', exact: false },
   { href: '/admin/billing', label: 'Billing', exact: false },
+  { href: '/admin/config', label: 'Конфиг', exact: false },
 ];
 
 const current = (href: string, exact: boolean) => {
@@ -76,41 +35,6 @@ const current = (href: string, exact: boolean) => {
           >{item.label}</a>
         {/each}
       </nav>
-      <form
-        class="mt-4 border-t border-white/8 pt-3"
-        method="POST"
-        action="/admin?/import"
-        enctype="multipart/form-data"
-        use:enhance={onImport}
-      >
-        <p class="px-2 text-xs text-zinc-500">Импорт</p>
-        <input
-          bind:this={fileInput}
-          class="sr-only"
-          name="config"
-          type="file"
-          accept="application/json,.json"
-          onchange={chosenFile}
-        />
-        <button
-          class="mt-1 flex w-full min-w-0 items-center rounded-xl px-2 py-1.5 text-left text-sm transition hover:bg-white/5 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 {fileName === '' ? 'text-zinc-400' : 'text-zinc-100'}"
-          type="button"
-          title={fileName === '' ? 'Файл из local-debug, живёт 2 часа' : fileName}
-          onclick={openFile}
-        >
-          <span class="min-w-0 truncate">{fileName === '' ? 'Выбрать файл' : fileName}</span>
-        </button>
-        {#if fileName !== ''}
-          <button
-            class="mt-1 w-full rounded-xl bg-white/10 px-2 py-1.5 text-sm text-white transition hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:bg-white/20 disabled:cursor-wait disabled:opacity-60"
-            type="submit"
-            disabled={importing}
-          >{importing ? 'Импорт…' : 'Импортировать'}</button>
-        {/if}
-        {#if importMessage !== ''}
-          <p class="mt-1 px-2 text-xs break-words {importOk ? 'text-emerald-300' : 'text-rose-300'}" aria-live="polite">{importMessage}</p>
-        {/if}
-      </form>
     </div>
     <div class="relative mt-3 shrink-0">
       {#if accountOpen}
