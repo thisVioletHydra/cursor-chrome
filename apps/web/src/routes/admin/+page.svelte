@@ -5,7 +5,7 @@ import { onMount, tick } from 'svelte';
 let { data } = $props();
 let stats = $state(data.stats);
 let polling = $state(data.polling);
-let pulseLine = $state('');
+let shownPulse = $state('');
 let watchLog = $state<{ at: number; who: string; text: string; death: boolean }[]>([]);
 let watchList = $state<HTMLUListElement>();
 let followLog = true;
@@ -49,8 +49,36 @@ async function refresh(): Promise<void> {
     stats = { ...stats, ...body.figures, rows: body.rows ?? stats.rows, judged: body.judged ?? stats.judged, autopilot: body.autopilot ?? stats.autopilot };
 
   polling = body.polling === true;
-  pulseLine = typeof body.pulse?.line === 'string' ? body.pulse.line : '';
+  notePulse(typeof body.pulse?.line === 'string' ? body.pulse.line : '');
   watchLog = Array.isArray(body.log) ? body.log : [];
+}
+
+const STEP_MAX = 80;
+const STEP_PREFIX = /^(открыл|ищу|читаю|в очереди|мимо,|сервер|админка|жду|уже видели)/;
+const HARD_SKIP = /^(удалёнку запрещают|удаленку запрещают|джуниор|1C или Bitrix ядром|Python основной бэк)$/i;
+const SKIP_ESSAY = /вакансия требует|стек не сов|скип,|удал[её]нку запрещают|не наш стек/i;
+
+function notePulse(line: string): void {
+  if (headerStep(line))
+    shownPulse = line.trim();
+}
+
+function headerStep(line: string): boolean {
+  const text = line.trim();
+  if (text.length === 0 || text.length > STEP_MAX)
+    return false;
+
+  return skipEssay(text) === false;
+}
+
+function skipEssay(text: string): boolean {
+  if (STEP_PREFIX.test(text))
+    return false;
+
+  if (HARD_SKIP.test(text))
+    return true;
+
+  return SKIP_ESSAY.test(text);
 }
 
 function clock(at: number): string {
@@ -160,34 +188,21 @@ const allGreen = $derived(checks.every(row => row.ok));
 
 <section class="mb-8">
   <h2 class="mb-3 text-base font-semibold">Логирование</h2>
-  <div class="mockup-code w-full font-mono">
-    <pre data-prefix=">" class={pulseLine.length > 0 ? 'bg-success/10 text-success' : 'opacity-50'}>
-      <code>
-        {#if pulseLine.length > 0}
-          <span class="mr-2 inline-grid align-middle *:[grid-area:1/1]">
-            <span class="status status-lg status-success animate-ping"></span>
-            <span class="status status-lg status-success"></span>
-          </span>
-        {/if}
-        {pulseLine.length > 0 ? pulseLine : 'пульса ещё нет'}
-      </code>
-    </pre>
+  <div class="log-card mockup-code w-full font-mono">
+    <pre data-prefix=">" class="pulse {shownPulse.length > 0 ? 'bg-success/10 text-success' : 'opacity-50'}"><code>{#if shownPulse.length > 0}<span class="pulse-dot"></span>{/if}{shownPulse.length > 0 ? shownPulse : 'пульса ещё нет'}</code></pre>
     {#if watchLog.length === 0}
       <pre data-prefix="·" class="opacity-50"><code>Пока тихо. Сюда попадают смена шага и поломки, не каждая секунда.</code></pre>
     {:else}
-      <ul bind:this={watchList} class="timeline timeline-compact timeline-vertical mx-5 mt-2 max-h-80 overflow-y-auto text-sm" onscroll={onLogScroll}>
-        {#each watchLog as row (row.at + row.text)}
-          <li>
-            <hr />
-            <div class="timeline-middle">
-              <span class="status {row.death ? 'status-error' : 'status-success'}"></span>
-            </div>
-            <div class="timeline-end mb-1 flex flex-wrap items-center gap-2">
-              <time class="text-xs opacity-50">{clock(row.at)}</time>
-              <span class="badge badge-ghost badge-xs">{whoName[row.who] ?? row.who}</span>
-              <span class={row.death ? 'text-error' : ''}>{row.text}</span>
-            </div>
-            <hr />
+      <ul bind:this={watchList} class="max-h-80 overflow-x-hidden overflow-y-auto px-4 py-2 text-sm" onscroll={onLogScroll}>
+        {#each watchLog as row (row.at + row.who + row.text)}
+          <li class="grid grid-cols-[0.75rem_4.75rem_max-content_minmax(0,1fr)] items-start gap-x-2">
+            <span class="relative flex justify-center self-stretch">
+              <span class="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white/20"></span>
+              <span class="relative z-10 mt-2 size-2 rounded-full ring-2 ring-neutral {row.death ? 'bg-error' : 'bg-success'}"></span>
+            </span>
+            <time class="pt-1.5 text-xs whitespace-nowrap tabular-nums opacity-50">{clock(row.at)}</time>
+            <span class="badge badge-ghost badge-xs mt-1.5 w-fit">{whoName[row.who] ?? row.who}</span>
+            <span class="min-w-0 py-1.5 break-words whitespace-normal {row.death ? 'text-error' : ''}">{row.text}</span>
           </li>
         {/each}
       </ul>
@@ -265,3 +280,57 @@ const allGreen = $derived(checks.every(row => row.ok));
     {/each}
   </div>
 </section>
+
+<style>
+  .log-card {
+    display: block;
+    height: auto;
+    align-items: start;
+  }
+
+  .pulse {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    min-height: 0;
+    flex: none;
+    align-self: start;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    line-height: 1.5;
+  }
+
+  .pulse code {
+    display: inline;
+    white-space: nowrap;
+  }
+
+  .pulse-dot {
+    position: relative;
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-right: 0.45rem;
+    border-radius: 999px;
+    background: var(--color-success);
+    vertical-align: middle;
+  }
+
+  .pulse-dot::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--color-success);
+    animation: pulse-ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+
+  @keyframes pulse-ping {
+    75%, 100% {
+      transform: scale(2);
+      opacity: 0;
+    }
+  }
+</style>
