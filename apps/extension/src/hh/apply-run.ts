@@ -5,6 +5,7 @@ import { applyBlocker, formReady, humanPayload } from './apply-detect';
 import { asHumanBlock, fillApply } from './apply-fill';
 import { ask } from './bridge';
 import { pause, until } from './dom';
+import { noteLive } from './live-log';
 import { murkyBlock, vacancyAndFormText } from './murky';
 import { markReviewing, setApplyLock } from './screen-questions';
 
@@ -121,6 +122,7 @@ async function submitStep(): Promise<ApplyResult> {
   if (btn === null)
     return fail('нет кнопки отправки');
 
+  noteLive('отправляю отклик');
   await pause(900, 3_200);
   click(btn);
   await until(() => freshSuccess(hadToast) || formErrors().length > 0, 8000);
@@ -136,8 +138,12 @@ async function submitStep(): Promise<ApplyResult> {
 
 function murkyStep(): ApplyResult | null {
   const block = murkyBlock(vacancyAndFormText());
+  if (block === null)
+    return null;
 
-  return block ? humanResult(block) : null;
+  noteLive('мутно, зову человека');
+
+  return humanResult(block);
 }
 
 function humanOrNull(block: ReturnType<typeof applyBlocker>): ApplyResult | null {

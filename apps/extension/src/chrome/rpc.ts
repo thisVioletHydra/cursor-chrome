@@ -3,6 +3,7 @@ import { appendApply, clearWaiting, dropWaiting, getSyncKey, getSyncUrl, listApp
 import { getFlags, setFlags } from './flags';
 import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from './human-review';
 import { syncNegotiations } from './negotiations';
+import { liveLines, tellPage } from './page-log';
 import { readPausedUntil, readQueueReport, runQueue } from './queue-run';
 import { checkWorker, listJobTabs, openHhBackground, pinWorker } from './worker-tab';
 import { openPinnedWorker } from './worker-open';
@@ -143,6 +144,17 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
   },
   'run-queue': (_message, reply) => {
     replyJob(reply, runQueue());
+
+    return true;
+  },
+  'page-log': (message, reply) => {
+    const line = typeof message.line === 'string' ? message.line : '';
+    replyJob(reply, tellPage(line).then(() => ({ ok: true })));
+
+    return true;
+  },
+  'page-log-get': (_message, reply) => {
+    reply({ lines: liveLines() });
 
     return true;
   },

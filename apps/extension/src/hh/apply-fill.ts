@@ -5,6 +5,7 @@ import { applyBlocker } from './apply-detect';
 import { ask } from './bridge';
 import { compact, pause, until, visible } from './dom';
 import { coverLetter } from './letter';
+import { noteLive } from './live-log';
 import { pickResume, resumeKind, vacancyBody, vacancyTitle } from './resume';
 import { applyRoot, isCoverLetter, isStandardQuestion, promptFields } from './screen-questions';
 
@@ -49,8 +50,10 @@ const FIELD_SEL = 'textarea, input:not([type="hidden"]):not([type="radio"]):not(
 
 export async function fillApply(): Promise<FillFail | null> {
   const kind = resumeKind(vacancyTitle(), vacancyBody());
-  if (kind !== null)
+  if (kind !== null) {
+    noteLive(`резюме ${kind}`);
     await pickResume(kind);
+  }
 
   const letterOk = await insertLetter();
   if (letterOk === false)

@@ -1,4 +1,5 @@
 import { scanApplied, watchToasts } from './apply-watch';
+import { keepLiveLog, mountLiveLog } from './live-log';
 import { pullRemoteNegotiations, scanNegotiations } from './negotiations';
 import { mountOverlay, refreshOverlay } from './overlay';
 import { scanScreenQuestions, watchScreenQuestions } from './screen-questions';
@@ -13,6 +14,7 @@ export function startHhJob(): void {
     return;
 
   mountOverlay();
+  mountLiveLog();
   watchToasts();
   watchScreenQuestions();
   void bootHistory();
@@ -20,6 +22,7 @@ export function startHhJob(): void {
     if (document.getElementById('cc-hh-overlay') === null)
       mountOverlay();
 
+    keepLiveLog();
     scanApplied();
     scanScreenQuestions();
     scanNegotiations();

@@ -8,6 +8,7 @@ import { runMakeGood } from './chrome/make-good';
 import { postNative as sendNative } from './chrome/native-post';
 import { syncNegotiations } from './chrome/negotiations';
 import { ensureOffscreen, setBadge, waitOffscreen } from './chrome/offscreen-ctl';
+import { armLiveLog, disarmLiveLog, tickPage } from './chrome/page-log';
 import { clearSearchBusy, clearSearchSoon, isPaused, kickedRecently, markKicked, markSearchSoon, runQueue } from './chrome/queue-run';
 import { rpc } from './chrome/rpc';
 import { closePinnedHh } from './chrome/worker-tab';
@@ -213,15 +214,18 @@ async function onQueueAlarm(): Promise<void> {
   if (await isPaused())
     return;
 
-  await delay(15_000 + Math.floor(Math.random() * 150_000));
+  armLiveLog();
+  try {
+    await tickPage('жду', 15_000 + Math.floor(Math.random() * 150_000));
+  }
+  finally {
+    disarmLiveLog();
+  }
+
   if (await isPaused())
     return;
 
   void runQueue();
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function syncNegotiationsIfDue(): Promise<void> {

@@ -3,6 +3,7 @@ import type { Hunt, QueueItem } from './admin-api';
 import { fetchHunt, fetchQueue, postFound } from './admin-api';
 import { getSyncKey, getSyncUrl } from './apply-log';
 import { loadPace, rare, waitMs } from './pace';
+import { armLiveLog, disarmLiveLog, tellPage, tickPage } from './page-log';
 import { runHhApply } from './hh-apply-cmd';
 import { collectVacancies } from './hh-search';
 import { requireTabId } from './inject';
@@ -49,15 +50,17 @@ export async function runQueue(): Promise<QueueRun> {
     return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason: 'уже идёт', lines: [] };
 
   running = true;
-  await browser.storage.local.set({ [BUSY_KEY]: true, [SOON_KEY]: false });
-  await browser.runtime.sendMessage({ type: 'queue-busy' }).catch(() => {});
+  armLiveLog();
   try {
+    await browser.storage.local.set({ [BUSY_KEY]: true, [SOON_KEY]: false });
+    await browser.runtime.sendMessage({ type: 'queue-busy' }).catch(() => {});
     const run = await drain();
     await rememberReport(run);
 
     return run;
   }
   finally {
+    disarmLiveLog();
     running = false;
     await browser.storage.local.set({ [BUSY_KEY]: false });
   }
@@ -182,7 +185,7 @@ async function drain(): Promise<QueueRun> {
       }
 
       if (distract)
-        await delay(await distractWait());
+        await tickPage('отвлёкся', await distractWait());
 
       distract = false;
       seen.add(item.id);
@@ -306,10 +309,11 @@ async function applyOne(item: QueueItem): Promise<ApplyReply> {
   const loaded = waitTab(tabId, 15_000);
   await browser.tabs.update(tabId, { url: item.url, active: false });
   await loaded;
+  await tellPage(`открыл ${item.title.trim() || item.id}`);
   if (await loginPage(tabId))
     return { status: 'skip', reason: 'hh.ru просит войти (login)' };
 
-  await delay(await readWait());
+  await pacedWait();
   if (await loginPage(tabId))
     return { status: 'skip', reason: 'hh.ru просит войти (login)' };
 
@@ -404,14 +408,16 @@ function hoursOpen(now = new Date()): boolean {
   return hour >= WORK_FROM_HOUR && hour < WORK_TO_HOUR;
 }
 
-async function readWait(): Promise<number> {
+async function pacedWait(): Promise<void> {
   const pace = await loadPace();
-  const tea = rare(pace.teaEvery) ? waitMs(pace.teaMin, pace.teaMax) : 0;
-  const read = rare(pace.fastEvery)
+  if (rare(pace.teaEvery))
+    await tickPage('чай', waitMs(pace.teaMin, pace.teaMax));
+
+  const fast = rare(pace.fastEvery);
+  const wait = fast
     ? waitMs(pace.fastMin, pace.fastMax)
     : waitMs(pace.readMin, pace.readMax);
-
-  return tea + read;
+  await tickPage(fast ? 'быстро' : 'читаю', wait);
 }
 
 async function distractWait(): Promise<number> {
@@ -464,8 +470,4 @@ function asReply(raw: unknown): ApplyReply {
     reason: typeof rec.reason === 'string' ? rec.reason : '',
     hints: rec.hints,
   };
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }

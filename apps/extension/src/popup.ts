@@ -491,7 +491,7 @@ async function paintAutoLine(): Promise<void> {
   const until = typeof state?.pausedUntil === 'number' ? state.pausedUntil : 0;
   const paused = until > Date.now();
   autoLineEl.classList.toggle('paused', paused);
-  autoLineEl.textContent = paused ? `Пауза до ${clockOf(until)}` : 'Каждые 15 мин, до 3 откликов за раз';
+  autoLineEl.textContent = paused ? `Пауза до ${clockOf(until)}` : 'Каждые 15 мин, пока в очереди есть вакансии';
 }
 
 function clockOf(ms: number): string {

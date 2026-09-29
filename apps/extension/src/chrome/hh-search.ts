@@ -1,3 +1,4 @@
+import { tellPage } from './page-log';
 import { isHhUrl, requireWorkerTab, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
 
@@ -43,6 +44,7 @@ export async function collectVacancies(queries: string[]): Promise<SearchHit> {
       if (cards.length >= LOOK)
         break;
 
+      await tellPage('ищу вакансию');
       const pulled = await pull(tabId, searchUrl(query, page));
       if (pulled === null) {
         if (cards.length === 0)
@@ -74,6 +76,7 @@ export async function collectVacancies(queries: string[]): Promise<SearchHit> {
     return { login: false, cards, reason: 'пустая выдача' };
 
   for (const card of cards) {
+    await tellPage(`открыл ${cardTitle(card)}`);
     const pulled = await pull(tabId, card.url);
     if (pulled !== null && isLogin(pulled.url, pulled.html))
       return { login: true, cards, reason: '' };
@@ -85,6 +88,14 @@ export async function collectVacancies(queries: string[]): Promise<SearchHit> {
   }
 
   return { login: false, cards, reason: '' };
+}
+
+function cardTitle(card: FoundCard): string {
+  const title = card.title.trim();
+  if (title.length > 0)
+    return title;
+
+  return card.id;
 }
 
 function searchUrl(query: string, page: number): string {
