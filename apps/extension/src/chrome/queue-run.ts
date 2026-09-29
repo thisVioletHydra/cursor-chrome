@@ -3,7 +3,7 @@ import type { Hunt, QueueItem } from './admin-api';
 import { fetchHunt, fetchQueue, postFound } from './admin-api';
 import { getSyncKey, getSyncUrl } from './apply-log';
 import { loadPace, rare, waitMs } from './pace';
-import { armLiveLog, disarmLiveLog, tellPage, tickPage } from './page-log';
+import { armLiveLog, disarmLiveLog, doneServerBatch, noteServerBatch, tellPage, tickPage } from './page-log';
 import { runHhApply } from './hh-apply-cmd';
 import { collectVacancies } from './hh-search';
 import { requireTabId } from './inject';
@@ -250,7 +250,8 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
     return { note: found.reason.length > 0 ? found.reason : 'пустая выдача' };
 
   await browser.storage.local.remove(STOP_NOTE_KEY);
-  const posted = await postFound(base, key, found.cards);
+  await noteServerBatch();
+  const posted = await postFound(base, key, found.cards).finally(doneServerBatch);
   if (posted.ok === false || posted.added === 0) {
     const note = posted.reason.length > 0 ? posted.reason : 'сервер не принял вакансии';
     await tellPage(note);

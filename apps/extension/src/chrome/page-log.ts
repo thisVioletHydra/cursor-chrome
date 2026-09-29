@@ -4,11 +4,13 @@ import { browser } from '../browser-host';
 
 const MAX_LINES = 12;
 const STALL_MS = 90_000;
+const SERVER_STALL_MS = 3 * 60_000;
 const HH_URLS = ['https://hh.ru/*', 'https://*.hh.ru/*'];
 
 const lines: string[] = [];
 let armed = 0;
 let notedAt = 0;
+let serverWait = false;
 let stall: ReturnType<typeof setTimeout> | undefined;
 
 export function liveLines(): string[] {
@@ -28,10 +30,21 @@ export function disarmLiveLog(): void {
   if (armed > 0)
     return;
 
+  serverWait = false;
   if (stall !== undefined)
     clearTimeout(stall);
 
   stall = undefined;
+}
+
+export async function noteServerBatch(): Promise<void> {
+  serverWait = true;
+  await tellPage('сервер разбирает пачку');
+}
+
+export function doneServerBatch(): void {
+  serverWait = false;
+  planStall();
 }
 
 export async function tellPage(line: string): Promise<void> {
@@ -40,7 +53,7 @@ export async function tellPage(line: string): Promise<void> {
     return;
 
   notedAt = Date.now();
-  if (text === 'я завис' && lines[lines.length - 1] === 'я завис') {
+  if (repeatedHang(text)) {
     planStall();
     schedulePulse(text, true);
 
@@ -83,19 +96,31 @@ function planStall(): void {
   if (armed === 0)
     return;
 
+  const limit = stallLimit();
   stall = setTimeout(() => {
     stall = undefined;
     if (armed === 0)
       return;
 
-    if (Date.now() - notedAt < STALL_MS - 1000) {
+    if (Date.now() - notedAt < stallLimit() - 1000) {
       planStall();
 
       return;
     }
 
-    void tellPage('я завис');
-  }, STALL_MS);
+    void tellPage(serverWait ? 'сервер молчит' : 'я завис');
+  }, limit);
+}
+
+function stallLimit(): number {
+  return serverWait ? SERVER_STALL_MS : STALL_MS;
+}
+
+function repeatedHang(text: string): boolean {
+  if (text !== 'я завис' && text !== 'сервер молчит')
+    return false;
+
+  return lines[lines.length - 1] === text;
 }
 
 // Сообщение во вкладку не активирует её.

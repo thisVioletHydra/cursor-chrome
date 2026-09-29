@@ -63,20 +63,17 @@ export function watchPulse(line: string): void {
 
   pulse = { at: Date.now(), line: text };
   silenceNoted = false;
-  if (text === 'я завис') {
-    if (lastDeath.startsWith('extension:'))
-      lastDeath = '';
-
+  if (text === 'я завис' || text === 'сервер молчит') {
     void mark('extension', text, true);
 
     return;
   }
 
-  if (lastDeath.startsWith('extension:замолчало'))
-    lastDeath = '';
-
   if (TICK.test(text))
     return;
+
+  if (lastDeath.startsWith('extension:'))
+    lastDeath = '';
 
   void mark('extension', text, false);
 }
