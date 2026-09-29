@@ -33,28 +33,43 @@ const statusBadge: Record<string, string> = {
   needsHuman: 'badge-warning',
   dropped: 'badge-ghost',
 };
+
+const checks = $derived([
+  { ok: data.ready.telegram, label: 'Токен бота', miss: 'Токена нет. Вставь его в', href: '/admin/telegram', link: 'Telegram' },
+  { ok: data.ready.model, label: 'Хотя бы одна модель', miss: 'Моделей нет. Добавь ключ в', href: '/admin/model', link: 'Модель' },
+  { ok: data.ready.resume, label: 'Резюме привязано', miss: 'Резюме не привязано. Вставь ссылку в', href: '/admin/hh', link: 'HeadHunter' },
+  { ok: data.ready.queries, label: 'Запросы поиска сохранены', miss: 'Запросы не сохранены. Запиши их в', href: '/admin/hh', link: 'HeadHunter' },
+  { ok: data.ready.extension, label: 'Ссылка расширения выпущена', miss: 'Ссылки нет. Выпусти её в', href: '/admin/extension', link: 'Extension' },
+  { ok: data.ready.live, label: 'Боевой режим', miss: 'Боевой режим выключен. Включи его кнопкой ниже.', href: '', link: '' },
+]);
+const allGreen = $derived(checks.every(row => row.ok));
 </script>
 
-<section class="mb-8 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+<section class="mb-8 rounded-2xl border border-white/8 bg-[#151922] px-5 {allGreen ? 'py-3' : 'py-4'}">
   <h2 class="text-base font-semibold">До старта</h2>
-  <p class="mt-2 text-sm text-zinc-400">Когда всё зелёное, открой бота и напиши «старт». Chrome с запиненной вкладкой hh и включённым автопилотом расширения должен быть открыт.</p>
-  <ul class="mt-4 grid gap-2 text-sm">
-    {#each [
-      { ok: data.ready.telegram, label: 'Telegram' },
-      { ok: data.ready.model, label: 'Хотя бы одна модель' },
-      { ok: data.ready.resume, label: 'Резюме' },
-      { ok: data.ready.queries, label: 'Запросы поиска сохранены' },
-      { ok: data.ready.extension, label: 'Ссылка расширения выпущена' },
-      { ok: data.ready.live, label: 'Боевой режим' },
-    ] as row}
-      <li class="flex items-center gap-2">
-        <span class="size-2 rounded-full {row.ok ? 'bg-emerald-400' : 'bg-rose-400'}"></span>
-        <span class={row.ok ? 'text-zinc-200' : 'text-zinc-500'}>{row.label}</span>
+  {#if allGreen}
+    <p class="mt-2 text-xs text-zinc-500">«Старт» в боте только включает автопилот. Поиск и клики делает открытый Chrome: ссылка в попапе, запиненная вкладка hh.ru и «Автопилот в Chrome», с 9:00 до 22:00 МСК.</p>
+  {/if}
+  <ul class="mt-3 grid grid-cols-2 gap-x-4 {allGreen ? 'gap-y-1' : 'gap-y-3'}">
+    {#each checks as row (row.label)}
+      <li>
+        <div class="flex items-center gap-2">
+          <span class="size-2 shrink-0 rounded-full {row.ok ? 'bg-emerald-400' : 'bg-rose-400'}"></span>
+          <span class={row.ok ? 'text-xs text-zinc-400' : 'text-sm text-zinc-200'}>{row.label}</span>
+        </div>
+        {#if row.ok === false}
+          <p class="mt-1 pl-4 text-xs text-zinc-500">
+            {row.miss}
+            {#if row.href}
+              <a class="text-zinc-300 underline-offset-4 hover:text-zinc-100 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400" href={row.href}>{row.link}</a>.
+            {/if}
+          </p>
+        {/if}
       </li>
     {/each}
   </ul>
   <form
-    class="mt-4"
+    class="mt-3"
     method="POST"
     action="?/live"
     use:enhance={() => {
