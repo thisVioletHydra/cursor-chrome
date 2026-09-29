@@ -3,7 +3,7 @@ import type { Stored } from './secrets';
 
 import type { Provider } from '@cursor-chrome/hh';
 
-import { asProvider, connectApp, COVER_LETTER, distillCorpus, parseRules, providerName, splitQueries, splitWords, suggestQueries } from '@cursor-chrome/hh';
+import { asProvider, COVER_LETTER, distillCorpus, parseRules, providerName, splitQueries, splitWords, suggestQueries } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
 import { chainOf, collapseChain, isCreator, newExtToken, publishSecrets, readAccount, withChain, writeAccount } from './secrets';
@@ -82,35 +82,6 @@ export async function verifyAdmin({ request, cookies }: RequestEvent) {
   publishSecrets(login, next);
 
   return { ok: true, detail: probe.detail, wait: 0 };
-}
-
-export async function saveAppAdmin({ request, cookies }: RequestEvent) {
-  const login = guard(cookies);
-  if (viewingGuest(cookies, login))
-    return { ok: false, detail: 'это просмотр', wait: 0 };
-
-  const form = await request.formData();
-  const clientId = String(form.get('hhClientId') ?? '').trim();
-  const clientSecret = String(form.get('hhClientSecret') ?? '').trim();
-  if (clientId.length < 8 || clientSecret.length < 8)
-    return { ok: false, detail: 'вставь id и секрет с dev.hh.ru', wait: 0 };
-
-  try {
-    await connectApp(clientId, clientSecret);
-  }
-  catch (error) {
-    const detail = error instanceof Error ? error.message : 'hh не ответил';
-
-    return { ok: false, detail, wait: 0 };
-  }
-
-  const next = { ...await readAccount(login) };
-  next.hhClientId = clientId;
-  next.hhClientSecret = clientSecret;
-  await writeAccount(login, next);
-  publishSecrets(login, next);
-
-  return { ok: true, detail: 'приложение подключено', wait: 0 };
 }
 
 export async function saveResumeAdmin({ request, cookies }: RequestEvent) {

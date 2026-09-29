@@ -1,7 +1,7 @@
 import type { Actions, PageServerLoad } from './$types';
 
 import { corpusState, parseRules } from '@cursor-chrome/hh';
-import { distillAdmin, saveAppAdmin, saveCorpusAdmin, saveQueryAdmin, saveResumeAdmin, saveRulesAdmin, suggestQueryAdmin, unlinkAdmin, verifyAdmin } from '$lib/server/admin-actions';
+import { distillAdmin, saveCorpusAdmin, saveQueryAdmin, saveResumeAdmin, saveRulesAdmin, suggestQueryAdmin, unlinkAdmin, verifyAdmin } from '$lib/server/admin-actions';
 import { isCreator, readAccount } from '$lib/server/secrets';
 import { allowedLogins, readSession } from '$lib/server/session';
 
@@ -59,7 +59,6 @@ function parsedRules(raw: string): unknown {
 
 export const actions: Actions = {
   verify: verifyAdmin,
-  app: saveAppAdmin,
   resume: saveResumeAdmin,
   query: saveQueryAdmin,
   rules: saveRulesAdmin,

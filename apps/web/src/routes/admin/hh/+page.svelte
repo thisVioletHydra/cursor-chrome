@@ -35,11 +35,6 @@ $effect(() => {
   corpusBrief = data.corpusBrief;
 });
 let phrase = $state('');
-let appOpen = $state(false);
-let appId = $state('');
-let appSecret = $state('');
-let appPhase = $state<'idle' | 'checking' | 'error'>('idle');
-let appMessage = $state('');
 let resumeOpen = $state(false);
 let resumeDraft = $state('');
 let resumePhase = $state<'idle' | 'checking' | 'error'>('idle');
@@ -57,64 +52,6 @@ function openResume() {
   <p class="text-xs tracking-wide text-zinc-500 uppercase">HeadHunter</p>
   <h1 class="mt-1 text-3xl font-semibold tracking-tight">Отклики</h1>
 </header>
-
-<section class="mb-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
-  <h2 class="text-base font-semibold text-white">Приложение hh</h2>
-  {#if data.ready.hhApp && appOpen === false}
-    <p class="mt-2 flex items-center gap-1.5 text-sm text-zinc-400">
-      <span class="size-1.5 rounded-full bg-emerald-400"></span>
-      подключено, поиск вакансий с сервера открыт
-    </p>
-    <button class="btn btn-ghost mt-3 h-11 min-h-11 px-3" type="button" onclick={() => { appOpen = true; appMessage = ''; appPhase = 'idle'; }}>Заменить</button>
-  {:else}
-    <p class="mt-2 text-sm text-zinc-400">Без токена приложения api.hh.ru отвечает 403, и «старт» обрывается. На <Out href="https://dev.hh.ru/admin" text="dev.hh.ru" /> создай приложение и вставь Client ID и Client Secret.</p>
-    {#if appMessage}
-      <p class="mt-3 font-mono text-xs text-rose-300">{appMessage}</p>
-    {/if}
-    <form
-      class="mt-4 grid gap-3"
-      method="POST"
-      action="?/app"
-      use:enhance={() => {
-        appPhase = 'checking';
-        appMessage = '';
-        return async ({ result, update }) => {
-          const body = result.type === 'success' ? result.data : null;
-          if (body?.ok === true) {
-            appOpen = false;
-            appSecret = '';
-            await update();
-            return;
-          }
-
-          appPhase = 'error';
-          appMessage = typeof body?.detail === 'string' ? body.detail : 'не вышло';
-        };
-      }}
-    >
-      <input
-        class="input input-bordered h-11 border-white/10 bg-black/30 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
-        name="hhClientId"
-        autocomplete="off"
-        placeholder="Client ID"
-        readonly={appPhase === 'checking'}
-        bind:value={appId}
-      />
-      <input
-        class="input input-bordered h-11 border-white/10 bg-black/30 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
-        name="hhClientSecret"
-        type="password"
-        autocomplete="off"
-        placeholder="Client Secret"
-        readonly={appPhase === 'checking'}
-        bind:value={appSecret}
-      />
-      <button class="btn btn-primary h-11 min-h-11 w-fit px-4" type="submit" disabled={appPhase === 'checking' || appId.trim().length < 8 || appSecret.trim().length < 8}>
-        {appPhase === 'checking' ? 'Проверяю' : 'Проверить'}
-      </button>
-    </form>
-  {/if}
-</section>
 
 <div class="mb-4 grid gap-3">
   {#if data.resumeId}
