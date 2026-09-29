@@ -301,7 +301,7 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
   if (hunt.queries.length === 0)
     return { note: 'сервер не прислал запрос' };
 
-  const found = await collectVacancies(hunt.queries);
+  const found = await collectVacancies(hunt.queries, hunt.seen);
   if (hangHalted())
     return { stop: 'расширение зависло' };
 

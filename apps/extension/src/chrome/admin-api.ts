@@ -5,7 +5,7 @@ import { rememberPace } from './pace';
 
 export type QueueItem = { id: string; company: string; title: string; url: string };
 
-export type Hunt = { items: QueueItem[]; queries: string[]; want: boolean };
+export type Hunt = { items: QueueItem[]; queries: string[]; want: boolean; seen: string[] };
 
 export { keepWorkHours } from './hours-flag';
 
@@ -18,6 +18,7 @@ export async function fetchHunt(base: string, key: string): Promise<Hunt | null>
     items: Array.isArray(body.items) ? body.items.filter(isItem) : [],
     queries: stringsOf(body.queries),
     want: body.want === true,
+    seen: idsOf(body.seen),
   };
 }
 
@@ -59,14 +60,14 @@ export async function postFound(base: string, key: string, cards: unknown[]): Pr
   }
 }
 
-async function getQueue(base: string, key: string): Promise<{ items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; hours?: unknown } | null> {
+async function getQueue(base: string, key: string): Promise<{ items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; hours?: unknown; seen?: unknown } | null> {
   const stamp = pilotStamp();
   try {
     const res = await fetch(`${base}/api/queue`, { headers: { authorization: `Bearer ${key}` } });
     if (res.ok === false)
       return null;
 
-    const body = await res.json() as { items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; stop?: unknown; hours?: unknown };
+    const body = await res.json() as { items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; stop?: unknown; hours?: unknown; seen?: unknown };
     noteHours(body);
 
     if (body.stop === true && stamp === pilotStamp())
@@ -118,6 +119,13 @@ export async function postResume(base: string, key: string, id: string, text: st
   catch {
     return { ok: false, reason: 'сервер не ответил' };
   }
+}
+
+function idsOf(value: unknown): string[] {
+  if (Array.isArray(value) === false)
+    return [];
+
+  return value.filter((item): item is string => typeof item === 'string' && /^\d+$/.test(item));
 }
 
 function stringsOf(value: unknown): string[] {

@@ -26,7 +26,7 @@ export type FoundCard = {
   experience: string;
 };
 
-export async function collectVacancies(queries: string[]): Promise<SearchHit> {
+export async function collectVacancies(queries: string[], seenIds: readonly string[] = []): Promise<SearchHit> {
   const tabId = await searchTab();
   if (tabId === null)
     return { login: false, cards: [], reason: 'нет запиненной вкладки hh' };
@@ -37,6 +37,8 @@ export async function collectVacancies(queries: string[]): Promise<SearchHit> {
 
   const cards: FoundCard[] = [];
   const seen = new Set<string>();
+  const known = new Set(seenIds.filter(id => /^\d+$/.test(id)));
+  let knownHits = 0;
   let sawCards = false;
   let unread = false;
   const login = await whileSearching(async () => {
@@ -50,7 +52,7 @@ export async function collectVacancies(queries: string[]): Promise<SearchHit> {
 
         const pulled = await pull(tabId, searchUrl(query, page));
         if (pulled === null) {
-          if (cards.length === 0) {
+          if (cards.length === 0 && knownHits === 0) {
             unread = true;
 
             return false;
@@ -68,10 +70,18 @@ export async function collectVacancies(queries: string[]): Promise<SearchHit> {
 
         sawCards = true;
         for (const card of batch) {
-          if (seen.has(card.id) || cards.length >= LOOK || fitsTitle(card.title, queries) === false)
+          if (cards.length >= LOOK || fitsTitle(card.title, queries) === false)
+            continue;
+
+          if (seen.has(card.id))
             continue;
 
           seen.add(card.id);
+          if (known.has(card.id)) {
+            knownHits += 1;
+            continue;
+          }
+
           cards.push(card);
         }
 
@@ -89,6 +99,12 @@ export async function collectVacancies(queries: string[]): Promise<SearchHit> {
     await tellPage('не прочиталась страница hh');
 
     return { login: false, cards, reason: 'не прочиталась страница hh' };
+  }
+
+  if (cards.length === 0 && knownHits > 0) {
+    await tellPage(`уже видели, ${knownHits}`);
+
+    return { login: false, cards, reason: `уже видели, ${knownHits}` };
   }
 
   if (cards.length === 0)

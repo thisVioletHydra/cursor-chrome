@@ -84,3 +84,18 @@ export function remember(memory: Memory, ...ids: string[]): Memory {
 
   return { ...memory, seen: [...memory.seen, ...fresh] };
 }
+
+export function diaryIds(seen: readonly string[], queued: readonly string[]): string[] {
+  const ids = new Set<string>();
+  for (const id of seen) {
+    if (/^\d+$/.test(id))
+      ids.add(id);
+  }
+
+  for (const id of queued) {
+    if (/^\d+$/.test(id))
+      ids.add(id);
+  }
+
+  return [...ids];
+}
