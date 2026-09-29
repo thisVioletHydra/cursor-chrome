@@ -160,6 +160,63 @@ export async function writeAccount(login: string, next: Account): Promise<void> 
   await writeJsonAtomic(accountPath(login), next);
 }
 
+export type AtsScan = {
+  score: number;
+  flags: string[];
+  via: string;
+  at: number;
+  letter: string;
+};
+
+function atsPath(login: string): string {
+  return path.join(rootDir(), 'accounts', `${safeLogin(login)}.ats.json`);
+}
+
+export async function readAtsScan(login: string): Promise<AtsScan | null> {
+  let text: string;
+  try {
+    text = await fsPromises.readFile(atsPath(login), 'utf8');
+  }
+  catch {
+    return null;
+  }
+
+  const parsed = parseJsonLoose(text);
+  if (parsed === null)
+    return null;
+
+  return atsScanOf(parsed.value);
+}
+
+export async function writeAtsScan(login: string, scan: AtsScan): Promise<void> {
+  await writeJsonAtomic(atsPath(login), scan);
+}
+
+function atsScanOf(value: unknown): AtsScan | null {
+  if (typeof value !== 'object' || value === null)
+    return null;
+
+  const row = value as Partial<AtsScan>;
+  if (typeof row.score !== 'number' || Number.isInteger(row.score) === false || row.score < 0 || row.score > 100)
+    return null;
+  if (typeof row.via !== 'string' || row.via.trim().length === 0 || row.via.length > 40)
+    return null;
+  if (typeof row.at !== 'number' || Number.isFinite(row.at) === false)
+    return null;
+  if (typeof row.letter !== 'string')
+    return null;
+  if (Array.isArray(row.flags) === false)
+    return null;
+
+  const flags = row.flags
+    .filter((item): item is string => typeof item === 'string')
+    .map(item => item.trim())
+    .filter(item => item.length > 0 && item.length <= 180)
+    .slice(0, 5);
+
+  return { score: row.score, flags, via: row.via.trim(), at: row.at, letter: row.letter };
+}
+
 export async function accountFileStat(login: string): Promise<{ bytes: number; mtimeMs: number } | null> {
   try {
     const stat = await fsPromises.stat(accountPath(login));

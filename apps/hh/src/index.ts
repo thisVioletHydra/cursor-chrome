@@ -1,4 +1,5 @@
 export { answerQuestion, asQuestion } from './answer.ts';
+export { atsSource, scoreAts } from './ats.ts';
 export type { Answer, Question } from './answer.ts';
 export { corpusOn, corpusState, distillCorpus, keepVacancy } from './corpus.ts';
 export { COVER_LETTER, FACTS } from './copy.ts';

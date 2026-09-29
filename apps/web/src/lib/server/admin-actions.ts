@@ -3,10 +3,10 @@ import type { Stored } from './secrets';
 
 import type { Provider } from '@cursor-chrome/hh';
 
-import { asProvider, COVER_LETTER, distillCorpus, parseRules, providerName, splitQueries, splitWords, suggestQueries } from '@cursor-chrome/hh';
+import { asProvider, COVER_LETTER, distillCorpus, parseRules, providerName, scoreAts, splitQueries, splitWords, suggestQueries } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
-import { chainOf, collapseChain, imitationFromFields, isCreator, newExtToken, publishSecrets, readAccount, withChain, writeAccount } from './secrets';
+import { chainOf, collapseChain, imitationFromFields, isCreator, newExtToken, publishSecrets, readAccount, withChain, writeAccount, writeAtsScan } from './secrets';
 import { allowedLogins, readSession } from './session';
 
 const sections = ['telegram', 'model', 'hh'] as const;
@@ -233,6 +233,30 @@ export async function suggestQueryAdmin({ cookies }: RequestEvent) {
     const picked = await limitSuggest(suggestQueries(chain, saved.coverLetter || COVER_LETTER));
 
     return { ok: true, detail: picked.queries.join('\n'), via: providerName(picked.provider), wait: 0 };
+  }
+  catch (err) {
+    return { ok: false, detail: suggestDetail(err), wait: 0 };
+  }
+}
+
+export async function scanAtsAdmin({ cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const saved = await readAccount(login);
+  const chain = chainOf(saved);
+  if (chain.length === 0)
+    return { ok: false, detail: 'нет ключа модели', wait: 0 };
+
+  const letter = saved.coverLetter || COVER_LETTER;
+  try {
+    const picked = await limitSuggest(scoreAts(chain, letter));
+    const via = providerName(picked.provider);
+    const at = Date.now();
+    await writeAtsScan(login, { score: picked.score, flags: picked.flags, via, at, letter });
+
+    return { ok: true, score: picked.score, flags: picked.flags, via, at, detail: '', wait: 0 };
   }
   catch (err) {
     return { ok: false, detail: suggestDetail(err), wait: 0 };
