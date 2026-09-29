@@ -15,37 +15,51 @@
     </div>
 
     <section id="view-main">
-      <div id="worker-status" class="worker-status">
-        <p id="worker-line" class="worker-line">Рабочей вкладки нет</p>
-        <p id="worker-host" class="worker-host" hidden></p>
-        <p id="active-line" class="active-line">Сейчас открыта: …</p>
-        <p id="pin-note" class="pin-note" hidden></p>
-      </div>
-      <button id="pin-here" class="pin-primary" type="button">Запинить эту</button>
-      <button id="make-good" class="hh-secondary" type="button" title="найти hh.ru или открыть пин" aria-label="Поднять HH — найти hh.ru или открыть пин">
-        <svg class="cta-spark" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M4.5 22V17M4.5 7V2M2 4.5H7M2 19.5H7M13 3L11.2658 7.50886C10.9838 8.24209 10.8428 8.60871 10.6235 8.91709C10.4292 9.1904 10.1904 9.42919 9.91709 9.62353C9.60871 9.8428 9.24209 9.98381 8.50886 10.2658L4 12L8.50886 13.7342C9.24209 14.0162 9.60871 14.1572 9.91709 14.3765C10.1904 14.5708 10.4292 14.8096 10.6235 15.0829C10.8428 15.3913 10.9838 15.7579 11.2658 16.4911L13 21L14.7342 16.4911C15.0162 15.7579 15.1572 15.3913 15.3765 15.0829C15.5708 14.8096 15.8096 14.5708 16.0829 14.3765C16.3913 14.1572 16.7579 14.0162 17.4911 13.7342L22 12L17.4911 10.2658C16.7579 9.98381 16.3913 9.8428 16.0829 9.62353C15.8096 9.42919 15.5708 9.1904 15.3765 8.91709C15.1572 8.60871 15.0162 8.24209 14.7342 7.50886L13 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-        </svg>
-        <span class="cta-label">Поднять HH</span>
-      </button>
-      <form id="connect-form" class="connect" autocomplete="off">
-        <p id="connect-title" class="connect-title">Подключи админку</p>
+      <section class="group">
+        <h2 class="group-label">Вкладка</h2>
+        <div id="worker-status" class="worker-status">
+          <p id="worker-line" class="worker-line">Рабочей вкладки нет</p>
+          <p id="worker-host" class="worker-host" hidden></p>
+          <p id="active-line" class="active-line">Сейчас открыта: …</p>
+          <p id="pin-note" class="pin-note" hidden></p>
+        </div>
+        <button id="pin-here" class="btn-primary" type="button">Запинить эту</button>
+        <button id="make-good" class="hh-secondary" type="button" title="найти hh.ru или открыть пин" aria-label="Поднять HH — найти hh.ru или открыть пин">
+          <svg class="cta-spark" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4.5 22V17M4.5 7V2M2 4.5H7M2 19.5H7M13 3L11.2658 7.50886C10.9838 8.24209 10.8428 8.60871 10.6235 8.91709C10.4292 9.1904 10.1904 9.42919 9.91709 9.62353C9.60871 9.8428 9.24209 9.98381 8.50886 10.2658L4 12L8.50886 13.7342C9.24209 14.0162 9.60871 14.1572 9.91709 14.3765C10.1904 14.5708 10.4292 14.8096 10.6235 15.0829C10.8428 15.3913 10.9838 15.7579 11.2658 16.4911L13 21L14.7342 16.4911C15.0162 15.7579 15.1572 15.3913 15.3765 15.0829C15.5708 14.8096 15.8096 14.5708 16.0829 14.3765C16.3913 14.1572 16.7579 14.0162 17.4911 13.7342L22 12L17.4911 10.2658C16.7579 9.98381 16.3913 9.8428 16.0829 9.62353C15.8096 9.42919 15.5708 9.1904 15.3765 8.91709C15.1572 8.60871 15.0162 8.24209 14.7342 7.50886L13 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+          <span class="cta-label">Поднять HH</span>
+        </button>
+        <form id="worker-url-form" class="worker-url" autocomplete="off">
+          <input id="worker-url" type="url" placeholder="https://… — пин-воркер" />
+          <button id="open-worker-url" class="ghost" type="submit">Открыть</button>
+        </form>
+      </section>
+
+      <form id="connect-form" class="group connect" autocomplete="off">
+        <p id="connect-title" class="group-label">Подключи админку</p>
         <p id="connect-host" class="connect-host" hidden></p>
         <p id="connect-note" class="connect-note">В админке открой Extension, скопируй ссылку и вставь сюда.</p>
-        <input id="connect-link" type="text" placeholder="https://…/connect#ключ" autocomplete="off" />
-        <button id="connect-save" class="pin-primary" type="submit">Подключить</button>
+        <div class="field-row">
+          <input id="connect-link" type="text" placeholder="https://…/connect#ключ" autocomplete="off" />
+          <button id="connect-save" class="ghost" type="submit">Подключить</button>
+        </div>
         <p id="connect-error" class="connect-error" hidden></p>
       </form>
-      <button id="run-queue" class="pin-primary" type="button" title="забрать очередь из админки и откликнуться из этой вкладки" hidden>Разобрать очередь</button>
-      <label id="auto-queue" class="flag auto-queue" hidden>
-        <span>
-          <strong>Автопилот в Chrome</strong>
-          <small id="auto-line">Каждые 15 мин, пока в очереди есть вакансии</small>
-        </span>
-        <input id="flag-auto-queue" type="checkbox" />
-      </label>
-      <p id="pill" class="status" hidden></p>
-      <pre id="report" hidden></pre>
+
+      <section class="group">
+        <h2 class="group-label">Очередь</h2>
+        <button id="run-queue" class="btn-primary" type="button" title="забрать очередь из админки и откликнуться из этой вкладки" hidden>Разобрать очередь</button>
+        <label id="auto-queue" class="flag auto-queue" hidden>
+          <span>
+            <strong>Автопилот в Chrome</strong>
+            <small id="auto-line">Каждые 15 мин, пока в очереди есть вакансии</small>
+          </span>
+          <input id="flag-auto-queue" type="checkbox" />
+        </label>
+        <p id="pill" class="status" hidden></p>
+        <pre id="report" hidden></pre>
+      </section>
     </section>
 
     <section id="view-history" hidden>
@@ -77,13 +91,7 @@
         </span>
         <input id="flag-keep-session" type="checkbox" />
       </label>
-
     </section>
-
-    <form id="worker-url-form" class="worker-url" autocomplete="off">
-      <input id="worker-url" type="url" placeholder="https://… — пин-воркер" />
-      <button id="open-worker-url" class="ghost" type="submit">Открыть</button>
-    </form>
 
     <script src="popup.js"></script>
   </body>
