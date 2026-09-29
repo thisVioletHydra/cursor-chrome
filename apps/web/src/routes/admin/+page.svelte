@@ -158,18 +158,41 @@ const allGreen = $derived(checks.every(row => row.ok));
   </form>
 </section>
 
-<section class="mb-8 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
-  <h2 class="text-base font-semibold">Логирование</h2>
-  <p class="mt-2 font-mono text-xs text-indigo-200">{pulseLine.length > 0 ? pulseLine : 'пульса ещё нет'}</p>
-  {#if watchLog.length === 0}
-    <p class="mt-3 text-xs text-zinc-500">Пока тихо. Сюда попадают смена шага и поломки, не каждая секунда.</p>
-  {:else}
-    <ul bind:this={watchList} class="mt-3 max-h-40 overflow-y-auto font-mono text-xs" onscroll={onLogScroll}>
-      {#each watchLog as row (row.at + row.text)}
-        <li class={row.death ? 'text-rose-300' : 'text-zinc-400'}>{clock(row.at)} {whoName[row.who] ?? row.who} {row.text}</li>
-      {/each}
-    </ul>
-  {/if}
+<section class="mb-8">
+  <h2 class="mb-3 text-base font-semibold">Логирование</h2>
+  <div class="mockup-code w-full font-mono">
+    <pre data-prefix=">" class={pulseLine.length > 0 ? 'bg-success/10 text-success' : 'opacity-50'}>
+      <code>
+        {#if pulseLine.length > 0}
+          <span class="mr-2 inline-grid align-middle *:[grid-area:1/1]">
+            <span class="status status-lg status-success animate-ping"></span>
+            <span class="status status-lg status-success"></span>
+          </span>
+        {/if}
+        {pulseLine.length > 0 ? pulseLine : 'пульса ещё нет'}
+      </code>
+    </pre>
+    {#if watchLog.length === 0}
+      <pre data-prefix="·" class="opacity-50"><code>Пока тихо. Сюда попадают смена шага и поломки, не каждая секунда.</code></pre>
+    {:else}
+      <ul bind:this={watchList} class="timeline timeline-compact timeline-vertical mx-5 mt-2 max-h-80 overflow-y-auto text-sm" onscroll={onLogScroll}>
+        {#each watchLog as row (row.at + row.text)}
+          <li>
+            <hr />
+            <div class="timeline-middle">
+              <span class="status {row.death ? 'status-error' : 'status-success'}"></span>
+            </div>
+            <div class="timeline-end mb-1 flex flex-wrap items-center gap-2">
+              <time class="text-xs opacity-50">{clock(row.at)}</time>
+              <span class="badge badge-ghost badge-xs">{whoName[row.who] ?? row.who}</span>
+              <span class={row.death ? 'text-error' : ''}>{row.text}</span>
+            </div>
+            <hr />
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </div>
 </section>
 
 <section class="mb-8">
