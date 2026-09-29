@@ -81,6 +81,19 @@ function skipEssay(text: string): boolean {
   return SKIP_ESSAY.test(text);
 }
 
+const liveStep = $derived.by(() => {
+  if (headerStep(shownPulse))
+    return shownPulse;
+
+  for (let index = watchLog.length - 1; index >= 0; index -= 1) {
+    const row = watchLog[index];
+    if (row !== undefined && row.death === false && headerStep(row.text))
+      return row.text;
+  }
+
+  return '';
+});
+
 function clock(at: number): string {
   return new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(at);
 }
@@ -188,21 +201,21 @@ const allGreen = $derived(checks.every(row => row.ok));
 
 <section class="mb-8">
   <h2 class="mb-3 text-base font-semibold">Логирование</h2>
-  <div class="log-card mockup-code w-full font-mono">
-    <pre data-prefix=">" class="pulse {shownPulse.length > 0 ? 'bg-success/10 text-success' : 'opacity-50'}"><code>{#if shownPulse.length > 0}<span class="pulse-dot"></span>{/if}{shownPulse.length > 0 ? shownPulse : 'пульса ещё нет'}</code></pre>
+  <div class="overflow-hidden rounded-lg border border-white/10 bg-[#07080c] font-mono text-[13px] leading-snug">
+    <p class="flex min-w-0 items-center gap-2 overflow-hidden border-b border-white/10 px-3 py-2 whitespace-nowrap">
+      <span class="shrink-0 text-zinc-500">&gt;</span>
+      <span class="min-w-0 truncate {liveStep.length > 0 ? 'text-[#9dccab]' : 'text-zinc-500'}">{liveStep.length > 0 ? liveStep : 'пульса ещё нет'}</span>
+      <span class="term-cursor shrink-0" aria-hidden="true"></span>
+    </p>
     {#if watchLog.length === 0}
-      <pre data-prefix="·" class="opacity-50"><code>Пока тихо. Сюда попадают смена шага и поломки, не каждая секунда.</code></pre>
+      <p class="px-3 py-2 text-zinc-500">Пока тихо. Сюда попадают смена шага и поломки, не каждая секунда.</p>
     {:else}
-      <ul bind:this={watchList} class="max-h-80 overflow-x-hidden overflow-y-auto px-4 py-2 text-sm" onscroll={onLogScroll}>
+      <ul bind:this={watchList} class="max-h-80 overflow-x-hidden overflow-y-auto px-3 py-2" onscroll={onLogScroll}>
         {#each watchLog as row (row.at + row.who + row.text)}
-          <li class="grid grid-cols-[0.75rem_4.75rem_max-content_minmax(0,1fr)] items-start gap-x-2">
-            <span class="relative flex justify-center self-stretch">
-              <span class="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white/20"></span>
-              <span class="relative z-10 mt-2 size-2 rounded-full ring-2 ring-neutral {row.death ? 'bg-error' : 'bg-success'}"></span>
-            </span>
-            <time class="pt-1.5 text-xs whitespace-nowrap tabular-nums opacity-50">{clock(row.at)}</time>
-            <span class="badge badge-ghost badge-xs mt-1.5 w-fit">{whoName[row.who] ?? row.who}</span>
-            <span class="min-w-0 py-1.5 break-words whitespace-normal {row.death ? 'text-error' : ''}">{row.text}</span>
+          <li class="grid grid-cols-[4.75rem_6.5rem_minmax(0,1fr)] items-baseline gap-x-3 py-0.5">
+            <time class="text-xs text-zinc-500 tabular-nums whitespace-nowrap">{clock(row.at)}</time>
+            <span class="truncate text-xs text-zinc-500">{whoName[row.who] ?? row.who}</span>
+            <span class="min-w-0 break-words whitespace-normal {row.death ? 'text-[#c49090]' : 'text-zinc-200'}">{row.text}</span>
           </li>
         {/each}
       </ul>
@@ -282,55 +295,22 @@ const allGreen = $derived(checks.every(row => row.ok));
 </section>
 
 <style>
-  .log-card {
-    display: block;
-    height: auto;
-    align-items: start;
-  }
-
-  .pulse {
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    height: auto;
-    min-height: 0;
-    flex: none;
-    align-self: start;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    line-height: 1.5;
-  }
-
-  .pulse code {
-    display: inline;
-    white-space: nowrap;
-  }
-
-  .pulse-dot {
-    position: relative;
-    display: inline-block;
+  .term-cursor {
     width: 0.5rem;
-    height: 0.5rem;
-    margin-right: 0.45rem;
-    border-radius: 999px;
-    background: var(--color-success);
-    vertical-align: middle;
+    height: 0.9em;
+    background: #9dccab;
+    animation: term-blink 1.1s steps(1) infinite;
   }
 
-  .pulse-dot::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: var(--color-success);
-    animation: pulse-ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
-  }
-
-  @keyframes pulse-ping {
-    75%, 100% {
-      transform: scale(2);
+  @keyframes term-blink {
+    50% {
       opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .term-cursor {
+      animation: none;
     }
   }
 </style>
