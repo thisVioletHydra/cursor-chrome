@@ -10,7 +10,6 @@ type WorkerSnap = {
   error?: string;
 };
 
-const BLOCKED_URL = /^(chrome|chrome-extension|edge|about|devtools|chrome-search|moz-extension):/i;
 const TITLE_MAX = 40;
 
 const pinBtn = document.getElementById('pin-here') as HTMLButtonElement | null;
@@ -36,14 +35,15 @@ function hostOf(url: string): string {
   }
 }
 
-function pinBlockReason(url: string): string | null {
-  if (url.length === 0)
-    return 'нет URL вкладки';
+function isHhUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
 
-  if (BLOCKED_URL.test(url))
-    return 'сюда нельзя (служебная вкладка)';
-
-  return null;
+    return host === 'hh.ru' || host.endsWith('.hh.ru');
+  }
+  catch {
+    return false;
+  }
 }
 
 function showNote(node: HTMLElement | null, text: string, ok?: boolean): void {
@@ -76,7 +76,6 @@ export async function refreshWorkerPanel(): Promise<void> {
   const [active] = await browser.tabs.query({ active: true, currentWindow: true });
   const check = await browser.runtime.sendMessage({ type: 'check-worker' }) as WorkerSnap;
   const activeUrl = active?.url || active?.pendingUrl || '';
-  const block = pinBlockReason(activeUrl);
   const alreadyWorker = check?.ok === true
     && typeof check.tabId === 'number'
     && typeof active?.id === 'number'
@@ -102,22 +101,8 @@ export async function refreshWorkerPanel(): Promise<void> {
     }
   }
 
-  if (pinNote) {
-    pinNote.className = 'pin-note';
-    pinNote.hidden = block === null;
-    pinNote.textContent = block ?? '';
-  }
-
   if (pinBtn === null)
     return;
-
-  if (block) {
-    pinBtn.hidden = false;
-    pinBtn.disabled = true;
-    pinBtn.textContent = 'Запинить';
-
-    return;
-  }
 
   if (alreadyWorker) {
     pinBtn.hidden = true;
@@ -127,40 +112,30 @@ export async function refreshWorkerPanel(): Promise<void> {
 
   pinBtn.hidden = false;
   pinBtn.disabled = false;
-  pinBtn.textContent = check?.ok === true ? 'Сменить' : 'Запинить';
+  pinBtn.textContent = isHhUrl(activeUrl) && check?.ok === true ? 'Сменить' : 'Запинить';
 }
 
 export async function pinHere(): Promise<void> {
   if (pinBtn?.disabled === true)
     return;
 
-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-  if (typeof tab?.id !== 'number') {
-    await refreshWorkerPanel();
-    showNote(pinNote, 'нет вкладки', false);
-
-    return;
-  }
-
-  const url = tab.url || tab.pendingUrl || '';
-  const block = pinBlockReason(url);
-  if (block) {
-    await refreshWorkerPanel();
-    showNote(pinNote, block, false);
-
-    return;
-  }
-
   if (pinBtn) {
     pinBtn.disabled = true;
     pinBtn.textContent = 'Запинил…';
   }
 
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  const url = tab?.url || tab?.pendingUrl || '';
+  const tabId = tab?.id;
+  const pinThis = isHhUrl(url) && typeof tabId === 'number';
+
   try {
-    const result = await browser.runtime.sendMessage({ type: 'pin-tab', tabId: tab.id }) as WorkerSnap;
+    const result = pinThis
+      ? await browser.runtime.sendMessage({ type: 'pin-tab', tabId }) as WorkerSnap
+      : await browser.runtime.sendMessage({ type: 'ensure-hh' }) as WorkerSnap;
     await refreshWorkerPanel();
     if (result?.ok === true) {
-      showNote(pinNote, 'Запинил', true);
+      showNote(pinNote, pinThis ? 'Запинил' : (result.status || 'Открыл hh и запинил'), true);
 
       return;
     }

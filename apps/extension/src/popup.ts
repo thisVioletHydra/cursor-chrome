@@ -69,6 +69,8 @@ let linked = false;
 let adminOn = false;
 let autoOn = false;
 let powering = false;
+let reviving = false;
+let revivedAt = 0;
 let waitCleared = false;
 
 const clicks: Record<string, () => void> = {
@@ -169,8 +171,12 @@ browser.runtime.onMessage.addListener((message) => {
     return;
 
   const type = 'type' in message ? message.type : '';
-  if (type === 'queue-soon')
+  if (type === 'queue-soon') {
+    if (Date.now() - revivedAt < 45_000)
+      return;
+
     paintStatus('Поиск начнётся примерно через полминуты');
+  }
   else if (type === 'queue-busy')
     paintStatus('Читаю вакансии в запиненной вкладке hh');
   else if (type === 'queue-report' && 'run' in message)
@@ -199,8 +205,10 @@ function show(name: ViewName): void {
   if (name === 'history')
     void renderHistory();
 
-  if (name === 'main')
+  if (name === 'main') {
     void refreshWorkerPanel();
+    void paintBootStatus();
+  }
 }
 
 function syncTabChip(): void {
@@ -509,6 +517,14 @@ type QueueRun = {
   error?: string;
 };
 
+type HhOpen = {
+  ok?: boolean;
+  reason?: string;
+  error?: string;
+  status?: string;
+  url?: string;
+};
+
 function paintStatus(text: string, kind: 'ok' | 'fail' | 'plain' = 'plain'): void {
   if (pillEl === null)
     return;
@@ -624,6 +640,12 @@ async function paintQueue(run: QueueRun | unknown): Promise<void> {
     return;
   }
 
+  if (reason === 'уже идёт') {
+    paintStatus('Читаю вакансии в запиненной вкладке hh');
+
+    return;
+  }
+
   const applied = (row.sent ?? 0) + (row.human ?? 0) + (row.skipped ?? 0);
   if (applied === 0 && reason.length > 0)
     paintStatus(reason, 'fail');
@@ -633,13 +655,83 @@ async function paintQueue(run: QueueRun | unknown): Promise<void> {
     paintStatus(reason.length > 0 ? reason : 'НЕ ВЫШЛО', 'fail');
 }
 
+function isHhHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+
+    return host === 'hh.ru' || host.endsWith('.hh.ru');
+  }
+  catch {
+    return false;
+  }
+}
+
+function openFail(opened: HhOpen): string {
+  return opened.error || opened.reason || 'не удалось открыть hh';
+}
+
+async function ensureHh(): Promise<HhOpen> {
+  const opened = await browser.runtime.sendMessage({ type: 'ensure-hh' }) as HhOpen;
+
+  return opened ?? { ok: false, error: 'нет ответа' };
+}
+
+function kickSearch(): void {
+  void browser.runtime.sendMessage({ type: 'run-queue' }).catch((error: unknown) => {
+    paintStatus(error instanceof Error ? error.message : 'не вышло', 'fail');
+  });
+}
+
+async function reviveHh(kick: boolean): Promise<void> {
+  if (reviving || autoOn === false)
+    return;
+
+  reviving = true;
+  try {
+    const opened = await ensureHh();
+    if (autoOn === false)
+      return;
+
+    if (opened.ok !== true) {
+      const text = openFail(opened);
+      paintStatus(text, 'fail');
+      paintPowerNote(text);
+
+      return;
+    }
+
+    revivedAt = Date.now();
+    await refreshWorkerPanel();
+    if (kick === false) {
+      paintStatus('Читаю вакансии в запиненной вкладке hh');
+
+      return;
+    }
+
+    paintStatus('Включено', 'ok');
+    kickSearch();
+  }
+  catch (error) {
+    const text = error instanceof Error ? error.message : 'не вышло';
+    paintStatus(text, 'fail');
+    paintPowerNote(text);
+  }
+  finally {
+    reviving = false;
+  }
+}
+
 async function paintBootStatus(): Promise<void> {
+  await syncAuto();
   if (autoOn === false) {
     paintStatus('Выключено');
     await browser.runtime.sendMessage({ type: 'forget-hang' }).catch(() => {});
 
     return;
   }
+
+  if (powering)
+    return;
 
   const step = await readStall();
   if (step !== null) {
@@ -660,27 +752,48 @@ async function paintBootStatus(): Promise<void> {
     busy?: boolean;
     report?: QueueRun | null;
   };
+  const check = await browser.runtime.sendMessage({ type: 'check-worker' }) as HhOpen;
+  if (check?.ok !== true || isHhHost(check.url || '') === false) {
+    paintStatus('Включено, но вкладки hh нет', 'fail');
+    await reviveHh(state?.busy !== true);
+
+    return;
+  }
+
   if (state?.busy === true) {
     paintStatus('Читаю вакансии в запиненной вкладке hh');
 
     return;
   }
 
-  if (state?.soon === true) {
+  const report = state?.report;
+  const reportReason = report?.reason || '';
+  const justKicked = reviving || Date.now() - revivedAt < 45_000;
+  if (report && reportReason !== 'нет запиненной вкладки hh') {
+    const applied = (report.sent ?? 0) + (report.human ?? 0) + (report.skipped ?? 0);
+    if (reportReason.length > 0 || applied > 0)
+      await paintQueue(report);
+    else
+      paintStatus('Включено', 'ok');
+
+    return;
+  }
+
+  if (state?.soon === true && justKicked === false) {
     paintStatus('Поиск начнётся примерно через полминуты');
 
     return;
   }
 
-  const report = state?.report;
-  const reportReason = report?.reason || '';
-  if (report && isHang(reportReason) === false && (reportReason.length > 0 || (report.sent ?? 0) + (report.human ?? 0) + (report.skipped ?? 0) > 0)) {
-    await paintQueue(report);
+  if (justKicked) {
+    paintStatus('Включено', 'ok');
 
     return;
   }
 
-  paintStatus('Включено', 'ok');
+  paintStatus('Включено, поиск не идёт', 'fail');
+  revivedAt = Date.now();
+  kickSearch();
 }
 
 async function togglePower(): Promise<void> {
@@ -699,6 +812,20 @@ async function togglePower(): Promise<void> {
   powerBtn.textContent = next ? 'Включаю…' : 'Выключаю…';
   clearPowerNote();
   try {
+    if (next) {
+      const opened = await ensureHh();
+      if (opened.ok !== true) {
+        const text = openFail(opened);
+        paintPowerNote(text);
+        paintStatus(text, 'fail');
+
+        return;
+      }
+
+      revivedAt = Date.now();
+      await refreshWorkerPanel();
+    }
+
     const result = await browser.runtime.sendMessage({ type: 'set-flags', autoQueue: next }) as { error?: string; autoQueue?: boolean };
     if (typeof result?.error === 'string' && result.error.length > 0) {
       paintPowerNote(result.error);
@@ -714,10 +841,22 @@ async function togglePower(): Promise<void> {
 
     autoOn = result.autoQueue;
     paintPower();
-    if (autoOn === false)
+    if (autoOn === false) {
       paintStatus('Выключено');
-    else
-      await afterPowerOn();
+
+      return;
+    }
+
+    const paused = await readPaused();
+    if (paused !== null) {
+      paintStatus(`Пауза до ${clockOf(paused)}`);
+
+      return;
+    }
+
+    revivedAt = Date.now();
+    paintStatus('Включено', 'ok');
+    kickSearch();
   }
   catch (error) {
     paintPowerNote(error instanceof Error ? error.message : 'не вышло');
@@ -726,17 +865,6 @@ async function togglePower(): Promise<void> {
     powering = false;
     paintPower();
   }
-}
-
-async function afterPowerOn(): Promise<void> {
-  const paused = await readPaused();
-  if (paused !== null) {
-    paintStatus(`Пауза до ${clockOf(paused)}`);
-
-    return;
-  }
-
-  paintStatus('Поиск начнётся примерно через полминуты');
 }
 
 async function runQueue(): Promise<void> {
@@ -752,16 +880,30 @@ async function runQueue(): Promise<void> {
   queueBtn.disabled = true;
   queueBtn.textContent = 'Откликаюсь…';
   paintStatus('Откликаюсь…');
+  let failed = '';
   try {
+    const opened = await ensureHh();
+    if (opened.ok !== true) {
+      failed = openFail(opened);
+      queueBtn.textContent = failed;
+      paintStatus(failed, 'fail');
+
+      return;
+    }
+
+    await refreshWorkerPanel();
     const run = await browser.runtime.sendMessage({ type: 'run-queue' }) as QueueRun;
     await paintQueue(run);
   }
   catch (error) {
-    paintStatus(error instanceof Error ? error.message : 'не вышло', 'fail');
+    failed = error instanceof Error ? error.message : 'не вышло';
+    queueBtn.textContent = failed;
+    paintStatus(failed, 'fail');
   }
   finally {
     queueBtn.disabled = false;
-    queueBtn.textContent = QUEUE_LABEL;
+    if (failed.length === 0)
+      queueBtn.textContent = QUEUE_LABEL;
   }
 
   await renderHistory();

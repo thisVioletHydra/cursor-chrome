@@ -7,7 +7,7 @@ import { clearStuckHang, forgetStuckHang, liveLines, stallStep, stalling, tellPa
 import { forgetHangReport, queueBusy, readPausedUntil, readQueueReport, runQueue } from './queue-run';
 import { pullSavedResume } from './resume-pull';
 import { checkWorker, listJobTabs, openHhBackground, pinWorker } from './worker-tab';
-import { openPinnedWorker } from './worker-open';
+import { ensurePinnedHh, openPinnedWorker } from './worker-open';
 
 type Reply = (value?: unknown) => void;
 type Sender = chrome.runtime.MessageSender;
@@ -95,6 +95,11 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
   },
   'open-hh': (_message, reply) => {
     replyJob(reply, openHhBackground());
+
+    return true;
+  },
+  'ensure-hh': (_message, reply) => {
+    replyJob(reply, ensurePinnedHh());
 
     return true;
   },
