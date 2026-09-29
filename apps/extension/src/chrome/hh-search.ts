@@ -1,8 +1,9 @@
-import { tellPage } from './page-log';
+import { tellPage, whileSearching } from './page-log';
 import { isHhUrl, requireWorkerTab, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
 
 const LOOK = 40;
+const PAGE_MS = 45_000;
 const SEARCH = 'https://hh.ru/search/vacancy';
 const HH_ROOT = 'https://hh.ru/';
 
@@ -37,41 +38,57 @@ export async function collectVacancies(queries: string[]): Promise<SearchHit> {
   const cards: FoundCard[] = [];
   const seen = new Set<string>();
   let sawCards = false;
-  for (const query of queries) {
-    if (cards.length >= LOOK)
-      break;
-
-    for (const page of [0, 1]) {
+  let unread = false;
+  const login = await whileSearching(async () => {
+    for (const query of queries) {
       if (cards.length >= LOOK)
-        break;
+        return false;
 
-      await tellPage('ищу вакансию');
-      const pulled = await pull(tabId, searchUrl(query, page));
-      if (pulled === null) {
-        if (cards.length === 0)
-          return { login: false, cards, reason: 'не прочиталась страница hh' };
+      for (const page of [0, 1]) {
+        if (cards.length >= LOOK)
+          return false;
 
-        break;
+        const pulled = await pull(tabId, searchUrl(query, page));
+        if (pulled === null) {
+          if (cards.length === 0) {
+            unread = true;
+
+            return false;
+          }
+
+          break;
+        }
+
+        if (isLogin(pulled.url, pulled.html))
+          return true;
+
+        const batch = cardsOf(serpHtml(pulled.html));
+        if (batch.length === 0)
+          break;
+
+        sawCards = true;
+        for (const card of batch) {
+          if (seen.has(card.id) || cards.length >= LOOK || fitsTitle(card.title, queries) === false)
+            continue;
+
+          seen.add(card.id);
+          cards.push(card);
+        }
+
+        await pause(1500, 4000);
       }
-
-      if (isLogin(pulled.url, pulled.html))
-        return { login: true, cards, reason: '' };
-
-      const batch = cardsOf(serpHtml(pulled.html));
-      if (batch.length === 0)
-        break;
-
-      sawCards = true;
-      for (const card of batch) {
-        if (seen.has(card.id) || cards.length >= LOOK || fitsTitle(card.title, queries) === false)
-          continue;
-
-        seen.add(card.id);
-        cards.push(card);
-      }
-
-      await pause(1500, 4000);
     }
+
+    return false;
+  });
+
+  if (login)
+    return { login: true, cards, reason: '' };
+
+  if (unread) {
+    await tellPage('не прочиталась страница hh');
+
+    return { login: false, cards, reason: 'не прочиталась страница hh' };
   }
 
   if (cards.length === 0)
@@ -166,12 +183,14 @@ function usable(page: { url: string; html: string; ok: boolean } | null): page i
 
 async function fetchInPage(tabId: number, url: string): Promise<{ url: string; html: string; ok: boolean } | null> {
   try {
-    const results = await browser.scripting.executeScript({
+    const results = await within(browser.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
       func: fetchPage,
-      args: [url],
-    });
+      args: [url, PAGE_MS],
+    }), PAGE_MS + 5_000);
+    if (results === null)
+      return null;
 
     return asFetched(results[0]?.result);
   }
@@ -182,10 +201,12 @@ async function fetchInPage(tabId: number, url: string): Promise<{ url: string; h
 
 async function readTab(tabId: number): Promise<{ url: string; html: string } | null> {
   try {
-    const results = await browser.scripting.executeScript({
+    const results = await within(browser.scripting.executeScript({
       target: { tabId },
       func: readPage,
-    });
+    }), PAGE_MS);
+    if (results === null)
+      return null;
 
     return asHtml(results[0]?.result);
   }
@@ -197,16 +218,17 @@ async function readTab(tabId: number): Promise<{ url: string; html: string } | n
 async function showUrl(tabId: number, url: string): Promise<void> {
   const tab = await browser.tabs.get(tabId).catch(() => null);
   const loaded = waitTab(tabId, 15_000);
-  await browser.tabs.update(tabId, tab?.active === true ? { url } : { url, active: false });
+  await within(browser.tabs.update(tabId, tab?.active === true ? { url } : { url, active: false }), PAGE_MS);
   await loaded;
   await pause(500, 1200);
 }
 
-function fetchPage(url: string): Promise<{ url: string; html: string; ok: boolean }> {
+function fetchPage(url: string, ms: number): Promise<{ url: string; html: string; ok: boolean }> {
   return fetch(url, {
     credentials: 'include',
     redirect: 'follow',
     headers: { accept: 'text/html' },
+    signal: AbortSignal.timeout(ms),
   }).then(res => res.text().then(html => ({
     url: res.url,
     html: html.slice(0, 1_500_000),
@@ -446,6 +468,22 @@ function decode(html: string): string {
     .replace(/&gt;/g, '>')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function within<T>(work: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(null);
+      },
+    );
+  });
 }
 
 function pause(min: number, max: number): Promise<void> {

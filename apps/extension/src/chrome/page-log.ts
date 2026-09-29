@@ -17,6 +17,7 @@ let stall: ReturnType<typeof setTimeout> | undefined;
 let onHangClear: (() => Promise<boolean>) | undefined;
 
 const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
+const SEARCH_TICK = /^ищу вакансию, \d+ с$/;
 
 function stallText(text: string): boolean {
   return text === 'сервер молчит' || text.startsWith('я завис');
@@ -92,7 +93,7 @@ export function stalling(): boolean {
 export function stallStep(): string {
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     const line = lines[index] ?? '';
-    if (line.length === 0 || stallText(line) || TICK.test(line))
+    if (line.length === 0 || stallText(line) || movingTick(line))
       continue;
 
     return line;
@@ -223,6 +224,9 @@ function planStall(): void {
     }
 
     const step = stallStep() || 'жду очередь';
+    if (step === 'ищу вакансию' || step.startsWith('ищу вакансию,'))
+      return;
+
     const mins = Math.max(1, Math.round((Date.now() - notedAt) / 60_000));
     void tellPage(serverWait ? 'сервер молчит' : `я завис: ${step}, ${mins} мин`);
   }, Math.max(0, limit - quiet));
@@ -261,12 +265,53 @@ async function broadcast(rows: string[]): Promise<void> {
 }
 
 function sameTick(previous: string, next: string): boolean {
+  if (SEARCH_TICK.test(previous) && SEARCH_TICK.test(next))
+    return true;
+
   const was = previous.match(TICK);
   const now = next.match(TICK);
   if (was === null || now === null)
     return false;
 
   return was[1] === now[1];
+}
+
+function movingTick(text: string): boolean {
+  return TICK.test(text) || SEARCH_TICK.test(text);
+}
+
+let searchGen = 0;
+
+export async function whileSearching<T>(work: () => Promise<T>): Promise<T> {
+  const gen = ++searchGen;
+  const started = Date.now();
+  await tellPage('ищу вакансию');
+  void runSearchClock(gen, started);
+  try {
+    return await work();
+  }
+  finally {
+    if (searchGen === gen)
+      searchGen += 1;
+  }
+}
+
+async function runSearchClock(gen: number, started: number): Promise<void> {
+  while (gen === searchGen && halted === false) {
+    await beatSearch(gen, started);
+    if (gen !== searchGen || halted)
+      return;
+
+    await delay(1000);
+  }
+}
+
+async function beatSearch(gen: number, started: number): Promise<void> {
+  if (gen !== searchGen || halted)
+    return;
+
+  const sec = Math.max(1, Math.ceil((Date.now() - started) / 1000));
+  await tellPage(`ищу вакансию, ${sec} с`);
 }
 
 let namedWait = false;

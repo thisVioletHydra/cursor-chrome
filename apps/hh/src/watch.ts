@@ -20,6 +20,7 @@ const SILENCE_MS = 3 * 60_000;
 const START_GRACE_MS = 5 * 60_000;
 const HANG_BLIND_MS = 60_000;
 const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
+const SEARCH_TICK = /^ищу вакансию, \d+ с$/;
 const FROZEN_MS = 90_000;
 const STEP_MAX = 80;
 const STEP_PREFIX = /^(открыл|ищу|читаю|в очереди|мимо,|сервер|админка|жду|уже видели)/;
@@ -93,6 +94,13 @@ export async function watchPulse(line: string): Promise<boolean> {
   }
 
   noteTick(text);
+  if (searchHang(text)) {
+    pulse = { at: Date.now(), line: 'ищу вакансию' };
+    await mark('extension', 'не прочиталась страница hh', false);
+
+    return false;
+  }
+
   const step = shortStep(text);
   const kept = shortStep(previous) ? previous : '';
   pulse = { at: Date.now(), line: step ? text : kept };
@@ -114,7 +122,7 @@ export async function watchPulse(line: string): Promise<boolean> {
     return pilotStop();
   }
 
-  if (TICK.test(text)) {
+  if (TICK.test(text) || searchTick(text)) {
     stepped = true;
 
     return pilotStop();
@@ -206,6 +214,20 @@ async function silence(): Promise<void> {
   if (queueWait(where) && frozenTick(where) === false && tickMoving())
     return;
 
+  if (where === 'ищу вакансию' || searchTick(where)) {
+    silenceNoted = true;
+    try {
+      await mark('extension', 'не прочиталась страница hh', false);
+    }
+    catch (error) {
+      silenceNoted = false;
+
+      throw error;
+    }
+
+    return;
+  }
+
   silenceNoted = true;
 
   const stuck = queueWait(where) || frozenTick(where);
@@ -231,6 +253,12 @@ async function mark(who: WatchWho, text: string, death: boolean, stage = false):
   const clean = clip(text);
   if (clean.length === 0)
     return;
+
+  if (death && searchHang(clean)) {
+    await mark(who, 'не прочиталась страница hh', false);
+
+    return;
+  }
 
   const key = `${who}:${clean}`;
   const hang = death && who === 'extension' && hangLine(clean);
@@ -315,6 +343,14 @@ function hangLine(text: string): boolean {
 
 function queueWait(text: string): boolean {
   return text === 'жду очередь' || /^жду \d+$/.test(text);
+}
+
+function searchTick(text: string): boolean {
+  return SEARCH_TICK.test(text);
+}
+
+function searchHang(text: string): boolean {
+  return text.startsWith('я завис: ищу вакансию') || text.startsWith('замолчало на шаге ищу');
 }
 
 function noteTick(text: string): void {
