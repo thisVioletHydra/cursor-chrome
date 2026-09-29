@@ -3,7 +3,7 @@ import type { Stored } from './secrets';
 
 import type { Provider } from '@cursor-chrome/hh';
 
-import { asProvider, COVER_LETTER, distillCorpus, parseRules, providerName, scoreAts, splitQueries, splitWords, suggestQueries } from '@cursor-chrome/hh';
+import { asProvider, COVER_LETTER, distillCorpus, parseRules, providerName, scoreAts, splitQueries, splitWords, suggestQueries, watchRestart } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
 import { chainOf, collapseChain, imitationFromFields, isCreator, newExtToken, publishSecrets, readAccount, readResume, withChain, writeAccount, writeAtsScan } from './secrets';
@@ -354,6 +354,16 @@ export async function setLiveAdmin({ request, cookies }: RequestEvent) {
   publishSecrets(login, next);
 
   return { ok: true, detail: hhLive === '1' ? 'Боевой режим включён' : 'Боевой режим выключен', wait: 0 };
+}
+
+export async function restartAdmin({ cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр' };
+
+  await watchRestart();
+
+  return { ok: true, detail: 'Включил' };
 }
 
 export async function importSetupAdmin({ request, cookies }: RequestEvent) {

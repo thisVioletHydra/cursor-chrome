@@ -1,11 +1,11 @@
 import type { RequestHandler } from './$types';
 
-import { COVER_LETTER, dayOpen, pending, pendingCount, QUEUE_TARGET, readMemory, readState, splitQueries, workHours } from '@cursor-chrome/hh';
+import { COVER_LETTER, dayOpen, pending, pendingCount, QUEUE_TARGET, readMemory, readState, splitQueries, takePilotStart, workHours } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { DEFAULT_QUERY, readAccount } from '$lib/server/secrets';
 
-export const GET: RequestHandler = async ({ request }) => {
+export const GET: RequestHandler = async ({ request, url }) => {
   const login = await extLogin(request);
   if (login === null)
     return json({ error: 'нет' }, { status: 401 });
@@ -14,10 +14,12 @@ export const GET: RequestHandler = async ({ request }) => {
   const letter = account.coverLetter || COVER_LETTER;
   const queries = splitQueries(account.hhQuery || DEFAULT_QUERY);
   const stop = state.hung === true && state.auto === false;
+  const auto = state.auto === true;
+  const start = url.searchParams.get('listen') === '1' ? takePilotStart() : false;
   const hours = account.hhHours !== '0';
   const open = (hours === false || workHours()) && dayOpen(memory);
   if (open === false)
-    return json({ items: [], letter, queries, want: false, imitation: account.imitation, stop, hours });
+    return json({ items: [], letter, queries, want: false, imitation: account.imitation, stop, hours, auto, start });
 
   const queued = await pendingCount();
   const want = account.hhLive === '1' && state.auto && queued < QUEUE_TARGET;
@@ -31,5 +33,7 @@ export const GET: RequestHandler = async ({ request }) => {
     imitation: account.imitation,
     stop,
     hours,
+    auto,
+    start,
   });
 };

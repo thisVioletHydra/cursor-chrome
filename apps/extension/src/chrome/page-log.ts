@@ -1,5 +1,6 @@
 import { getSyncKey, getSyncUrl } from './apply-log';
 import { getFlags, setFlags } from './flags';
+import { noteHours } from './hours-flag';
 import { browser } from '../browser-host';
 
 const MAX_LINES = 12;
@@ -195,6 +196,12 @@ function sameTick(previous: string, next: string): boolean {
 
 let pulseTimer: ReturnType<typeof setTimeout> | undefined;
 let pulseLine = '';
+let waking = false;
+let onWake: (() => Promise<void>) | undefined;
+
+export function bindPilotWake(fn: () => Promise<void>): void {
+  onWake = fn;
+}
 
 function schedulePulse(line: string, now: boolean): void {
   if (halted)
@@ -221,49 +228,112 @@ function schedulePulse(line: string, now: boolean): void {
 }
 
 export async function pulseNow(): Promise<void> {
-  if (halted)
-    return;
-
   const flags = await getFlags();
-  if (flags.autoQueue !== true)
+  if (halted || flags.autoQueue !== true) {
+    await listenPilot();
+
     return;
+  }
 
   await postPulse(lines[lines.length - 1] ?? 'жду очередь');
 }
 
 async function postPulse(line: string): Promise<void> {
-  if (halted)
+  if (halted || line.trim().length === 0)
     return;
 
-  const raw = (await getSyncUrl()).trim();
-  const key = await getSyncKey();
-  if (raw.length === 0 || key.length === 0 || line.trim().length === 0)
+  const body = await pilotFetch('/api/pulse', {
+    method: 'POST',
+    body: JSON.stringify({ line }),
+  });
+  if (body === null)
     return;
 
-  let host = '';
-  try {
-    const url = new URL(raw);
-    host = `${url.protocol}//${url.host}`;
+  noteHours(body);
+
+  if (pilotStart(body)) {
+    await pilotWake();
+
+    return;
   }
-  catch {
+
+  if (stopFlag(body))
+    await haltHang();
+}
+
+async function listenPilot(): Promise<void> {
+  const body = await pilotFetch('/api/queue?listen=1');
+  if (body === null)
     return;
+
+  noteHours(body);
+
+  if (pilotStart(body) || pilotAuto(body))
+    await pilotWake();
+}
+
+async function pilotWake(): Promise<void> {
+  if (onWake === undefined || waking)
+    return;
+
+  waking = true;
+  try {
+    await onWake();
   }
+  finally {
+    waking = false;
+  }
+}
+
+async function pilotFetch(path: string, init?: { method: string; body: string }): Promise<unknown | null> {
+  const auth = await pilotAuth();
+  if (auth === null)
+    return null;
 
   try {
-    const res = await fetch(`${host}/api/pulse`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-      body: JSON.stringify({ line }),
+    const headers: Record<string, string> = { authorization: `Bearer ${auth.key}` };
+    if (init?.body !== undefined)
+      headers['content-type'] = 'application/json';
+
+    const res = await fetch(`${auth.host}${path}`, {
+      method: init?.method ?? 'GET',
+      headers,
+      body: init?.body,
     });
     if (res.ok === false)
-      return;
+      return null;
 
     const body: unknown = await res.json();
-    if (stopFlag(body))
-      await haltHang();
+
+    return body;
   }
   catch {
+    return null;
   }
+}
+
+async function pilotAuth(): Promise<{ host: string; key: string } | null> {
+  const raw = (await getSyncUrl()).trim();
+  const key = await getSyncKey();
+  if (raw.length === 0 || key.length === 0)
+    return null;
+
+  try {
+    const url = new URL(raw);
+
+    return { host: `${url.protocol}//${url.host}`, key };
+  }
+  catch {
+    return null;
+  }
+}
+
+function pilotStart(body: unknown): boolean {
+  return typeof body === 'object' && body !== null && 'start' in body && body.start === true;
+}
+
+function pilotAuto(body: unknown): boolean {
+  return typeof body === 'object' && body !== null && 'auto' in body && body.auto === true;
 }
 
 function stopFlag(body: unknown): boolean {

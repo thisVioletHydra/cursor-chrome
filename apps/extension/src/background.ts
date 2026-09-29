@@ -3,12 +3,12 @@ import type { CommandName, WsRequest } from '@cursor-chrome/protocol';
 import { NATIVE_HOST_NAME } from '@cursor-chrome/protocol';
 import { pageInfo, runCommand } from './chrome/commands';
 import { installFocusLock } from './chrome/focus-lock';
-import { getFlags } from './chrome/flags';
+import { getFlags, setFlags } from './chrome/flags';
 import { runMakeGood } from './chrome/make-good';
 import { postNative as sendNative } from './chrome/native-post';
 import { syncNegotiations } from './chrome/negotiations';
 import { ensureOffscreen, setBadge, waitOffscreen } from './chrome/offscreen-ctl';
-import { armLiveLog, clearHangHalt, disarmLiveLog, hangHalted, tickPage } from './chrome/page-log';
+import { armLiveLog, bindPilotWake, clearHangHalt, disarmLiveLog, hangHalted, pulseNow, tickPage } from './chrome/page-log';
 import { clearSearchBusy, clearSearchSoon, isPaused, kickedRecently, markKicked, markSearchSoon, runQueue } from './chrome/queue-run';
 import { rpc } from './chrome/rpc';
 import { closePinnedHh } from './chrome/worker-tab';
@@ -34,6 +34,15 @@ let nativeRetry: ReturnType<typeof setTimeout> | undefined;
 let ignoreNativeDisconnect = false;
 let heldOff = false;
 let armingSearch = false;
+let holdSoon = false;
+
+bindPilotWake(async () => {
+  holdSoon = true;
+  clearHangHalt();
+  await setFlags({ autoQueue: true });
+  holdSoon = false;
+  void runQueue();
+});
 
 browser.runtime.onInstalled.addListener(() => {
   void boot();
@@ -55,6 +64,9 @@ browser.storage.onChanged.addListener((changes, area) => {
 
   if (turnedAutoOn(changes.flags)) {
     clearHangHalt();
+    if (holdSoon)
+      return;
+
     void armSearchSoon(true);
   }
 
@@ -80,6 +92,7 @@ browser.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== ALARM)
     return;
 
+  void pulseNow();
   void ensureOffscreen().then((fail) => {
     if (fail)
       detail = fail;
@@ -255,6 +268,7 @@ async function boot(): Promise<void> {
   connectNative();
   await setBadge(connected);
   await clearSearchBusy();
+  void pulseNow();
 }
 
 function turnedAutoOn(change: chrome.storage.StorageChange | undefined): boolean {

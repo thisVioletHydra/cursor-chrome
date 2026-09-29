@@ -29,6 +29,8 @@ const deaths = new Set<string>();
 let lastStage = '';
 let hangTold = false;
 let silenceNoted = false;
+let pilotStart = false;
+let resumeGen = 0;
 let timer: ReturnType<typeof setInterval> | undefined;
 let notify: (text: string) => Promise<void> = async () => {};
 let loaded = false;
@@ -99,6 +101,33 @@ export function watchNote(who: WatchWho, text: string): void {
 
 export function watchDeath(who: WatchWho, text: string): void {
   void mark(who, clip(text), true);
+}
+
+export async function watchRestart(): Promise<void> {
+  resumeGen += 1;
+  dropHangDeaths();
+  hangTold = false;
+  silenceNoted = false;
+  // Свежий пульс, иначе проверка тишины сразу снова выключит автопилот.
+  pulse = { at: Date.now(), line: shortStep(pulse.line) ? pulse.line : '' };
+  pilotStart = true;
+  try {
+    await writeState({ auto: true });
+  }
+  catch (error) {
+    pilotStart = false;
+
+    throw error;
+  }
+}
+
+export function takePilotStart(): boolean {
+  if (pilotStart === false)
+    return false;
+
+  pilotStart = false;
+
+  return true;
 }
 
 export function watchView(): { pulse: { at: number; line: string }; rows: WatchRow[] } {
@@ -178,6 +207,7 @@ async function mark(who: WatchWho, text: string, death: boolean, stage = false):
     hangTold = true;
 
   if (hang) {
+    const gen = resumeGen;
     try {
       await writeState({ auto: false, hung: true });
     }
@@ -187,6 +217,12 @@ async function mark(who: WatchWho, text: string, death: boolean, stage = false):
         hangTold = false;
 
       throw error;
+    }
+
+    if (gen !== resumeGen) {
+      await writeState({ auto: true });
+
+      return;
     }
   }
 
@@ -212,16 +248,36 @@ function hangLine(text: string): boolean {
   return text === 'я завис' || text.startsWith('замолчало');
 }
 
+function dropHangDeaths(): void {
+  for (const key of deaths) {
+    if (key.startsWith('extension:') === false)
+      continue;
+
+    if (hangLine(key.slice('extension:'.length)))
+      deaths.delete(key);
+  }
+}
+
 async function holdPilot(): Promise<void> {
   const tell = hangTold === false;
   if (tell)
     hangTold = true;
 
+  const gen = resumeGen;
   const state = await readState().catch(() => null);
+  if (gen !== resumeGen)
+    return;
+
   if (state !== null && state.auto === false && state.hung === true)
     return;
 
   await writeState({ auto: false, hung: true });
+  if (gen !== resumeGen) {
+    await writeState({ auto: true });
+
+    return;
+  }
+
   if (tell)
     await notify('Расширение зависло. Автопилот выключен. Иди чини.').catch(() => undefined);
 }

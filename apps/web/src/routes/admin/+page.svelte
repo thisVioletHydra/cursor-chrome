@@ -9,6 +9,13 @@ let shownPulse = $state('');
 let watchLog = $state<{ at: number; who: string; text: string; death: boolean }[]>([]);
 let watchList = $state<HTMLUListElement>();
 let followLog = true;
+let restarting = $state(false);
+let restartNote = $state('');
+let restartOk = $state(false);
+let hoursOn = $state(data.hours !== false);
+let hoursSaving = $state(false);
+let hoursNote = $state('');
+let hoursOk = $state(false);
 
 const whoName: Record<string, string> = {
   extension: 'расширение',
@@ -20,6 +27,10 @@ const whoName: Record<string, string> = {
 $effect(() => {
   stats = data.stats;
   polling = data.polling;
+});
+
+$effect(() => {
+  hoursOn = data.hours !== false;
 });
 
 onMount(() => {
@@ -156,12 +167,41 @@ const checks = $derived([
   { ok: data.ready.live, label: 'Боевой режим', miss: 'Боевой режим выключен. Включи его кнопкой ниже.', href: '', link: '' },
 ]);
 const allGreen = $derived(checks.every(row => row.ok));
+
+function restartDetail(data: unknown): { ok: boolean; detail: string } {
+  if (typeof data !== 'object' || data === null)
+    return { ok: false, detail: 'не вышло' };
+
+  const detail = 'detail' in data && typeof data.detail === 'string' ? data.detail : 'не вышло';
+  const ok = 'ok' in data && data.ok === true;
+
+  return { ok, detail };
+}
+
+const hoursLine = $derived(
+  hoursOn
+    ? 'ищем и откликаемся только с 9:00 до 22:00 по Москве'
+    : 'ищем и откликаемся в любое время (для тестов)',
+);
+
+function hoursAnswer(payload: unknown): { ok: boolean; detail: string; hours: boolean | null } {
+  if (typeof payload !== 'object' || payload === null)
+    return { ok: false, detail: 'не вышло', hours: null };
+
+  const ok = 'ok' in payload && payload.ok === true;
+  const detail = 'detail' in payload && typeof payload.detail === 'string' && payload.detail.length > 0
+    ? payload.detail
+    : 'не вышло';
+  const hours = 'hours' in payload && typeof payload.hours === 'boolean' ? payload.hours : null;
+
+  return { ok, detail, hours };
+}
 </script>
 
 <section class="mb-8 rounded-2xl border border-white/8 bg-[#151922] px-5 {allGreen ? 'py-3' : 'py-4'}">
   <h2 class="text-base font-semibold">До старта</h2>
   {#if allGreen}
-    <p class="mt-2 text-xs text-zinc-500">«Старт» в боте только включает автопилот. Поиск и клики делает открытый Chrome: ссылка в попапе, запиненная вкладка hh.ru и «Автопилот в Chrome», с 9:00 до 22:00 МСК.</p>
+    <p class="mt-2 text-xs text-zinc-500">С 9:00 до 22:00 МСК.</p>
   {/if}
   <ul class="mt-3 grid grid-cols-2 gap-x-4 {allGreen ? 'gap-y-1' : 'gap-y-3'}">
     {#each checks as row (row.label)}
@@ -246,7 +286,7 @@ const allGreen = $derived(checks.every(row => row.ok));
         </tbody>
       </table>
     {:else}
-      <p class="px-5 py-8 text-sm text-zinc-500">Очередь пустая. Напиши боту «старт».</p>
+      <p class="px-5 py-8 text-sm text-zinc-500">Очередь пустая.</p>
     {/if}
   </div>
 </section>
@@ -278,11 +318,74 @@ const allGreen = $derived(checks.every(row => row.ok));
     <span class="badge badge-sm {stats.autopilot.auto ? 'badge-success' : 'badge-ghost'}">
       Автопилот {stats.autopilot.auto ? 'вкл' : 'выкл'}
     </span>
+    <form
+      class="contents"
+      method="POST"
+      action="?/restart"
+      use:enhance={() => {
+        restarting = true;
+        restartNote = '';
+        return async ({ result }) => {
+          restarting = false;
+          const parsed = restartDetail(result.type === 'success' ? result.data : null);
+          restartOk = parsed.ok;
+          restartNote = parsed.detail;
+          if (parsed.ok)
+            stats = { ...stats, autopilot: { ...stats.autopilot, auto: true } };
+        };
+      }}
+    >
+      <button class="btn btn-ghost btn-sm h-8 min-h-8 px-3" type="submit" disabled={restarting}>
+        {restarting ? 'Запускаю' : 'Перезапустить'}
+      </button>
+    </form>
+    {#if restartNote}
+      <p class="text-xs {restartOk ? 'text-emerald-400' : 'text-rose-300'}">{restartNote}</p>
+    {/if}
     <p class="text-xs text-zinc-500">{polling ? 'Бот слушает команды.' : 'Бот молчит, пока нет токена телеги.'}</p>
     {#if stats.autopilot.lastNote}
       <p class="text-xs text-zinc-500">{stats.autopilot.lastNote}</p>
     {/if}
   </div>
+  <form
+    class="mb-4 max-w-xl rounded-2xl border border-white/8 bg-[#151922] px-5 py-4"
+    method="POST"
+    action="?/hours"
+    use:enhance={() => {
+      hoursSaving = true;
+      hoursNote = '';
+      return async ({ result, update }) => {
+        const parsed = hoursAnswer(result.type === 'success' ? result.data : null);
+        try {
+          if (parsed.ok)
+            await update({ reset: false });
+        }
+        finally {
+          hoursSaving = false;
+          hoursOk = parsed.ok;
+          hoursNote = parsed.detail;
+          if (parsed.ok && parsed.hours !== null)
+            hoursOn = parsed.hours;
+        }
+      };
+    }}
+  >
+    <h3 class="text-base font-semibold">Часы поиска</h3>
+    <p class="mt-1 text-sm text-zinc-300">{hoursLine}</p>
+    <input name="hhHours" type="hidden" value={hoursOn ? '0' : '1'} />
+    <div class="mt-3 flex flex-wrap items-center gap-3">
+      <button
+        class="btn btn-ghost h-11 min-h-11 px-4 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-[0.97] disabled:cursor-wait disabled:opacity-60"
+        type="submit"
+        disabled={hoursSaving}
+        aria-pressed={hoursOn}
+        aria-busy={hoursSaving}
+      >{hoursSaving ? 'Сохраняю…' : hoursOn ? 'Включено' : 'Выключено'}</button>
+      {#if hoursNote}
+        <p class="text-sm {hoursOk ? 'text-emerald-300' : 'text-rose-300'}" aria-live="polite">{hoursNote}</p>
+      {/if}
+    </div>
+  </form>
   <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
     {#each figures as figure}
       <div class="stat rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
