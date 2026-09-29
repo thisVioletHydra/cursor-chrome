@@ -334,8 +334,7 @@ export async function saveImitationAdmin({ request, cookies }: RequestEvent) {
   if (parsed.ok === false)
     return { ok: false, detail: parsed.detail, wait: 0 };
 
-  const hhHours = form.get('hhHours') === '1' ? '1' : '0';
-  const next = { ...await readAccount(login), imitation: parsed.pace, hhHours };
+  const next = { ...await readAccount(login), imitation: parsed.pace };
   await writeAccount(login, next);
   publishSecrets(login, next);
 
@@ -354,6 +353,20 @@ export async function setLiveAdmin({ request, cookies }: RequestEvent) {
   publishSecrets(login, next);
 
   return { ok: true, detail: hhLive === '1' ? 'Боевой режим включён' : 'Боевой режим выключен', wait: 0 };
+}
+
+export async function setHoursAdmin({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', hours: true };
+
+  const form = await request.formData();
+  const hhHours = form.get('hhHours') === '0' ? '0' : '1';
+  const next = { ...await readAccount(login), hhHours };
+  await writeAccount(login, next);
+  publishSecrets(login, next);
+
+  return { ok: true, detail: 'Сохранено', hours: hhHours !== '0' };
 }
 
 export async function restartAdmin({ cookies }: RequestEvent) {

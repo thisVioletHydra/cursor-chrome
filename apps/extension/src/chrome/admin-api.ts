@@ -1,4 +1,5 @@
 import { setCoverLetter } from '../hh/letter';
+import { noteHours } from './hours-flag';
 import { haltHang } from './page-log';
 import { rememberPace } from './pace';
 
@@ -6,11 +7,7 @@ export type QueueItem = { id: string; company: string; title: string; url: strin
 
 export type Hunt = { items: QueueItem[]; queries: string[]; want: boolean };
 
-let workHoursKept = true;
-
-export function keepWorkHours(): boolean {
-  return workHoursKept;
-}
+export { keepWorkHours } from './hours-flag';
 
 export async function fetchHunt(base: string, key: string): Promise<Hunt | null> {
   const body = await getQueue(base, key);
@@ -69,8 +66,7 @@ async function getQueue(base: string, key: string): Promise<{ items?: unknown; l
       return null;
 
     const body = await res.json() as { items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; stop?: unknown; hours?: unknown };
-    if (typeof body.hours === 'boolean')
-      workHoursKept = body.hours;
+    noteHours(body);
 
     if (body.stop === true)
       await haltHang();

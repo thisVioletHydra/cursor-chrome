@@ -3,14 +3,12 @@ import { enhance } from '$app/forms';
 
 let { data } = $props();
 let pace = $state({ ...data.pace });
-let hours = $state(data.hours !== false);
 let saving = $state(false);
 let message = $state('');
 let ok = $state(false);
 
 $effect(() => {
   pace = { ...data.pace };
-  hours = data.hours !== false;
 });
 
 const steps = $derived([
@@ -274,16 +272,6 @@ function onSave() {
         </label>
       </div>
     </fieldset>
-    <input name="hhHours" type="hidden" value={hours ? '1' : '0'} />
-    <label class="flex cursor-pointer items-center gap-2 text-sm text-zinc-300">
-      <input
-        class="checkbox checkbox-sm checkbox-primary"
-        type="checkbox"
-        bind:checked={hours}
-        disabled={saving}
-      />
-      Только с 9 до 22
-    </label>
     <div class="flex flex-wrap items-center gap-3">
       <button
         class="btn btn-primary h-11 min-h-11 px-4 active:scale-[0.97] disabled:cursor-wait disabled:opacity-60"
