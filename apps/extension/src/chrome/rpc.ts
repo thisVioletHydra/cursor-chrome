@@ -4,6 +4,7 @@ import { getFlags, setFlags } from './flags';
 import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from './human-review';
 import { syncNegotiations } from './negotiations';
 import { clearStuckHang, forgetStuckHang, liveLines, stallStep, stalling, tellPage } from './page-log';
+import { pushPilot } from './pilot-switch';
 import { forgetHangReport, queueBusy, readPausedUntil, readQueueReport, runQueue } from './queue-run';
 import { pullSavedResume } from './resume-pull';
 import { checkWorker, listJobTabs, openHhBackground, pinWorker } from './worker-tab';
@@ -224,6 +225,12 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
 };
 
 async function writeFlags(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean }): Promise<unknown> {
+  if (patch.autoQueue === true || patch.autoQueue === false) {
+    const pushed = await pushPilot(patch.autoQueue);
+    if (pushed.ok === false)
+      return { error: pushed.error, autoQueue: patch.autoQueue === false };
+  }
+
   const next = await setFlags(patch);
   if ('autoQueue' in patch)
     await forgetStuckHang();

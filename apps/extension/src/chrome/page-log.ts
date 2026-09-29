@@ -61,6 +61,23 @@ export function clearHangHalt(): void {
   halted = false;
 }
 
+let pilotGen = 0;
+let hangLive = true;
+
+export function bumpPilot(): void {
+  pilotGen += 1;
+  hangLive = false;
+  lines.length = 0;
+  if (stall !== undefined)
+    clearTimeout(stall);
+
+  stall = undefined;
+}
+
+export function pilotStamp(): number {
+  return pilotGen;
+}
+
 export function bindHangClear(fn: () => Promise<boolean>): void {
   onHangClear = fn;
 }
@@ -123,7 +140,13 @@ export async function tellPage(line: string): Promise<void> {
   if (text.length === 0)
     return;
 
+  if (STALL_LINE.has(text) && hangLive === false)
+    return;
+
   notedAt = Date.now();
+  if (STALL_LINE.has(text) === false)
+    hangLive = true;
+
   if (repeatedHang(text)) {
     planStall();
     schedulePulse(text, true);
@@ -282,11 +305,15 @@ async function postPulse(line: string): Promise<void> {
   if (halted || line.trim().length === 0)
     return;
 
+  if (STALL_LINE.has(line) && hangLive === false)
+    return;
+
+  const stamp = pilotStamp();
   const body = await pilotFetch('/api/pulse', {
     method: 'POST',
     body: JSON.stringify({ line }),
   });
-  if (body === null)
+  if (body === null || stamp !== pilotStamp())
     return;
 
   noteHours(body);
@@ -307,8 +334,9 @@ async function postPulse(line: string): Promise<void> {
 }
 
 async function listenPilot(): Promise<void> {
+  const stamp = pilotStamp();
   const body = await pilotFetch('/api/queue?listen=1');
-  if (body === null)
+  if (body === null || stamp !== pilotStamp())
     return;
 
   noteHours(body);

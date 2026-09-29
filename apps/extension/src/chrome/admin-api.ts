@@ -1,6 +1,6 @@
 import { setCoverLetter } from '../hh/letter';
 import { noteHours } from './hours-flag';
-import { haltHang } from './page-log';
+import { haltHang, pilotStamp } from './page-log';
 import { rememberPace } from './pace';
 
 export type QueueItem = { id: string; company: string; title: string; url: string };
@@ -60,6 +60,7 @@ export async function postFound(base: string, key: string, cards: unknown[]): Pr
 }
 
 async function getQueue(base: string, key: string): Promise<{ items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; hours?: unknown } | null> {
+  const stamp = pilotStamp();
   try {
     const res = await fetch(`${base}/api/queue`, { headers: { authorization: `Bearer ${key}` } });
     if (res.ok === false)
@@ -68,7 +69,7 @@ async function getQueue(base: string, key: string): Promise<{ items?: unknown; l
     const body = await res.json() as { items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; stop?: unknown; hours?: unknown };
     noteHours(body);
 
-    if (body.stop === true)
+    if (body.stop === true && stamp === pilotStamp())
       await haltHang();
 
     if (typeof body.letter === 'string')

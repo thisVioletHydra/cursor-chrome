@@ -71,6 +71,8 @@ let autoOn = false;
 let powering = false;
 let reviving = false;
 let revivedAt = 0;
+let clingUntil = 0;
+let powerFail = '';
 let waitCleared = false;
 
 const clicks: Record<string, () => void> = {
@@ -152,6 +154,9 @@ browser.storage.onChanged.addListener((changes, area) => {
     return;
 
   const on = next.autoQueue === true;
+  if (on === false && (powering || Date.now() < clingUntil))
+    return;
+
   if (on === autoOn)
     return;
 
@@ -550,8 +555,8 @@ function paintPower(): void {
     return;
 
   powerBtn.disabled = false;
-  powerBtn.textContent = autoOn ? 'Выключить' : 'Включить';
-  powerBtn.classList.toggle('on', autoOn);
+  powerBtn.textContent = powerFail.length > 0 ? powerFail : (autoOn ? 'Выключить' : 'Включить');
+  powerBtn.classList.toggle('on', autoOn && powerFail.length === 0);
   powerBtn.setAttribute('aria-pressed', autoOn ? 'true' : 'false');
 }
 
@@ -808,6 +813,8 @@ async function togglePower(): Promise<void> {
   }
 
   powering = true;
+  powerFail = '';
+  clingUntil = 0;
   powerBtn.disabled = true;
   powerBtn.textContent = next ? 'Включаю…' : 'Выключаю…';
   clearPowerNote();
@@ -828,13 +835,17 @@ async function togglePower(): Promise<void> {
 
     const result = await browser.runtime.sendMessage({ type: 'set-flags', autoQueue: next }) as { error?: string; autoQueue?: boolean };
     if (typeof result?.error === 'string' && result.error.length > 0) {
-      paintPowerNote(result.error);
+      powerFail = result.error;
+      if (next)
+        autoOn = false;
 
       return;
     }
 
     if (typeof result?.autoQueue !== 'boolean') {
-      paintPowerNote('нет ответа');
+      powerFail = 'нет ответа';
+      if (next)
+        autoOn = false;
 
       return;
     }
@@ -847,6 +858,7 @@ async function togglePower(): Promise<void> {
       return;
     }
 
+    clingUntil = Date.now() + 15_000;
     const paused = await readPaused();
     if (paused !== null) {
       paintStatus(`Пауза до ${clockOf(paused)}`);
@@ -859,7 +871,14 @@ async function togglePower(): Promise<void> {
     kickSearch();
   }
   catch (error) {
-    paintPowerNote(error instanceof Error ? error.message : 'не вышло');
+    const text = error instanceof Error ? error.message : 'не вышло';
+    if (next) {
+      powerFail = text;
+      autoOn = false;
+    }
+    else {
+      paintPowerNote(text);
+    }
   }
   finally {
     powering = false;

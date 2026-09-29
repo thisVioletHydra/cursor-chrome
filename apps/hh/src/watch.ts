@@ -17,6 +17,8 @@ export type WatchRow = {
 const MAX_ROWS = 200;
 const MAX_BYTES = 200_000;
 const SILENCE_MS = 3 * 60_000;
+const START_GRACE_MS = 5 * 60_000;
+const HANG_BLIND_MS = 60_000;
 const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
 const STEP_MAX = 80;
 const STEP_PREFIX = /^(открыл|ищу|читаю|в очереди|мимо,|сервер|админка|жду|уже видели)/;
@@ -30,6 +32,8 @@ let lastStage = '';
 let hangTold = false;
 let silenceNoted = false;
 let pilotStart = false;
+let startedAt = 0;
+let stepped = false;
 let resumeGen = 0;
 let timer: ReturnType<typeof setInterval> | undefined;
 let notify: (text: string) => Promise<void> = async () => {};
@@ -73,6 +77,9 @@ export async function watchPulse(line: string): Promise<boolean> {
   const kept = shortStep(pulse.line) ? pulse.line : '';
   pulse = { at: Date.now(), line: step ? text : kept };
   if (text === 'я завис' || text === 'сервер молчит') {
+    if (holdHang())
+      return pilotStop();
+
     await mark('extension', text, true);
 
     return pilotStop();
@@ -87,8 +94,14 @@ export async function watchPulse(line: string): Promise<boolean> {
     return pilotStop();
   }
 
-  if (TICK.test(text))
+  if (TICK.test(text)) {
+    stepped = true;
+
     return pilotStop();
+  }
+
+  if (text !== 'жду очередь')
+    stepped = true;
 
   await mark('extension', text, false, true);
 
@@ -108,6 +121,8 @@ export async function watchRestart(): Promise<void> {
   dropHangDeaths();
   hangTold = false;
   silenceNoted = false;
+  startedAt = Date.now();
+  stepped = false;
   // Свежий пульс, иначе проверка тишины сразу снова выключит автопилот.
   pulse = { at: Date.now(), line: shortStep(pulse.line) ? pulse.line : '' };
   pilotStart = true;
@@ -116,9 +131,17 @@ export async function watchRestart(): Promise<void> {
   }
   catch (error) {
     pilotStart = false;
+    startedAt = 0;
 
     throw error;
   }
+}
+
+export async function watchStop(): Promise<void> {
+  pilotStart = false;
+  startedAt = 0;
+  stepped = false;
+  await writeState({ auto: false });
 }
 
 export function takePilotStart(): boolean {
@@ -145,6 +168,9 @@ async function silence(): Promise<void> {
 
     return;
   }
+
+  if (startedAt > 0 && Date.now() - startedAt < START_GRACE_MS)
+    return;
 
   const stale = pulse.at === 0 || Date.now() - pulse.at > SILENCE_MS;
   if (stale === false) {
@@ -242,6 +268,18 @@ async function mark(who: WatchWho, text: string, death: boolean, stage = false):
     return;
 
   await notify(`${headline(who)} ${clean}. Иди чини.`).catch(() => undefined);
+}
+
+// Минуту после старта «я завис» ещё от прошлого раза. Позже он гасит, только если шаг уже был.
+function holdHang(): boolean {
+  if (startedAt === 0)
+    return false;
+
+  const age = Date.now() - startedAt;
+  if (age < HANG_BLIND_MS)
+    return true;
+
+  return age < START_GRACE_MS && stepped === false;
 }
 
 function hangLine(text: string): boolean {
