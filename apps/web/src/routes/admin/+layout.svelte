@@ -1,19 +1,37 @@
 <script lang="ts">
 import { page } from '$app/stores';
+import NavIcon from './NavIcon.svelte';
 
 let { data, children } = $props();
 let accountOpen = $state(false);
 
-const items = [
-  { href: '/admin', label: 'Главная', exact: true },
-  { href: '/admin/telegram', label: 'Telegram', exact: false },
-  { href: '/admin/model', label: 'Модель', exact: false },
-  { href: '/admin/hh', label: 'HeadHunter', exact: false },
-  { href: '/admin/extension', label: 'Extension', exact: false },
-  { href: '/admin/letter', label: 'Сопроводительное', exact: false },
-  { href: '/admin/billing', label: 'Billing', exact: false },
-  { href: '/admin/config', label: 'Конфиг', exact: false },
+const items: { href: string; label: string; exact: boolean; icon?: string }[] = [
+  { href: '/admin', label: 'Главная', exact: true, icon: 'home' },
+  { href: '/admin/telegram', label: 'Telegram', exact: false, icon: 'plane' },
+  { href: '/admin/model', label: 'Модель', exact: false, icon: 'spark' },
+  { href: '/admin/hh', label: 'HeadHunter', exact: false, icon: 'briefcase' },
+  { href: '/admin/extension', label: 'Extension', exact: false, icon: 'puzzle' },
+  { href: '/admin/letter', label: 'Сопроводительное', exact: false, icon: 'letter' },
+  { href: '/admin/billing', label: 'Billing', exact: false, icon: 'card' },
+  { href: '/admin/config', label: 'Конфиг', exact: false, icon: 'file' },
+  { href: '/admin/imitation', label: 'Имитация', exact: false, icon: 'person' },
 ];
+
+const iconByLabel: Record<string, string> = {
+  'Главная': 'home',
+  Telegram: 'plane',
+  'Модель': 'spark',
+  HeadHunter: 'briefcase',
+  Extension: 'puzzle',
+  'Сопроводительное': 'letter',
+  Billing: 'card',
+  'Конфиг': 'file',
+  'Имитация': 'person',
+};
+
+function iconName(item: { label: string; icon?: string }): string {
+  return item.icon ?? iconByLabel[item.label] ?? 'mark';
+}
 
 const current = (href: string, exact: boolean) => {
   const path = $page.url.pathname;
@@ -29,10 +47,15 @@ const current = (href: string, exact: boolean) => {
     <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
       <nav class="flex flex-col gap-1">
         {#each items as item}
+          {@const on = current(item.href, item.exact)}
           <a
-            class="rounded-xl px-3 py-2 text-sm transition hover:bg-white/5 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 {current(item.href, item.exact) ? 'bg-white/10 text-white' : 'text-zinc-400'}"
+            class="flex min-w-0 items-center gap-2 rounded-xl px-2 py-1.5 text-sm transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 {on ? 'bg-indigo-500/30 text-white ring-1 ring-inset ring-indigo-400/60 hover:bg-indigo-500/40' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}"
             href={item.href}
-          >{item.label}</a>
+            aria-current={on ? 'page' : undefined}
+          >
+            <NavIcon name={iconName(item)} class={on ? 'text-indigo-300' : ''} />
+            <span class="min-w-0 flex-1 truncate">{item.label}</span>
+          </a>
         {/each}
       </nav>
     </div>
