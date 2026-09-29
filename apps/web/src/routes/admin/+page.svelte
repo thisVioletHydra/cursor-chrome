@@ -158,6 +158,20 @@ const allGreen = $derived(checks.every(row => row.ok));
   </form>
 </section>
 
+<section class="mb-8 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+  <h2 class="text-base font-semibold">Логирование</h2>
+  <p class="mt-2 font-mono text-xs text-indigo-200">{pulseLine.length > 0 ? pulseLine : 'пульса ещё нет'}</p>
+  {#if watchLog.length === 0}
+    <p class="mt-3 text-xs text-zinc-500">Пока тихо. Сюда попадают смена шага и поломки, не каждая секунда.</p>
+  {:else}
+    <ul bind:this={watchList} class="mt-3 max-h-40 overflow-y-auto font-mono text-xs" onscroll={onLogScroll}>
+      {#each watchLog as row (row.at + row.text)}
+        <li class={row.death ? 'text-rose-300' : 'text-zinc-400'}>{clock(row.at)} {whoName[row.who] ?? row.who} {row.text}</li>
+      {/each}
+    </ul>
+  {/if}
+</section>
+
 <section class="mb-8">
   <div class="max-h-[26rem] overflow-x-auto overflow-y-auto rounded-2xl border border-white/8 bg-[#151922]">
     {#if stats.rows.length > 0}
@@ -185,20 +199,6 @@ const allGreen = $derived(checks.every(row => row.ok));
       <p class="px-5 py-8 text-sm text-zinc-500">Очередь пустая. Напиши боту «старт».</p>
     {/if}
   </div>
-</section>
-
-<section class="mb-8 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
-  <h2 class="text-base font-semibold">Сторож</h2>
-  <p class="mt-2 font-mono text-xs text-indigo-200">{pulseLine.length > 0 ? pulseLine : 'пульса ещё нет'}</p>
-  {#if watchLog.length === 0}
-    <p class="mt-3 text-xs text-zinc-500">Пока тихо. Сюда попадают смена шага и поломки, не каждая секунда.</p>
-  {:else}
-    <ul bind:this={watchList} class="mt-3 max-h-40 overflow-y-auto font-mono text-xs" onscroll={onLogScroll}>
-      {#each watchLog as row (row.at + row.text)}
-        <li class={row.death ? 'text-rose-300' : 'text-zinc-400'}>{clock(row.at)} {whoName[row.who] ?? row.who} {row.text}</li>
-      {/each}
-    </ul>
-  {/if}
 </section>
 
 <header class="mb-8">
