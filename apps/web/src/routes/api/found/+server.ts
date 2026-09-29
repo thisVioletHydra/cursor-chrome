@@ -27,40 +27,94 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const [account, state, memory] = await Promise.all([readAccount(login), readState(), readMemory()]);
   const queued = await pendingCount();
-  const open = account.hhLive === '1' && state.auto && workHours() && dayOpen(memory) && queued < QUEUE_TARGET;
-  if (open === false)
-    return json({ ok: true, added: 0 });
+  const closed = closedReason(account.hhLive === '1', state.auto, workHours(), dayOpen(memory), queued < QUEUE_TARGET);
+  if (closed.length > 0)
+    return json({ ok: true, added: 0, reason: closed });
 
   const body = await request.json().catch(() => null) as { vacancies?: unknown } | null;
-  const list = vacanciesOf(body?.vacancies);
+  if (body === null || Array.isArray(body.vacancies) === false || body.vacancies.length === 0)
+    return json({ ok: true, added: 0, reason: 'пустое тело' });
+
+  const list = vacanciesOf(body.vacancies);
   if (list.length === 0)
-    return json({ ok: true, added: 0 });
+    return json({ ok: true, added: 0, reason: 'не те id' });
 
   const query = account.hhQuery || '';
-  const result = await scan({
-    query,
-    dry: false,
-    live: true,
-    load: async () => list,
-  });
+  let result: Awaited<ReturnType<typeof scan>>;
+  try {
+    result = await scan({
+      query,
+      dry: false,
+      live: true,
+      load: async () => list,
+    });
+  }
+  catch (error) {
+    const text = error instanceof Error ? error.message.trim() : '';
 
-  let added = 0;
-  for (const report of result.reports) {
-    if (report.verdict === 'apply') {
-      added += 1;
-      const paid = await chargeQueued({ id: report.id, company: report.company, url: report.url });
-      if (paid === false) {
-        await notifyOwner('Баланс кончился. Вакансия стоит 1 ₽.');
-        break;
-      }
-    }
-
-    if (report.verdict === 'human')
-      await notifyOwner(report.line);
+    return json({ ok: false, added: 0, reason: text.length > 0 ? text.slice(0, 200) : 'скан упал' });
   }
 
-  return json({ ok: true, added, already: result.already });
-};
+  let added = 0;
+  try {
+    for (const report of result.reports) {
+      if (report.verdict === 'apply') {
+        added += 1;
+        const paid = await chargeQueued({ id: report.id, company: report.company, url: report.url });
+        if (paid === false) {
+          await notifyOwner('Баланс кончился. Вакансия стоит 1 ₽.');
+          break;
+        }
+      }
+
+      if (report.verdict === 'human')
+        await notifyOwner(report.line);
+    }
+  }
+  catch (error) {
+    const text = error instanceof Error ? error.message.trim() : '';
+
+    return json({ ok: added > 0, added, already: result.already, reason: text.length > 0 ? text.slice(0, 200) : 'скан упал' });
+  }
+
+  const reason = added === 0 ? idleReason(result.reports, result.already) : '';
+
+  return json({ ok: true, added, already: result.already, reason });
+}
+
+function closedReason(live: boolean, auto: boolean, hours: boolean, day: boolean, room: boolean): string {
+  if (live === false)
+    return 'живой режим выкл';
+
+  if (auto === false)
+    return 'автопилот выкл';
+
+  if (hours === false)
+    return 'не рабочие часы';
+
+  if (day === false)
+    return 'день закрыт';
+
+  if (room === false)
+    return 'очередь полная';
+
+  return '';
+}
+
+function idleReason(reports: { verdict: string; reason: string }[], already: number): string {
+  const human = reports.find(report => report.verdict === 'human');
+  if (human)
+    return human.reason;
+
+  if (reports.length === 0 && already > 0)
+    return 'уже видели';
+
+  const skip = reports.find(report => report.verdict === 'skip');
+  if (skip)
+    return skip.reason;
+
+  return 'в очередь ничего не встало';
+}
 
 function vacanciesOf(value: unknown): Vacancy[] {
   if (Array.isArray(value) === false)
@@ -84,9 +138,9 @@ function vacancyOf(value: unknown): Vacancy | null {
     return null;
 
   const row = value as Incoming;
-  const id = typeof row.id === 'string' ? row.id.trim() : '';
+  const id = idOf(row.id) || idOf(urlId(row.url));
   const title = typeof row.title === 'string' ? row.title.trim() : '';
-  if (/^\d+$/.test(id) === false || title.length === 0)
+  if (id.length === 0 || title.length === 0)
     return null;
 
   const url = typeof row.url === 'string' && row.url.includes('/vacancy/')
@@ -108,6 +162,25 @@ function vacancyOf(value: unknown): Vacancy | null {
     employerId: '',
     experience: textOf(row.experience, '').slice(0, 80),
   };
+}
+
+function idOf(value: unknown): string {
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0)
+    return String(value);
+
+  if (typeof value !== 'string')
+    return '';
+
+  const id = value.trim();
+
+  return /^\d+$/.test(id) ? id : '';
+}
+
+function urlId(value: unknown): string {
+  if (typeof value !== 'string')
+    return '';
+
+  return value.match(/\/vacancy\/(\d+)/)?.[1] ?? '';
 }
 
 function textOf(value: unknown, fallback: string): string {

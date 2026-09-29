@@ -28,18 +28,30 @@ export async function fetchQueue(base: string, key: string): Promise<QueueItem[]
   return body.items.filter(isItem);
 }
 
-export async function postFound(base: string, key: string, cards: unknown[]): Promise<boolean> {
+export type FoundReply = { ok: boolean; added: number; reason: string };
+
+export async function postFound(base: string, key: string, cards: unknown[]): Promise<FoundReply> {
   try {
     const res = await fetch(`${base}/api/found`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
       body: JSON.stringify({ vacancies: cards }),
     });
+    const body = await res.json().catch(() => null) as { ok?: unknown; added?: unknown; reason?: unknown; error?: unknown } | null;
+    if (body === null)
+      return { ok: false, added: 0, reason: res.ok ? 'пустое тело' : `сервер ${res.status}` };
 
-    return res.ok;
+    const reason = typeof body.reason === 'string'
+      ? body.reason
+      : typeof body.error === 'string' ? body.error : '';
+    const added = typeof body.added === 'number' ? body.added : 0;
+    if (res.ok === false)
+      return { ok: false, added, reason: reason.length > 0 ? reason : `сервер ${res.status}` };
+
+    return { ok: body.ok !== false, added, reason };
   }
   catch {
-    return false;
+    return { ok: false, added: 0, reason: 'сервер не ответил' };
   }
 }
 

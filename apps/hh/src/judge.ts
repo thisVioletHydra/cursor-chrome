@@ -22,9 +22,16 @@ export async function judge(vacancy: Vacancy, opts: JudgeOpts): Promise<Report> 
     return packReport(vacancy, 'human', 'модель не смотрела', opts.dry);
 
   opts.takeModel();
-  const answer = await opts.model(vacancy);
+  try {
+    const answer = await opts.model(vacancy);
 
-  return packReport(vacancy, answer.verdict, answer.reason, opts.dry);
+    return packReport(vacancy, answer.verdict, answer.reason, opts.dry);
+  }
+  catch (error) {
+    const text = error instanceof Error ? error.message.trim() : '';
+
+    return packReport(vacancy, 'human', text.length > 0 ? text.slice(0, 200) : 'модель не ответила', opts.dry);
+  }
 }
 
 export function packReport(vacancy: Vacancy, verdict: Verdict, reason: string, dry: boolean): Report {

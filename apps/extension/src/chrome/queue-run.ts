@@ -154,7 +154,7 @@ async function drain(): Promise<QueueRun> {
     return blank(filled.stop);
 
   const run: QueueRun = { ok: true, sent: 0, human: 0, skipped: 0, left: 0, reason: '', lines: [] };
-  if (filled.note === 'сервер не принял вакансии')
+  if (filled.note.length > 0)
     run.lines.push(filled.note);
 
   const seen = new Set<string>();
@@ -251,8 +251,14 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
 
   await browser.storage.local.remove(STOP_NOTE_KEY);
   const posted = await postFound(base, key, found.cards);
-  if (posted === false)
-    return { note: 'сервер не принял вакансии' };
+  if (posted.ok === false || posted.added === 0) {
+    const note = posted.reason.length > 0 ? posted.reason : 'сервер не принял вакансии';
+    await tellPage(note);
+
+    return { note };
+  }
+
+  await tellPage(`в очереди ${posted.added}`);
 
   return { note: '' };
 }
