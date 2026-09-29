@@ -2,8 +2,9 @@ import type { Hunt, QueueItem } from './admin-api';
 
 import { fetchHunt, fetchQueue, keepWorkHours, postFound } from './admin-api';
 import { getSyncKey, getSyncUrl } from './apply-log';
+import { getFlags } from './flags';
 import { loadPace, rare, waitMs } from './pace';
-import { armLiveLog, bindHangClear, disarmLiveLog, doneServerBatch, hangHalted, noteServerBatch, tellPage, tickPage } from './page-log';
+import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage } from './page-log';
 import { runHhApply } from './hh-apply-cmd';
 import { collectVacancies } from './hh-search';
 import { requireTabId } from './inject';
@@ -56,6 +57,8 @@ export async function runQueue(): Promise<QueueRun> {
   if (hangHalted())
     return blank('расширение зависло');
 
+  noteQueueRunning(true);
+  await clearWait();
   running = true;
   armLiveLog();
   try {
@@ -69,7 +72,9 @@ export async function runQueue(): Promise<QueueRun> {
   finally {
     disarmLiveLog();
     running = false;
+    noteQueueRunning(false);
     await browser.storage.local.set({ [BUSY_KEY]: false });
+    await holdQueueWait();
   }
 }
 
@@ -334,7 +339,7 @@ export async function paceBeforeHunt(): Promise<void> {
   if (hangHalted())
     return;
 
-  await tickPage('жду', 15_000 + Math.floor(Math.random() * 150_000));
+  await tickPage('жду', 15_000 + Math.floor(Math.random() * 150_000), 'hunt');
 }
 
 async function sendFound(base: string, key: string, cards: unknown[]): Promise<{ ok: boolean; added: number; reason: string }> {
@@ -412,6 +417,11 @@ async function applyOne(item: QueueItem): Promise<ApplyReply> {
   const loaded = waitTab(tabId, 15_000);
   await browser.tabs.update(tabId, { url: item.url, active: false });
   await loaded;
+  const here = await browser.tabs.get(tabId).catch(() => null);
+  const opened = here?.url || '';
+  if (/\/vacancy\/\d+|vacancy_response/i.test(opened) === false)
+    return { status: 'skip', reason: 'вакансия не открылась' };
+
   await tellPage(`открыл ${item.title.trim() || item.id}`);
   if (await loginPage(tabId))
     return { status: 'skip', reason: 'hh.ru просит войти (login)' };
@@ -569,6 +579,25 @@ export async function syncBase(): Promise<string> {
 }
 
 bindHangClear(forgetHangReport);
+bindWaitResume(() => {
+  void resumeHunt();
+});
+
+async function resumeHunt(): Promise<void> {
+  try {
+    if (hangHalted() || await isPaused())
+      return;
+
+    const flags = await getFlags();
+    if (flags.autoQueue !== true)
+      return;
+
+    await runQueue();
+  }
+  finally {
+    settleResume();
+  }
+}
 
 function asReply(raw: unknown): ApplyReply {
   if (typeof raw !== 'object' || raw === null)

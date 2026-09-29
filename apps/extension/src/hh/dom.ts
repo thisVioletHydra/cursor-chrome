@@ -3,7 +3,19 @@ export function compact(text: string): string {
 }
 
 export function visible(element: HTMLElement): boolean {
-  return element.getClientRects().length > 0;
+  if (element.isConnected === false)
+    return false;
+
+  if (element.getClientRects().length > 0)
+    return true;
+
+  // Фон без фокуса: раскладки ещё нет, кнопка в HTML уже есть.
+  if (document.hidden === false)
+    return false;
+
+  const style = getComputedStyle(element);
+
+  return style.display !== 'none' && style.visibility !== 'hidden' && element.hidden === false;
 }
 
 export function sleep(ms: number): Promise<void> {

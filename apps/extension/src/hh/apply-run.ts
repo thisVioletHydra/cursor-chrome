@@ -72,7 +72,16 @@ function hhHostStep(): ApplyResult | null {
 }
 
 async function openStep(): Promise<ApplyResult | null> {
-  const plan = planOpen();
+  let plan = planOpen();
+  if (plan.kind === 'skip' && plan.reason === 'нет кнопки Откликнуться') {
+    await until(() => {
+      plan = planOpen();
+
+      return plan.kind !== 'skip';
+    }, 8_000);
+    plan = planOpen();
+  }
+
   const dispatch: Record<string, () => Promise<ApplyResult | null>> = {
     ready: async () => null,
     sent: async () => sentResult(),
@@ -124,10 +133,22 @@ async function submitStep(): Promise<ApplyResult> {
     return fail('нет кнопки отправки');
 
   await noteLive('отправляю отклик');
-  await noteLive('жду ответ');
   await beat('жду', between(900, 3_200), () => false);
   click(btn);
+  await noteLive('жду ответ');
   await beat('жду', 8_000, () => freshSuccess(hadToast) || formErrors().length > 0);
+  const stepButton = btn.matches('[data-qa*="response-submit"]') === false;
+  if (stepButton && freshSuccess(hadToast) === false && formErrors().length === 0 && formReady()) {
+    const filled = await fillStep();
+    if (filled)
+      return filled;
+
+    const again = findSubmit();
+    if (again !== null) {
+      click(again);
+      await beat('жду', 8_000, () => freshSuccess(hadToast) || formErrors().length > 0);
+    }
+  }
   const errors = formErrors();
   const outcomes: Array<[boolean, () => ApplyResult]> = [
     [errors.length > 0, () => humanResult({ reason: errors[0] || 'ошибка формы', hints: errors.slice(0, 8) })],

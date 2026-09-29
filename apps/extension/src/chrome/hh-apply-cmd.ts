@@ -16,6 +16,7 @@ type ApplyReply = {
 };
 
 export async function runHhApply(): Promise<unknown> {
+  const before = await workerHref();
   try {
     return finishApply(await followNavigation(await workerTopMessage('run-apply')));
   }
@@ -23,9 +24,28 @@ export async function runHhApply(): Promise<unknown> {
     const tab = await requireWorkerTab();
     await waitTab(requireTabId(tab), 15_000);
     await ensureContent(tab);
+    const again = await finishApply(await workerTopMessage('run-apply', { resume: true }));
+    const after = await workerHref();
+    if (before !== after && missedClick(again))
+      return { ...asReply(again), ok: false, status: 'skip', reason: 'нет подтверждения отправки' };
 
-    return finishApply(await workerTopMessage('run-apply', { resume: true }));
+    return again;
   }
+}
+
+async function workerHref(): Promise<string> {
+  const tab = await requireWorkerTab().catch(() => null);
+
+  return tab?.url || tab?.pendingUrl || '';
+}
+
+function missedClick(raw: unknown): boolean {
+  const reason = asReply(raw).reason;
+
+  return reason === 'нет кнопки Откликнуться'
+    || reason === 'нет кнопки отправки'
+    || reason === 'форма отклика не открылась'
+    || reason === 'не страница вакансии';
 }
 
 async function followNavigation(raw: unknown): Promise<unknown> {

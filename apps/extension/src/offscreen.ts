@@ -34,7 +34,7 @@ setInterval(() => {
   catch {
     keepAlive();
   }
-}, 20_000);
+}, 1_000);
 
 function status(connected: boolean, detail = ''): void {
   void browser.runtime.sendMessage({ type: 'ws-status', connected, detail }).catch(() => {});

@@ -20,11 +20,14 @@ const SILENCE_MS = 3 * 60_000;
 const START_GRACE_MS = 5 * 60_000;
 const HANG_BLIND_MS = 60_000;
 const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
+const FROZEN_MS = 90_000;
 const STEP_MAX = 80;
 const STEP_PREFIX = /^(открыл|ищу|читаю|в очереди|мимо,|сервер|админка|жду|уже видели)/;
 const HARD_SKIP = /^(удалёнку запрещают|удаленку запрещают|джуниор|1C или Bitrix ядром|Python основной бэк)$/i;
 const SKIP_ESSAY = /вакансия требует|стек не сов|скип,|удал[её]нку запрещают|не наш стек/i;
 
+let tickText = '';
+let tickAt = 0;
 let rows: WatchRow[] = [];
 let pulse = { at: 0, line: '' };
 const deaths = new Set<string>();
@@ -74,16 +77,26 @@ export async function watchPulse(line: string): Promise<boolean> {
 
   silenceNoted = false;
   const previous = pulse.line;
-  const step = shortStep(text);
-  const kept = shortStep(previous) ? previous : '';
-  if (text === 'я завис' && queueWait(previous)) {
+  if (text.startsWith('я завис') && queueWait(previous) && tickMoving()) {
     pulse = { at: Date.now(), line: previous };
 
     return pilotStop();
   }
 
+  if (frozenTick(text)) {
+    const mins = Math.max(1, Math.round((Date.now() - tickAt) / 60_000));
+    const hang = `я завис: жду очередь, ${mins} мин`;
+    pulse = { at: Date.now(), line: hang };
+    await mark('extension', hang, true);
+
+    return pilotStop();
+  }
+
+  noteTick(text);
+  const step = shortStep(text);
+  const kept = shortStep(previous) ? previous : '';
   pulse = { at: Date.now(), line: step ? text : kept };
-  if (text === 'я завис' || text === 'сервер молчит') {
+  if (text.startsWith('я завис') || text === 'сервер молчит') {
     if (holdHang())
       return pilotStop();
 
@@ -189,13 +202,17 @@ async function silence(): Promise<void> {
   if (silenceNoted)
     return;
 
-  silenceNoted = true;
   const where = shortStep(pulse.line) ? pulse.line : 'нет пульса';
-  if (queueWait(where))
+  if (queueWait(where) && frozenTick(where) === false && tickMoving())
     return;
 
+  silenceNoted = true;
+
+  const stuck = queueWait(where) || frozenTick(where);
+  const mins = Math.max(1, Math.round((Date.now() - (tickAt || pulse.at)) / 60_000));
+  const text = stuck ? `я завис: жду очередь, ${mins} мин` : `замолчало на шаге ${where}`;
   try {
-    await mark('extension', `замолчало на шаге ${where}`, true);
+    await mark('extension', text, true);
   }
   catch (error) {
     silenceNoted = false;
@@ -293,11 +310,36 @@ function holdHang(): boolean {
 }
 
 function hangLine(text: string): boolean {
-  return text === 'я завис' || text.startsWith('замолчало');
+  return text.startsWith('я завис') || text.startsWith('замолчало');
 }
 
 function queueWait(text: string): boolean {
   return text === 'жду очередь' || /^жду \d+$/.test(text);
+}
+
+function noteTick(text: string): void {
+  if (TICK.test(text) === false) {
+    if (text !== 'жду очередь' && text.startsWith('я завис') === false) {
+      tickText = '';
+      tickAt = 0;
+    }
+
+    return;
+  }
+
+  if (text === tickText)
+    return;
+
+  tickText = text;
+  tickAt = Date.now();
+}
+
+function tickMoving(): boolean {
+  return tickAt > 0 && Date.now() - tickAt < FROZEN_MS && TICK.test(tickText);
+}
+
+function frozenTick(text: string): boolean {
+  return TICK.test(text) && text === tickText && tickAt > 0 && Date.now() - tickAt >= FROZEN_MS;
 }
 
 function dropHangDeaths(): void {

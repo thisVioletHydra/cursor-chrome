@@ -16,8 +16,11 @@ let halted = false;
 let stall: ReturnType<typeof setTimeout> | undefined;
 let onHangClear: (() => Promise<boolean>) | undefined;
 
-const STALL_LINE = new Set(['я завис', 'сервер молчит']);
 const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
+
+function stallText(text: string): boolean {
+  return text === 'сервер молчит' || text.startsWith('я завис');
+}
 
 export function liveLines(): string[] {
   return lines.slice();
@@ -83,13 +86,13 @@ export function bindHangClear(fn: () => Promise<boolean>): void {
 }
 
 export function stalling(): boolean {
-  return STALL_LINE.has(lines[lines.length - 1] ?? '');
+  return stallText(lines[lines.length - 1] ?? '');
 }
 
 export function stallStep(): string {
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     const line = lines[index] ?? '';
-    if (line.length === 0 || STALL_LINE.has(line) || TICK.test(line))
+    if (line.length === 0 || stallText(line) || TICK.test(line))
       continue;
 
     return line;
@@ -100,7 +103,7 @@ export function stallStep(): string {
 
 export function clearStuckHang(): void {
   clearHangHalt();
-  while (lines.length > 0 && STALL_LINE.has(lines[lines.length - 1] ?? ''))
+  while (lines.length > 0 && stallText(lines[lines.length - 1] ?? ''))
     lines.pop();
 }
 
@@ -123,10 +126,6 @@ export async function haltHang(): Promise<void> {
     clearTimeout(stall);
 
   stall = undefined;
-  if (pulseTimer !== undefined)
-    clearTimeout(pulseTimer);
-
-  pulseTimer = undefined;
   await setFlags({ autoQueue: false });
   if (onHangClear !== undefined)
     await onHangClear();
@@ -140,16 +139,16 @@ export async function tellPage(line: string): Promise<void> {
   if (text.length === 0)
     return;
 
-  if (STALL_LINE.has(text) && hangLive === false)
+  if (stallText(text) && hangLive === false)
     return;
 
   notedAt = Date.now();
-  if (STALL_LINE.has(text) === false)
+  if (stallText(text) === false)
     hangLive = true;
 
   if (repeatedHang(text)) {
     planStall();
-    schedulePulse(text, true);
+    await enqueuePulse(text);
 
     return;
   }
@@ -164,9 +163,8 @@ export async function tellPage(line: string): Promise<void> {
     lines.shift();
 
   planStall();
-  schedulePulse(text, sameTick(previous, text) === false);
-  await broadcast(lines);
-  if (STALL_LINE.has(text))
+  await Promise.all([enqueuePulse(text), broadcast(lines)]);
+  if (stallText(text))
     await browser.runtime.sendMessage({ type: 'hang-status', step: stallStep() }).catch(() => {});
 }
 
@@ -178,35 +176,25 @@ const STAGE: Record<string, string> = {
   жду: 'жду очередь',
 };
 
-export async function tickPage(label: string, ms: number): Promise<void> {
+export async function tickPage(label: string, ms: number, resume: '' | 'hunt' = ''): Promise<void> {
   if (halted || ms <= 0)
     return;
 
-  namedWait = true;
-  planStall();
+  const job = await startWait(label, ms, resume);
+  loopOwns = true;
   try {
-    const stage = STAGE[label];
-    if (stage !== undefined)
-      await tellPage(stage);
-
-    const steps = Math.max(1, Math.round(ms / 1000));
-    const started = Date.now();
-    for (let sec = 1; sec <= steps; sec++) {
-      if (halted)
-        return;
-
-      await tellPage(`${label} ${sec}`);
-      if (halted)
-        return;
-
-      const pause = started + Math.round(ms * sec / steps) - Date.now();
+    while (Date.now() < job.until && halted === false) {
+      await postWaitSecond();
+      const pause = Math.min(1_000, job.until - Date.now());
       if (pause > 0)
         await delay(pause);
     }
   }
   finally {
-    namedWait = false;
-    planStall();
+    if (currentWait === job)
+      await clearWait();
+
+    loopOwns = false;
   }
 }
 
@@ -215,7 +203,11 @@ function planStall(): void {
     clearTimeout(stall);
 
   stall = undefined;
-  if (namedWait || armed === 0 || halted)
+  if (armed === 0 || halted)
+    return;
+
+  const quiet = Date.now() - notedAt;
+  if (namedWait && quiet < 5_000)
     return;
 
   const limit = stallLimit();
@@ -230,8 +222,10 @@ function planStall(): void {
       return;
     }
 
-    void tellPage(serverWait ? 'сервер молчит' : 'я завис');
-  }, limit);
+    const step = stallStep() || 'жду очередь';
+    const mins = Math.max(1, Math.round((Date.now() - notedAt) / 60_000));
+    void tellPage(serverWait ? 'сервер молчит' : `я завис: ${step}, ${mins} мин`);
+  }, Math.max(0, limit - quiet));
 }
 
 function stallLimit(): number {
@@ -239,21 +233,31 @@ function stallLimit(): number {
 }
 
 function repeatedHang(text: string): boolean {
-  if (text !== 'я завис' && text !== 'сервер молчит')
+  const last = lines[lines.length - 1] ?? '';
+  if (text === 'сервер молчит')
+    return last === text;
+
+  if (text.startsWith('я завис') === false)
     return false;
 
-  return lines[lines.length - 1] === text;
+  return last.startsWith('я завис');
 }
 
-// Сообщение во вкладку не активирует её.
+// Сообщение во вкладку не активирует её. Зависший кадр не держит секунды.
 async function broadcast(rows: string[]): Promise<void> {
-  const tabs = await browser.tabs.query({ url: HH_URLS }).catch(() => []);
-  await Promise.all(tabs.map(async (tab) => {
-    if (typeof tab.id !== 'number')
-      return;
+  const tabs = await Promise.race([
+    browser.tabs.query({ url: HH_URLS }).catch(() => [] as chrome.tabs.Tab[]),
+    delay(400).then(() => [] as chrome.tabs.Tab[]),
+  ]);
+  await Promise.race([
+    Promise.all(tabs.map(async (tab) => {
+      if (typeof tab.id !== 'number')
+        return;
 
-    await browser.tabs.sendMessage(tab.id, { type: 'hh-log', lines: rows }).catch(() => {});
-  }));
+      await browser.tabs.sendMessage(tab.id, { type: 'hh-log', lines: rows }).catch(() => {});
+    })),
+    delay(400),
+  ]);
 }
 
 function sameTick(previous: string, next: string): boolean {
@@ -266,38 +270,79 @@ function sameTick(previous: string, next: string): boolean {
 }
 
 let namedWait = false;
-let pulseTimer: ReturnType<typeof setTimeout> | undefined;
-let pulseLine = '';
+let loopOwns = false;
+let queueRunning = false;
+let resuming = false;
+let lastSent = 0;
 let waking = false;
 let onWake: (() => Promise<void>) | undefined;
+let onResume: (() => void) | undefined;
+let currentWait: WaitJob | null = null;
+
+const WAIT_KEY = 'ccWait';
+const IDLE_MS = 24 * 60 * 60_000;
+
+type WaitJob = {
+  label: string;
+  startedAt: number;
+  until: number;
+  resume: '' | 'hunt';
+};
 
 export function bindPilotWake(fn: () => Promise<void>): void {
   onWake = fn;
 }
 
-function schedulePulse(line: string, now: boolean): void {
-  if (halted)
+export function bindWaitResume(fn: () => void): void {
+  onResume = fn;
+}
+
+export function noteQueueRunning(on: boolean): void {
+  queueRunning = on;
+  if (on)
+    resuming = false;
+}
+
+export function settleResume(): void {
+  resuming = false;
+}
+
+export async function clearWait(): Promise<void> {
+  currentWait = null;
+  namedWait = false;
+  lastSent = 0;
+  await saveWait(null);
+  planStall();
+}
+
+export async function holdQueueWait(): Promise<void> {
+  if (halted || queueRunning || resuming || currentWait !== null)
     return;
 
-  pulseLine = line;
-  if (now) {
-    if (pulseTimer !== undefined)
-      clearTimeout(pulseTimer);
+  const flags = await getFlags();
+  if (flags.autoQueue !== true)
+    return;
 
-    pulseTimer = undefined;
-    void postPulse(line);
+  const stored = await loadWait();
+  if (stored !== null && stored.until > Date.now()) {
+    currentWait = stored;
+    namedWait = true;
+    await postWaitSecond();
 
     return;
   }
 
-  if (pulseTimer !== undefined)
-    return;
-
-  pulseTimer = setTimeout(() => {
-    pulseTimer = undefined;
-    void postPulse(pulseLine);
-  }, 2_000);
+  await startWait('жду', IDLE_MS, '');
 }
+
+function enqueuePulse(line: string): Promise<void> {
+  const job = pulseChain.then(() => postPulse(line));
+  pulseChain = job.then(() => undefined, () => undefined);
+
+  return job;
+}
+
+let pulseChain: Promise<void> = Promise.resolve();
 
 export async function pulseNow(): Promise<void> {
   const flags = await getFlags();
@@ -307,20 +352,129 @@ export async function pulseNow(): Promise<void> {
     return;
   }
 
-  await postPulse(lines[lines.length - 1] ?? 'жду очередь');
+  await pumpWait();
+  if (currentWait === null && queueRunning === false && resuming === false)
+    await holdQueueWait();
 }
+
+async function pumpWait(): Promise<void> {
+  if (halted)
+    return;
+
+  if (currentWait === null)
+    currentWait = await loadWait();
+
+  if (currentWait === null)
+    return;
+
+  if (Date.now() >= currentWait.until) {
+    await finishWait();
+
+    return;
+  }
+
+  namedWait = true;
+  await postWaitSecond();
+}
+
+async function finishWait(): Promise<void> {
+  if (loopOwns || currentWait === null || Date.now() < currentWait.until)
+    return;
+
+  const resume = currentWait.resume;
+  await clearWait();
+  if (resume === 'hunt') {
+    resuming = true;
+    onResume?.();
+  }
+}
+
+async function startWait(label: string, ms: number, resume: '' | 'hunt'): Promise<WaitJob> {
+  const startedAt = Date.now();
+  const job: WaitJob = { label, startedAt, until: startedAt + ms, resume };
+  currentWait = job;
+  lastSent = 0;
+  namedWait = true;
+  await saveWait(job);
+  const stage = STAGE[label];
+  if (stage !== undefined)
+    await tellPage(stage);
+
+  await postWaitSecond();
+
+  return job;
+}
+
+async function postWaitSecond(): Promise<void> {
+  const job = currentWait;
+  if (job === null || halted)
+    return;
+
+  const sec = Math.max(1, Math.ceil((Date.now() - job.startedAt) / 1000));
+  if (sec === lastSent)
+    return;
+
+  lastSent = sec;
+  await tellPage(`${job.label} ${sec}`);
+}
+
+async function saveWait(job: WaitJob | null): Promise<void> {
+  if (job === null)
+    await browser.storage.local.remove(WAIT_KEY).catch(() => {});
+  else
+    await browser.storage.local.set({ [WAIT_KEY]: job }).catch(() => {});
+}
+
+async function loadWait(): Promise<WaitJob | null> {
+  const stored = await browser.storage.local.get(WAIT_KEY).catch(() => null);
+  if (typeof stored !== 'object' || stored === null || WAIT_KEY in stored === false)
+    return null;
+
+  return waitOf(stored[WAIT_KEY]);
+}
+
+function waitOf(raw: unknown): WaitJob | null {
+  if (typeof raw !== 'object' || raw === null)
+    return null;
+
+  if ('label' in raw === false || typeof raw.label !== 'string' || raw.label.length === 0)
+    return null;
+
+  if ('startedAt' in raw === false || typeof raw.startedAt !== 'number')
+    return null;
+
+  if ('until' in raw === false || typeof raw.until !== 'number' || raw.until <= raw.startedAt)
+    return null;
+
+  const resume = 'resume' in raw && raw.resume === 'hunt' ? 'hunt' : '';
+
+  return { label: raw.label, startedAt: raw.startedAt, until: raw.until, resume };
+}
+
+browser.runtime.onConnect.addListener((port) => {
+  if (port.name !== 'keepalive')
+    return;
+
+  port.onMessage.addListener(() => {
+    void pumpWait().then(() => {
+      if (currentWait === null && queueRunning === false && resuming === false)
+        return holdQueueWait();
+    });
+  });
+});
 
 async function postPulse(line: string): Promise<void> {
   if (halted || line.trim().length === 0)
     return;
 
-  if (STALL_LINE.has(line) && hangLive === false)
+  if (stallText(line) && hangLive === false)
     return;
 
   const stamp = pilotStamp();
   const body = await pilotFetch('/api/pulse', {
     method: 'POST',
     body: JSON.stringify({ line }),
+    signal: AbortSignal.timeout(8_000),
   });
   if (body === null || stamp !== pilotStamp())
     return;
@@ -369,7 +523,7 @@ async function pilotWake(): Promise<void> {
   }
 }
 
-async function pilotFetch(path: string, init?: { method: string; body: string }): Promise<unknown | null> {
+async function pilotFetch(path: string, init?: { method: string; body: string; signal?: AbortSignal }): Promise<unknown | null> {
   const auth = await pilotAuth();
   if (auth === null)
     return null;
@@ -383,6 +537,7 @@ async function pilotFetch(path: string, init?: { method: string; body: string })
       method: init?.method ?? 'GET',
       headers,
       body: init?.body,
+      signal: init?.signal,
     });
     if (res.ok === false)
       return null;

@@ -73,6 +73,18 @@ function isApplyTrigger(node: HTMLElement): boolean {
   return text.toLowerCase().startsWith('откликнуться');
 }
 
+function successCopy(element: Element): boolean {
+  const nodes = [element, ...element.querySelectorAll('*')];
+
+  return nodes.some((node) => {
+    const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
+    if (text.length === 0 || text.length > 160)
+      return false;
+
+    return SUCCESS.test(text);
+  });
+}
+
 function toastHit(root: Element): boolean {
   const nodes = [root, ...root.querySelectorAll('*')];
 
@@ -132,13 +144,9 @@ function pickPayload(...rows: Array<ApplyPayload | null>): ApplyPayload {
 }
 
 export function applySucceeded(): boolean {
-  const nodes = document.querySelectorAll('[role="alert"], [role="status"], [role="dialog"], [data-qa*="notification"], [class*="snackbar"]');
+  const nodes = document.querySelectorAll('[role="alert"], [role="status"], [role="dialog"], [data-qa*="notification"], [class*="snackbar"], [data-qa*="vacancy-response"]');
 
-  return [...nodes].some((element) => {
-    const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
-
-    return SUCCESS.test(text) && text.length < 80;
-  });
+  return [...nodes].some(element => successCopy(element));
 }
 
 export function applyMeta(): ApplyPayload {

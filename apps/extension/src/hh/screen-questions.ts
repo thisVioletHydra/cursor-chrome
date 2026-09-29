@@ -1,5 +1,6 @@
-import { ask } from './bridge';
 import { applyMeta } from './apply-watch';
+import { ask } from './bridge';
+import { visible } from './dom';
 import { refreshOverlay } from './overlay';
 
 const APPLY_SEL = [
@@ -264,10 +265,6 @@ function reviewUrl(meta: { url: string }): string {
 async function refreshWorkerFlag(): Promise<void> {
   const res = await ask<{ worker?: boolean }>({ type: 'is-hh-worker' });
   thisIsWorker = res?.worker === true;
-}
-
-function visible(element: HTMLElement): boolean {
-  return element.getClientRects().length > 0;
 }
 
 function unique(items: string[]): string[] {

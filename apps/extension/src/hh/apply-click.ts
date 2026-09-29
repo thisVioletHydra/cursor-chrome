@@ -44,6 +44,9 @@ export function planOpen(): OpenPlan {
   if (el === null)
     return { kind: 'skip', reason: 'нет кнопки Откликнуться' };
 
+  if (offSite(el))
+    return { kind: 'skip', reason: 'отклик на сайте работодателя' };
+
   const url = responseHref(el);
   if (url)
     return { kind: 'navigate', url };
@@ -65,24 +68,23 @@ export function freshSuccess(hadToast: boolean): boolean {
 }
 
 export function findSubmit(): HTMLElement | null {
-  const roots = [applyRoot(), document.body].filter((element): element is HTMLElement => element !== null);
+  const root = applyRoot();
+  if (root === null)
+    return null;
 
-  for (const root of roots) {
-    const qa = root.querySelector<HTMLElement>([
-      '[data-qa="vacancy-response-submit-popup"]',
-      '[data-qa="vacancy-response-submit"]',
-      '[data-qa*="response-submit"]',
-    ].join(','));
-    if (qa && visible(qa))
-      return qa;
+  const qa = root.querySelector<HTMLElement>([
+    '[data-qa="vacancy-response-submit-popup"]',
+    '[data-qa="vacancy-response-submit"]',
+    '[data-qa*="response-submit"]',
+  ].join(','));
+  if (qa && visible(qa))
+    return qa;
 
-    const byText = [...root.querySelectorAll<HTMLElement>('button, [role="button"], input[type="submit"]')]
-      .find(element => visible(element) && SUBMIT.test(submitLabel(element)) && /перейти/i.test(submitLabel(element)) === false);
-    if (byText)
-      return byText;
-  }
-
-  return null;
+  return [...root.querySelectorAll<HTMLElement>('button, [role="button"], input[type="submit"]')]
+    .find(element => visible(element)
+      && opener(element) === false
+      && SUBMIT.test(submitLabel(element))
+      && /перейти/i.test(submitLabel(element)) === false) ?? null;
 }
 
 export function formErrors(): string[] {
@@ -121,6 +123,24 @@ function isRelated(start: HTMLElement): boolean {
   const meta = metaFrom(start);
 
   return pageId.length > 0 && meta.vacancyId.length > 0 && meta.vacancyId !== pageId;
+}
+
+function opener(element: HTMLElement): boolean {
+  return PAGE_QA.some(sel => element.matches(sel));
+}
+
+function offSite(element: HTMLElement): boolean {
+  const link = element instanceof HTMLAnchorElement ? element : element.closest('a');
+  const href = link?.href || '';
+  if (href.length === 0 || /vacancy_response/i.test(href))
+    return false;
+
+  try {
+    return /(^|\.)hh\.ru$/i.test(new URL(href).hostname) === false;
+  }
+  catch {
+    return false;
+  }
 }
 
 function responseHref(element: HTMLElement): string | null {
