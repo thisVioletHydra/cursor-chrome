@@ -65,6 +65,7 @@ if (verEl)
   verEl.textContent = browser.runtime.getManifest().version;
 
 let linked = false;
+let adminOn = false;
 
 const clicks: Record<string, () => void> = {
   'make-good': () => void (linked ? hangUp() : makeGood()),
@@ -297,21 +298,67 @@ function parseConnectLink(raw: string): { url: string; key: string } | null {
   }
 }
 
+function clearConnectAnswer(): void {
+  connectSaveEl?.classList.remove('saved');
+  if (connectSaveEl)
+    connectSaveEl.textContent = adminOn ? 'Заменить' : 'Подключить';
+
+  if (connectErrorEl === null)
+    return;
+
+  connectErrorEl.hidden = true;
+  connectErrorEl.className = 'connect-error';
+  connectErrorEl.textContent = '';
+}
+
+function paintConnectFail(text: string): void {
+  clearConnectAnswer();
+  if (connectErrorEl === null)
+    return;
+
+  connectErrorEl.hidden = false;
+  connectErrorEl.textContent = text;
+}
+
 async function connectFromLink(): Promise<void> {
-  if (connectLinkEl === null || connectErrorEl === null)
+  if (connectLinkEl === null || connectErrorEl === null || connectSaveEl === null)
     return;
 
   const parsed = parseConnectLink(connectLinkEl.value);
   if (parsed === null) {
-    connectErrorEl.hidden = false;
-    connectErrorEl.textContent = 'Это не ссылка подключения. Нужна вида https://…/connect#ключ';
+    paintConnectFail('Это не ссылка подключения');
     return;
   }
 
+  connectSaveEl.disabled = true;
+  connectSaveEl.classList.remove('saved');
+  connectSaveEl.textContent = 'Сохраняю…';
   connectErrorEl.hidden = true;
-  await browser.runtime.sendMessage({ type: 'set-sync-url', url: parsed.url, key: parsed.key });
-  connectLinkEl.value = '';
-  await paintConnect();
+  try {
+    const result = await browser.runtime.sendMessage({
+      type: 'set-sync-url',
+      url: parsed.url,
+      key: parsed.key,
+    }) as { ok?: boolean; error?: string };
+    if (result?.ok !== true) {
+      paintConnectFail('Не сохранилось');
+      return;
+    }
+
+    connectLinkEl.value = '';
+    connectSaveEl.classList.add('saved');
+    await paintConnect();
+    connectSaveEl.textContent = 'Заменено';
+    connectErrorEl.className = 'connect-error ok';
+    connectErrorEl.hidden = false;
+    connectErrorEl.textContent = 'Заменено';
+  }
+  catch {
+    paintConnectFail('Не сохранилось');
+  }
+  finally {
+    connectSaveEl.disabled = false;
+  }
 }
 
 connectForm?.addEventListener('submit', (event) => {
@@ -319,10 +366,16 @@ connectForm?.addEventListener('submit', (event) => {
   void connectFromLink();
 });
 
+connectLinkEl?.addEventListener('input', () => {
+  if (connectSaveEl?.classList.contains('saved') === true || connectErrorEl?.hidden === false)
+    clearConnectAnswer();
+});
+
 async function paintConnect(): Promise<void> {
   const sync = await browser.runtime.sendMessage({ type: 'get-sync-url' }) as { url?: string; hasKey?: boolean };
   const url = sync?.url || '';
   const on = sync?.hasKey === true && url.length > 0;
+  adminOn = on;
   if (queueBtn)
     queueBtn.hidden = on === false;
 
@@ -340,7 +393,7 @@ async function paintConnect(): Promise<void> {
   if (connectNoteEl)
     connectNoteEl.hidden = on;
 
-  if (connectSaveEl)
+  if (connectSaveEl && connectSaveEl.classList.contains('saved') === false)
     connectSaveEl.textContent = on ? 'Заменить' : 'Подключить';
 }
 
