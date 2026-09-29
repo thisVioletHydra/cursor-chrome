@@ -7,7 +7,7 @@ import { compact, pause, until, visible } from './dom';
 import { coverLetter } from './letter';
 import { noteLive } from './live-log';
 import { pickResume, resumeKind, vacancyBody, vacancyTitle } from './resume';
-import { applyRoot, isCoverLetter, isStandardQuestion, promptFields } from './screen-questions';
+import { applyRoot, employerQuestionnaire, isCoverLetter, isStandardQuestion, promptFields } from './screen-questions';
 
 export type FillFail = {
   ok: false;
@@ -49,6 +49,10 @@ const CUSTOM_REASON = 'свои вопросы HH';
 const FIELD_SEL = 'textarea, input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]):not([type="file"]):not([type="submit"])';
 
 export async function fillApply(): Promise<FillFail | null> {
+  const asked = employerQuestionnaire();
+  if (asked)
+    return { ok: false, status: 'needsHuman', reason: asked.reason, hints: asked.hints };
+
   const kind = resumeKind(vacancyTitle(), vacancyBody());
   if (kind !== null) {
     noteLive(`резюме ${kind}`);

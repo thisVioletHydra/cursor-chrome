@@ -1,6 +1,6 @@
 import { applyMeta } from './apply-watch';
 import { visible } from './dom';
-import { applyRoot, reviewHints } from './screen-questions';
+import { applyRoot, employerQuestionnaire, reviewHints } from './screen-questions';
 
 export type ApplyBlock = {
   reason: string;
@@ -15,7 +15,7 @@ const REASON: Record<string, string> = {
 };
 
 export function applyBlocker(): ApplyBlock | null {
-  const checks = [hintBlock, captchaBlock];
+  const checks = [employerQuestionnaire, hintBlock, captchaBlock];
   for (const check of checks) {
     const hit = check();
     if (hit)

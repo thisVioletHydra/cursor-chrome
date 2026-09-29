@@ -1,6 +1,6 @@
 import { applyMeta } from './apply-watch';
 import { ask } from './bridge';
-import { visible } from './dom';
+import { compact, visible } from './dom';
 import { refreshOverlay } from './overlay';
 
 const APPLY_SEL = [
@@ -13,6 +13,17 @@ const APPLY_SEL = [
 const APPLY_COPY = /ответьте на вопросы|сопроводительн|отклик на вакансию|vacancy-response/i;
 const SKIP_PROMPT = /персональн|соглас|резюме|сопроводительн|письмо работодателю|выберите резюме|прикрепить|добавить файл|закрыть|отмена|контакты|ответьте на вопросы|дополнительные вопросы/i;
 const SUBMIT = /откликнуться|отправить|готово/i;
+
+const QUESTION_SHELL = [
+  '[role="dialog"]',
+  '[data-qa="vacancy-response-popup"]',
+  '[data-qa*="response-popup"]',
+].join(',');
+
+const PAGE_ASK = /для отклика необходимо ответить на несколько вопросов/i;
+const BLOCK_ASK = /ответьте на вопросы/i;
+const EMPLOYER_REASON = 'вопросы работодателя, обязательные поля';
+const QUESTION_CONTROL = 'textarea, input, [role="radio"], [role="textbox"]';
 
 const CUSTOM_MARK = /крипт|usdt|btc|игр[аыуе]|портфолио|тест|задач|почему\s+вы|расскажите|github|кейс|пазл|quiz|код[ауе]?\b/i;
 const STANDARD = [
@@ -74,6 +85,14 @@ export function promptFields(): PromptField[] {
     .filter(row => row.prompt.length >= 8 && SKIP_PROMPT.test(row.prompt) === false);
 }
 
+export function employerQuestionnaire(): { reason: string; hints: string[] } | null {
+  const root = questionnaireRoot();
+  if (root === null)
+    return null;
+
+  return { reason: EMPLOYER_REASON, hints: [EMPLOYER_REASON] };
+}
+
 export function applyRoot(): HTMLElement | null {
   const scoped = [...document.querySelectorAll<HTMLElement>(APPLY_SEL)]
     .find(element => visible(element) && APPLY_COPY.test(element.textContent || ''));
@@ -86,6 +105,97 @@ export function applyRoot(): HTMLElement | null {
   const main = document.querySelector<HTMLElement>('main, [data-qa="vacancy-response-view"], form');
 
   return main && visible(main) ? main : document.body;
+}
+
+function questionnaireRoot(): HTMLElement | null {
+  if (onResponsePath())
+    return responseSurface();
+
+  return [...document.querySelectorAll<HTMLElement>(QUESTION_SHELL)]
+    .find(element => visible(element) && isEmployerQuestionnaire(element)) ?? null;
+}
+
+function responseSurface(): HTMLElement | null {
+  const main = document.querySelector<HTMLElement>('main, [data-qa="vacancy-response-view"], form');
+  if (main && isEmployerQuestionnaire(main))
+    return main;
+
+  if (isEmployerQuestionnaire(document.body))
+    return document.body;
+
+  return null;
+}
+
+function onResponsePath(): boolean {
+  return /\/applicant\/vacancy_response/i.test(location.pathname);
+}
+
+function isEmployerQuestionnaire(root: HTMLElement): boolean {
+  const text = compact(root.textContent || '');
+  if (PAGE_ASK.test(text))
+    return true;
+
+  if (BLOCK_ASK.test(text) && hasEmployerControl(root))
+    return true;
+
+  return onResponsePath() && hasRequiredEmployerControl(root);
+}
+
+function hasEmployerControl(root: HTMLElement): boolean {
+  return questionControls(root).some(isEmployerControl);
+}
+
+function hasRequiredEmployerControl(root: HTMLElement): boolean {
+  return questionControls(root).some(field => isEmployerControl(field) && isRequiredControl(field));
+}
+
+function questionControls(root: HTMLElement): HTMLElement[] {
+  return [...root.querySelectorAll<HTMLElement>(QUESTION_CONTROL)];
+}
+
+function isEmployerControl(field: HTMLElement): boolean {
+  if (isCoverLetter(field) || isResumeControl(field))
+    return false;
+
+  if (field instanceof HTMLInputElement && skippedInput(field.type))
+    return false;
+
+  if (field.getAttribute('role') === 'radio')
+    return true;
+
+  if (field instanceof HTMLInputElement && field.type === 'radio')
+    return true;
+
+  return visible(field);
+}
+
+function isResumeControl(field: HTMLElement): boolean {
+  const blob = `${field.getAttribute('data-qa') || ''} ${field.getAttribute('name') || ''} ${field.id} ${field.getAttribute('aria-label') || ''}`;
+  if (/resume|резюме/i.test(blob))
+    return true;
+
+  if (field.closest('[data-qa*="resume"], [class*="resume"]') !== null)
+    return true;
+
+  const group = field.closest('fieldset, [role="radiogroup"]');
+  if (group === null)
+    return false;
+
+  return /резюме/i.test(compact(group.textContent || '').slice(0, 120));
+}
+
+function skippedInput(type: string): boolean {
+  return type === 'hidden' || type === 'file' || type === 'checkbox' || type === 'submit' || type === 'button' || type === 'image' || type === 'search';
+}
+
+function isRequiredControl(field: HTMLElement): boolean {
+  if (field.getAttribute('aria-required') === 'true' || field.getAttribute('aria-invalid') === 'true')
+    return true;
+
+  if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)
+    return field.required;
+
+  return field.closest('[aria-required="true"]') !== null;
 }
 
 function collectPrompts(root: HTMLElement): string[] {

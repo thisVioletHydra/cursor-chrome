@@ -7,7 +7,7 @@ import { ask } from './bridge';
 import { sleep, until } from './dom';
 import { noteLive } from './live-log';
 import { murkyBlock, vacancyAndFormText } from './murky';
-import { markReviewing, setApplyLock } from './screen-questions';
+import { employerQuestionnaire, markReviewing, setApplyLock } from './screen-questions';
 
 export type ApplyStatus = 'sent' | 'needsHuman' | 'skip';
 
@@ -42,7 +42,7 @@ async function applyOnce(resume: boolean): Promise<ApplyResult> {
   setApplyLock(true);
   hadToast = resume ? hadToast : applySucceeded();
   if (resume)
-    await until(() => formReady() || ctaApplied(), 8000);
+    await until(() => formReady() || ctaApplied() || employerQuestionnaire() !== null, 8000);
 
   const steps: Array<() => Promise<ApplyResult | null>> = [
     async () => hhHostStep(),
@@ -77,8 +77,12 @@ async function openStep(): Promise<ApplyResult | null> {
     await until(() => {
       plan = planOpen();
 
-      return plan.kind !== 'skip';
+      return plan.kind !== 'skip' || employerQuestionnaire() !== null;
     }, 8_000);
+    const asked = askedResult();
+    if (asked)
+      return asked;
+
     plan = planOpen();
   }
 
@@ -102,10 +106,22 @@ async function clickOpen(plan: ReturnType<typeof planOpen>): Promise<ApplyResult
   if (plan.kind !== 'click')
     return fail('нет кнопки Откликнуться');
 
+  const before = askedResult();
+  if (before)
+    return before;
+
   await noteLive('жму откликнуться');
-  await beat('жду', between(700, 2_600), () => false);
+  await beat('жду', between(700, 2_600), () => employerQuestionnaire() !== null);
+  const mid = askedResult();
+  if (mid)
+    return mid;
+
   click(plan.el);
-  const ok = await beat('жду', 8_000, () => formReady() || freshSuccess(hadToast));
+  const ok = await beat('жду', 8_000, () => employerQuestionnaire() !== null || formReady() || freshSuccess(hadToast));
+  const after = askedResult();
+  if (after)
+    return after;
+
   if (freshSuccess(hadToast))
     return sentResult();
 
@@ -133,10 +149,18 @@ async function submitStep(): Promise<ApplyResult> {
     return fail('нет кнопки отправки');
 
   await noteLive('отправляю отклик');
-  await beat('жду', between(900, 3_200), () => false);
+  await beat('жду', between(900, 3_200), () => employerQuestionnaire() !== null);
+  const paused = askedResult();
+  if (paused)
+    return paused;
+
   click(btn);
   await noteLive('жду ответ');
-  await beat('жду', 8_000, () => freshSuccess(hadToast) || formErrors().length > 0);
+  await beat('жду', 8_000, () => employerQuestionnaire() !== null || freshSuccess(hadToast) || formErrors().length > 0);
+  const asked = askedResult();
+  if (asked)
+    return asked;
+
   const stepButton = btn.matches('[data-qa*="response-submit"]') === false;
   if (stepButton && freshSuccess(hadToast) === false && formErrors().length === 0 && formReady()) {
     const filled = await fillStep();
@@ -146,9 +170,13 @@ async function submitStep(): Promise<ApplyResult> {
     const again = findSubmit();
     if (again !== null) {
       click(again);
-      await beat('жду', 8_000, () => freshSuccess(hadToast) || formErrors().length > 0);
+      await beat('жду', 8_000, () => employerQuestionnaire() !== null || freshSuccess(hadToast) || formErrors().length > 0);
     }
   }
+  const afterAgain = askedResult();
+  if (afterAgain)
+    return afterAgain;
+
   const errors = formErrors();
   const outcomes: Array<[boolean, () => ApplyResult]> = [
     [errors.length > 0, () => humanResult({ reason: errors[0] || 'ошибка формы', hints: errors.slice(0, 8) })],
@@ -171,6 +199,14 @@ function murkyStep(): ApplyResult | null {
 
 function humanOrNull(block: ReturnType<typeof applyBlocker>): ApplyResult | null {
   return block ? humanResult(block) : null;
+}
+
+function askedResult(): ApplyResult | null {
+  const block = employerQuestionnaire();
+  if (block === null)
+    return null;
+
+  return humanResult(block);
 }
 
 function humanResult(block: { reason: string; hints: string[] }): ApplyResult {

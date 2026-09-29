@@ -459,7 +459,7 @@ function describe(status: Status, reply: ApplyReply): string {
     return 'отправлен';
 
   if (status === 'needsHuman')
-    return 'ждёт тебя';
+    return reply.reason === 'вопросы работодателя, обязательные поля' ? reply.reason : 'ждёт тебя';
 
   return `мимо, ${reply.reason || 'без причины'}`;
 }
