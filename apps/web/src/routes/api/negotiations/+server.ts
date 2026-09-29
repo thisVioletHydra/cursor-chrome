@@ -1,7 +1,6 @@
 import type { RequestHandler } from './$types';
 
 import { applyOutcomes, readMemory, remember, writeMemory, type Outcome } from '@cursor-chrome/hh';
-import { notifyOwner } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 
@@ -21,17 +20,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const memory = await readMemory();
   await writeMemory(remember(memory, ...new Set(items.map(row => row.id))));
-  const changes = await applyOutcomes(items.map(row => ({ id: row.id, outcome: row.outcome, at: row.at })));
-
-  for (const change of changes) {
-    const outcome = change.item.outcome;
-    if (outcome !== 'invitation' && outcome !== 'discard')
-      continue;
-
-    const company = change.item.company || 'без компании';
-    const label = outcome === 'invitation' ? 'Приглашение' : 'Отказ';
-    await notifyOwner(`${company}. ${label}. ${change.item.url}`);
-  }
+  await applyOutcomes(items.map(row => ({ id: row.id, outcome: row.outcome, at: row.at })));
 
   return json({ ok: true, count: items.length });
 };

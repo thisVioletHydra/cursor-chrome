@@ -1,8 +1,8 @@
 import type { Vacancy } from '@cursor-chrome/hh';
 import type { RequestHandler } from './$types';
 
-import { dayOpen, fitsTitle, LOOK_PER_START, modelsDown, pendingCount, QUEUE_TARGET, readMemory, readState, scan, splitQueries, watchDeath, watchNote, workHours } from '@cursor-chrome/hh';
-import { chargeQueued, notifyOwner } from '@cursor-chrome/telegram';
+import { dayOpen, fitsTitle, LOOK_PER_START, pendingCount, QUEUE_TARGET, readMemory, readState, scan, splitQueries, watchDeath, watchNote, workHours } from '@cursor-chrome/hh';
+import { chargeQueued } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { readAccount } from '$lib/server/secrets';
@@ -72,14 +72,9 @@ export const POST: RequestHandler = async ({ request }) => {
       if (report.verdict === 'apply') {
         added += 1;
         const paid = await chargeQueued({ id: report.id, company: report.company, url: report.url });
-        if (paid === false) {
-          await notifyOwner('Баланс кончился. Вакансия стоит 1 ₽.');
+        if (paid === false)
           break;
-        }
       }
-
-      if (report.verdict === 'human' && modelsDown(report.reason) === false)
-        await notifyOwner(report.line);
     }
   }
   catch (error) {

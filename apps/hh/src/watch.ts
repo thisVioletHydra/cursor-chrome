@@ -336,10 +336,10 @@ async function mark(who: WatchWho, text: string, death: boolean, stage = false):
     return;
   }
 
-  if (death === false || who === 'telegram')
+  if (death === false || who !== 'server')
     return;
 
-  await notify(`${headline(who)} ${clean}. Иди чини.`).catch(() => undefined);
+  await notify(`Сервер упал. ${clean}. Иди чини.`).catch(() => undefined);
 }
 
 // Минуту после старта «я завис» ещё от прошлого раза. Позже он гасит, только если шаг уже был.
@@ -440,16 +440,6 @@ function asleep(state: { auto: boolean } | null, live: boolean): boolean {
     return false;
 
   return workHours() === false;
-}
-
-function headline(who: WatchWho): string {
-  if (who === 'server')
-    return 'Сервер упал.';
-
-  if (who === 'model')
-    return 'Модель отказала.';
-
-  return 'Расширение замолчало.';
 }
 
 function trim(): void {

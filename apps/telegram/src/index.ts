@@ -103,27 +103,89 @@ function legacyOwnerFile(): string {
   return path.join(process.cwd(), 'data', 'owner.json');
 }
 
-const QUIET_MS = 90_000;
+const COLLECT_MS = 120_000;
+const TEXT_MAX = 4000;
 
-type DigestRow = { kind: 'sent' | 'miss'; line: string };
+// Как колонка «Когда» в админке.
+const whenOf = new Intl.DateTimeFormat('ru-RU', {
+  timeZone: 'Asia/Bishkek',
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+});
 
-const digest: DigestRow[] = [];
-let quiet: ReturnType<typeof setTimeout> | undefined;
+const statusWord = {
+  sent: 'откликнулся',
+  needsHuman: 'ждёт тебя',
+} as const;
 
-export function notifyDigest(kind: DigestRow['kind'], line: string): void {
-  const text = line.trim();
-  if (text.length === 0)
+type VacancyStatus = keyof typeof statusWord;
+
+type VacancyRow = {
+  company: string;
+  title: string;
+  status: VacancyStatus;
+  at: number;
+  url: string;
+};
+
+const vacancyRows: VacancyRow[] = [];
+let vacancyTimer: ReturnType<typeof setTimeout> | undefined;
+
+export function notifyVacancy(row: VacancyRow): void {
+  const company = row.company.trim();
+  const url = row.url.trim();
+  if (company.length === 0 || url.length === 0)
     return;
 
-  digest.push({ kind, line: text });
-  if (quiet)
-    clearTimeout(quiet);
+  if (row.status !== 'sent' && row.status !== 'needsHuman')
+    return;
 
-  quiet = setTimeout(() => {
-    quiet = undefined;
-    void flushDigest();
-  }, QUIET_MS);
-  quiet.unref?.();
+  if (vacancyRows.some(item => item.url === url && item.status === row.status))
+    return;
+
+  vacancyRows.push({
+    company,
+    title: row.title.trim(),
+    status: row.status,
+    at: Number.isFinite(row.at) ? row.at : Date.now(),
+    url,
+  });
+  if (vacancyTimer !== undefined)
+    return;
+
+  // Окно с первой строки, без сдвига: пачка не копится дольше двух минут.
+  vacancyTimer = setTimeout(() => {
+    vacancyTimer = undefined;
+    void flushVacancies();
+  }, COLLECT_MS);
+  vacancyTimer.unref?.();
+}
+
+function vacancyBlock(row: VacancyRow): string {
+  const head = row.title.length > 0 ? `${row.company} · ${row.title}` : row.company;
+
+  return `${head}\n${statusWord[row.status]} · ${whenOf.format(row.at)}\n${row.url}`;
+}
+
+async function flushVacancies(): Promise<void> {
+  const rows = vacancyRows.splice(0, vacancyRows.length);
+  let text = '';
+  for (const row of rows) {
+    const block = vacancyBlock(row);
+    const next = text.length === 0 ? block : `${text}\n\n${block}`;
+    if (text.length > 0 && next.length > TEXT_MAX) {
+      await notifyOwner(text);
+      text = block;
+      continue;
+    }
+
+    text = next;
+  }
+
+  if (text.length > 0)
+    await notifyOwner(text);
 }
 
 export function startTelegram(): void {
@@ -132,21 +194,6 @@ export function startTelegram(): void {
 
   started = true;
   void loop();
-}
-
-async function flushDigest(): Promise<void> {
-  if (digest.length === 0)
-    return;
-
-  const rows = digest.splice(0, digest.length);
-  if (rows.length === 1) {
-    await notifyOwner(rows[0].line);
-    return;
-  }
-
-  const sent = rows.filter(row => row.kind === 'sent').length;
-  const miss = rows.length - sent;
-  await notifyOwner(`Откликов ${sent}, мимо ${miss}\n${rows.map(row => row.line).join('\n')}`);
 }
 
 async function loop(): Promise<void> {
