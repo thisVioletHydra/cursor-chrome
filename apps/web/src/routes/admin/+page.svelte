@@ -1,7 +1,59 @@
 <script lang="ts">
 import { enhance } from '$app/forms';
+import { onMount } from 'svelte';
 
 let { data } = $props();
+let stats = $state(data.stats);
+let polling = $state(data.polling);
+let pulseLine = $state('');
+let watchLog = $state<{ at: number; who: string; text: string; death: boolean }[]>([]);
+
+const whoName: Record<string, string> = {
+  extension: 'расширение',
+  telegram: 'телега',
+  server: 'сервер',
+  model: 'модель',
+};
+
+$effect(() => {
+  stats = data.stats;
+  polling = data.polling;
+});
+
+onMount(() => {
+  const timer = setInterval(() => {
+    void refresh();
+  }, 4_000);
+  void refresh();
+
+  return () => clearInterval(timer);
+});
+
+async function refresh(): Promise<void> {
+  const res = await fetch('/admin/live').catch(() => null);
+  if (res === null || res.ok === false)
+    return;
+
+  const body = await res.json() as {
+    polling?: boolean;
+    figures?: { today: number; queued: number; waiting: number; invitations: number; discards: number; waitingReply: number };
+    rows?: typeof stats.rows;
+    autopilot?: { auto: boolean; lastNote: string };
+    judged?: number;
+    pulse?: { line?: string };
+    log?: { at: number; who: string; text: string; death: boolean }[];
+  };
+  if (body.figures)
+    stats = { ...stats, ...body.figures, rows: body.rows ?? stats.rows, judged: body.judged ?? stats.judged, autopilot: body.autopilot ?? stats.autopilot };
+
+  polling = body.polling === true;
+  pulseLine = typeof body.pulse?.line === 'string' ? body.pulse.line : '';
+  watchLog = Array.isArray(body.log) ? body.log : [];
+}
+
+function clock(at: number): string {
+  return new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(at);
+}
 
 const cards = $derived([
   { href: '/admin/telegram', light: data.links.find(item => item.name === 'Телега') },
@@ -10,12 +62,12 @@ const cards = $derived([
 ].flatMap(card => (card.light ? [{ href: card.href, light: card.light }] : [])));
 
 const figures = $derived([
-  { label: 'Сегодня', value: data.stats.today },
-  { label: 'В очереди', value: data.stats.queued },
-  { label: 'Ждут тебя', value: data.stats.waiting },
-  { label: 'Приглашения', value: data.stats.invitations },
-  { label: 'Отказы', value: data.stats.discards },
-  { label: 'Ждём', value: data.stats.waitingReply },
+  { label: 'Сегодня', value: stats.today },
+  { label: 'В очереди', value: stats.queued },
+  { label: 'Ждут тебя', value: stats.waiting },
+  { label: 'Приглашения', value: stats.invitations },
+  { label: 'Отказы', value: stats.discards },
+  { label: 'Ждём', value: stats.waitingReply },
 ]);
 
 const statusText: Record<string, string> = {
@@ -86,7 +138,7 @@ const allGreen = $derived(checks.every(row => row.ok));
 
 <section class="mb-8">
   <div class="max-h-[26rem] overflow-x-auto overflow-y-auto rounded-2xl border border-white/8 bg-[#151922]">
-    {#if data.stats.rows.length > 0}
+    {#if stats.rows.length > 0}
       <table class="table">
         <thead class="sticky top-0 z-10">
           <tr class="bg-[#151922] text-xs text-zinc-500">
@@ -96,7 +148,7 @@ const allGreen = $derived(checks.every(row => row.ok));
           </tr>
         </thead>
         <tbody>
-          {#each data.stats.rows as row (row.id)}
+          {#each stats.rows as row (row.id)}
             <tr>
               <td class="max-w-xs truncate">
                 <a class="text-zinc-200 underline-offset-4 hover:underline" href={row.url} target="_blank" rel="noreferrer">{row.company} · {row.title}</a>
@@ -111,6 +163,20 @@ const allGreen = $derived(checks.every(row => row.ok));
       <p class="px-5 py-8 text-sm text-zinc-500">Очередь пустая. Напиши боту «старт».</p>
     {/if}
   </div>
+</section>
+
+<section class="mb-8 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+  <h2 class="text-base font-semibold">Сторож</h2>
+  <p class="mt-2 font-mono text-xs text-indigo-200">{pulseLine.length > 0 ? pulseLine : 'пульса ещё нет'}</p>
+  {#if watchLog.length === 0}
+    <p class="mt-3 text-xs text-zinc-500">Пока тихо. Сюда попадают смена шага и поломки, не каждая секунда.</p>
+  {:else}
+    <ul class="mt-3 max-h-40 overflow-y-auto font-mono text-xs">
+      {#each watchLog as row (row.at + row.text)}
+        <li class={row.death ? 'text-rose-300' : 'text-zinc-400'}>{clock(row.at)} {whoName[row.who] ?? row.who} {row.text}</li>
+      {/each}
+    </ul>
+  {/if}
 </section>
 
 <header class="mb-8">
@@ -137,12 +203,12 @@ const allGreen = $derived(checks.every(row => row.ok));
 <section class="mt-8">
   <div class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
     <h2 class="text-lg font-semibold">Очередь</h2>
-    <span class="badge badge-sm {data.stats.autopilot.auto ? 'badge-success' : 'badge-ghost'}">
-      Автопилот {data.stats.autopilot.auto ? 'вкл' : 'выкл'}
+    <span class="badge badge-sm {stats.autopilot.auto ? 'badge-success' : 'badge-ghost'}">
+      Автопилот {stats.autopilot.auto ? 'вкл' : 'выкл'}
     </span>
-    <p class="text-xs text-zinc-500">{data.polling ? 'Бот слушает команды.' : 'Бот молчит, пока нет токена телеги.'}</p>
-    {#if data.stats.autopilot.lastNote}
-      <p class="text-xs text-zinc-500">{data.stats.autopilot.lastNote}</p>
+    <p class="text-xs text-zinc-500">{polling ? 'Бот слушает команды.' : 'Бот молчит, пока нет токена телеги.'}</p>
+    {#if stats.autopilot.lastNote}
+      <p class="text-xs text-zinc-500">{stats.autopilot.lastNote}</p>
     {/if}
   </div>
   <div class="grid grid-cols-2 gap-3 md:grid-cols-3">

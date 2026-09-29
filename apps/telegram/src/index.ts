@@ -1,4 +1,4 @@
-import { SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR, writeJsonAtomic, writeState } from '@cursor-chrome/hh';
+import { SEND_PER_DAY, watchDeath, WORK_FROM_HOUR, WORK_TO_HOUR, writeJsonAtomic, writeState } from '@cursor-chrome/hh';
 
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -205,19 +205,31 @@ async function writeOwner(chatId: number): Promise<void> {
 }
 
 async function send(chatId: number, text: string, keys = false): Promise<void> {
-  const res = await fetch(`${api()}/sendMessage`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      ...(keys
-        ? { reply_markup: { keyboard: [[{ text: 'старт' }, { text: 'стоп' }]], resize_keyboard: true } }
-        : {}),
-    }),
-  });
-  if (res.ok === false)
+  let res: Response;
+  try {
+    res = await fetch(`${api()}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        ...(keys
+          ? { reply_markup: { keyboard: [[{ text: 'старт' }, { text: 'стоп' }]], resize_keyboard: true } }
+          : {}),
+      }),
+    });
+  }
+  catch {
+    watchDeath('telegram', 'telegram не ответил');
+
+    throw new Error('telegram не ответил');
+  }
+
+  if (res.ok === false) {
+    watchDeath('telegram', `telegram ${res.status}`);
+
     throw new Error(`telegram send ${res.status}`);
+  }
 }
 
 const entry = process.argv[1];

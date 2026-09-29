@@ -1,7 +1,7 @@
 import type { Vacancy } from '@cursor-chrome/hh';
 import type { RequestHandler } from './$types';
 
-import { dayOpen, LOOK_PER_START, pendingCount, QUEUE_TARGET, readMemory, readState, scan, workHours } from '@cursor-chrome/hh';
+import { dayOpen, LOOK_PER_START, pendingCount, QUEUE_TARGET, readMemory, readState, scan, watchDeath, workHours } from '@cursor-chrome/hh';
 import { chargeQueued, notifyOwner } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
@@ -51,8 +51,10 @@ export const POST: RequestHandler = async ({ request }) => {
   }
   catch (error) {
     const text = error instanceof Error ? error.message.trim() : '';
+    const reason = text.length > 0 ? text.slice(0, 200) : 'скан упал';
+    watchDeath('model', reason);
 
-    return json({ ok: false, added: 0, reason: text.length > 0 ? text.slice(0, 200) : 'скан упал' });
+    return json({ ok: false, added: 0, reason });
   }
 
   let added = 0;

@@ -1,3 +1,5 @@
+import { getSyncKey, getSyncUrl } from './apply-log';
+import { getFlags } from './flags';
 import { browser } from '../browser-host';
 
 const MAX_LINES = 12;
@@ -40,15 +42,22 @@ export async function tellPage(line: string): Promise<void> {
   notedAt = Date.now();
   if (text === 'я завис' && lines[lines.length - 1] === 'я завис') {
     planStall();
+    schedulePulse(text, true);
 
     return;
   }
 
-  lines.push(text);
+  const previous = lines[lines.length - 1] ?? '';
+  if (sameTick(previous, text) && lines.length > 0)
+    lines[lines.length - 1] = text;
+  else
+    lines.push(text);
+
   if (lines.length > MAX_LINES)
     lines.shift();
 
   planStall();
+  schedulePulse(text, sameTick(previous, text) === false);
   await broadcast(lines);
 }
 
@@ -59,7 +68,7 @@ export async function tickPage(label: string, ms: number): Promise<void> {
   const steps = Math.max(1, Math.round(ms / 1000));
   const started = Date.now();
   for (let sec = 1; sec <= steps; sec++) {
-    await tellPage(`${label} ${sec}…`);
+    await tellPage(`${label} ${sec}`);
     const pause = started + Math.round(ms * sec / steps) - Date.now();
     if (pause > 0)
       await delay(pause);
@@ -100,6 +109,75 @@ async function broadcast(rows: string[]): Promise<void> {
   }));
 }
 
+const TICK = /^(читаю|быстро|чай|отвлёкся|жду) /;
+
+function sameTick(previous: string, next: string): boolean {
+  const was = previous.match(TICK);
+  const now = next.match(TICK);
+  if (was === null || now === null)
+    return false;
+
+  return was[1] === now[1];
+}
+
+let pulseTimer: ReturnType<typeof setTimeout> | undefined;
+let pulseLine = '';
+
+function schedulePulse(line: string, now: boolean): void {
+  pulseLine = line;
+  if (now) {
+    if (pulseTimer !== undefined)
+      clearTimeout(pulseTimer);
+
+    pulseTimer = undefined;
+    void postPulse(line);
+
+    return;
+  }
+
+  if (pulseTimer !== undefined)
+    return;
+
+  pulseTimer = setTimeout(() => {
+    pulseTimer = undefined;
+    void postPulse(pulseLine);
+  }, 2_000);
+}
+
+export async function pulseNow(): Promise<void> {
+  const flags = await getFlags();
+  if (flags.autoQueue !== true)
+    return;
+
+  await postPulse(lines[lines.length - 1] ?? 'жду очередь');
+}
+
+async function postPulse(line: string): Promise<void> {
+  const raw = (await getSyncUrl()).trim();
+  const key = await getSyncKey();
+  if (raw.length === 0 || key.length === 0 || line.trim().length === 0)
+    return;
+
+  let host = '';
+  try {
+    const url = new URL(raw);
+    host = `${url.protocol}//${url.host}`;
+  }
+  catch {
+    return;
+  }
+
+  await fetch(`${host}/api/pulse`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+    body: JSON.stringify({ line }),
+  }).catch(() => undefined);
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+setInterval(() => {
+  void pulseNow();
+}, 60_000);

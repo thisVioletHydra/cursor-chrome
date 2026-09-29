@@ -1,7 +1,9 @@
-import { setApplyGate, startAutopilot, startTelegram } from '@cursor-chrome/telegram';
+import { startWatch } from '@cursor-chrome/hh';
+import { notifyOwner, setApplyGate, startAutopilot, startTelegram } from '@cursor-chrome/telegram';
 import { applySavedSecrets, CREATOR, takeVacancy } from '$lib/server/secrets';
 
 await applySavedSecrets();
 setApplyGate(item => takeVacancy(CREATOR, item));
+startWatch(notifyOwner);
 startTelegram();
 startAutopilot();
