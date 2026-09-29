@@ -1,5 +1,6 @@
 <script lang="ts">
 import { enhance } from '$app/forms';
+import PaceChart from './PaceChart.svelte';
 
 let { data } = $props();
 let pace = $state({ ...data.pace });
@@ -175,6 +176,10 @@ function onSave() {
   <p class="text-xs tracking-wide text-zinc-500 uppercase">HeadHunter</p>
   <h1 class="mt-1 text-3xl font-semibold tracking-tight">Имитация</h1>
 </header>
+
+<div class="mb-4">
+  <PaceChart {pace} />
+</div>
 
 <section class="rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Маршрут</h2>
