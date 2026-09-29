@@ -13,6 +13,7 @@ export type ApplyRecord = {
 };
 
 const LOG_KEY = 'applyLog';
+const DISMISS_KEY = 'applyWaitDismiss';
 const SYNC_KEY = 'applySyncUrl';
 const SYNC_TOKEN_KEY = 'applySyncKey';
 const MIN_SYNC_KEY = 16;
@@ -80,6 +81,9 @@ export async function appendApply(record: ApplyRecord): Promise<ApplyRecord[]> {
 
   const normalized: ApplyRecord = { ...record, title: safeTitle, company: safeCompany };
   const log = await listApplies();
+  if (applyStatus(normalized) === 'needsHuman' && await isWaitDismissed(normalized))
+    return log;
+
   const sameDay = dayKey(normalized.sentAt);
   const dup = log.some((item) => {
     if (applyStatus(item) !== applyStatus(normalized))
@@ -175,6 +179,114 @@ function uniqueByVacancy(log: ApplyRecord[]): ApplyRecord[] {
 
 export function applyStatus(item: ApplyRecord): ApplyStatus {
   return item.status === 'needsHuman' ? 'needsHuman' : 'sent';
+}
+
+export type WaitingKey = {
+  vacancyId: string;
+  sentAt: number;
+  title: string;
+  company: string;
+};
+
+function waitDismissKey(item: WaitingKey): string {
+  if (item.vacancyId.length > 0)
+    return `id:${item.vacancyId}`;
+
+  return `row:${item.sentAt}|${item.title}|${item.company}`;
+}
+
+async function readDismissed(): Promise<string[]> {
+  const stored = await browser.storage.local.get(DISMISS_KEY);
+  const raw = stored[DISMISS_KEY];
+  if (Array.isArray(raw) === false)
+    return [];
+
+  return raw.filter((item): item is string => typeof item === 'string');
+}
+
+async function writeDismissed(keys: string[]): Promise<void> {
+  const next = [...new Set(keys)].slice(-MAX);
+  await browser.storage.local.set({ [DISMISS_KEY]: next });
+}
+
+async function isWaitDismissed(item: WaitingKey): Promise<boolean> {
+  const keys = await readDismissed();
+
+  return keys.includes(waitDismissKey(item));
+}
+
+export async function forgetWaitDismiss(vacancyId: string): Promise<void> {
+  if (vacancyId.length === 0)
+    return;
+
+  const keys = await readDismissed();
+  const drop = `id:${vacancyId}`;
+  if (keys.includes(drop) === false)
+    return;
+
+  await writeDismissed(keys.filter(key => key !== drop));
+}
+
+async function rememberDismiss(items: WaitingKey[]): Promise<void> {
+  if (items.length === 0)
+    return;
+
+  const keys = await readDismissed();
+  await writeDismissed([...keys, ...items.map(waitDismissKey)]);
+}
+
+function isWaitingTarget(item: ApplyRecord, target: WaitingKey): boolean {
+  if (applyStatus(item) !== 'needsHuman')
+    return false;
+
+  if (target.vacancyId.length > 0)
+    return item.vacancyId === target.vacancyId;
+
+  return item.vacancyId.length === 0
+    && item.sentAt === target.sentAt
+    && item.title === target.title
+    && item.company === target.company;
+}
+
+export async function dropWaiting(target: WaitingKey): Promise<void> {
+  const log = await listApplies();
+  const hit = log.filter(item => isWaitingTarget(item, target));
+  if (hit.length === 0)
+    return;
+
+  await rememberDismiss(hit);
+  await browser.storage.local.set({
+    [LOG_KEY]: log.filter(item => isWaitingTarget(item, target) === false),
+  });
+}
+
+export async function clearWaiting(): Promise<void> {
+  const log = await listApplies();
+  const waiting = waitingHuman(log);
+  if (waiting.length === 0)
+    return;
+
+  await rememberDismiss(waiting);
+  const drop = new Set(waiting);
+  await browser.storage.local.set({
+    [LOG_KEY]: log.filter(item => drop.has(item) === false),
+  });
+}
+
+export async function sweepDismissedWaiting(): Promise<void> {
+  const keys = new Set(await readDismissed());
+  if (keys.size === 0)
+    return;
+
+  const log = await listApplies();
+  const next = log.filter((item) => {
+    if (applyStatus(item) !== 'needsHuman')
+      return true;
+
+    return keys.has(waitDismissKey(item)) === false;
+  });
+  if (next.length !== log.length)
+    await browser.storage.local.set({ [LOG_KEY]: next });
 }
 
 type StoredSync = { url: string; key: string };

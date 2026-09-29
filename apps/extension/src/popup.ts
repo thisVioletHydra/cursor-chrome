@@ -1,4 +1,4 @@
-import { labeledApplies, paintApplyGroup } from './hh/history-list';
+import { labeledApplies, paintApplyGroup, readWaitingKey } from './hh/history-list';
 import { openWorkerUrl, pinHere, refreshWorkerPanel } from './popup-pin';
 import { browser } from './browser-host';
 
@@ -66,6 +66,7 @@ if (verEl)
 
 let linked = false;
 let adminOn = false;
+let waitCleared = false;
 
 const clicks: Record<string, () => void> = {
   'make-good': () => void (linked ? hangUp() : makeGood()),
@@ -75,6 +76,26 @@ const clicks: Record<string, () => void> = {
   'go-settings': () => show('settings'),
   'run-queue': () => void runQueue(),
 };
+
+historyEl?.addEventListener('click', (event) => {
+  const target = event.target;
+  if (!(target instanceof Element))
+    return;
+
+  const drop = target.closest('[data-cc-drop]');
+  if (drop instanceof HTMLButtonElement) {
+    event.preventDefault();
+    void dropHistoryRow(drop);
+
+    return;
+  }
+
+  const clear = target.closest('[data-cc-clear-wait]');
+  if (clear instanceof HTMLButtonElement) {
+    event.preventDefault();
+    void clearHistoryWait();
+  }
+});
 
 document.addEventListener('click', (event) => {
   const target = event.target;
@@ -272,12 +293,68 @@ async function renderHistory(): Promise<void> {
   const waiting = labeledApplies(data?.waiting || []);
   const log = labeledApplies((data?.log || []).filter(item => item.status !== 'needsHuman'));
   const todayKey = localDay(Date.now());
+  if (waiting.length > 0)
+    waitCleared = false;
+
   let n = paintApplyGroup(historyEl, 'Ждут ответа', waiting, 1, {
     kind: 'wait',
-    empty: 'пока нет мутных — охота сама шлёт стандарт',
+    drop: true,
+    empty: waitCleared ? 'пусто' : 'пока нет мутных — охота сама шлёт стандарт',
   });
   n = paintApplyGroup(historyEl, 'Сегодня', log.filter(item => localDay(item.sentAt) === todayKey), n);
   paintApplyGroup(historyEl, 'Ранее', log.filter(item => localDay(item.sentAt) !== todayKey), n);
+}
+
+function paintHistoryWaitEmpty(): void {
+  if (historyEl === null)
+    return;
+
+  waitCleared = true;
+  historyEl.querySelector('.cc-clear')?.remove();
+  const heading = historyEl.querySelector('h3.wait');
+  const list = heading?.nextElementSibling;
+  if (list instanceof HTMLOListElement)
+    list.remove();
+
+  if (historyEl.querySelector('.cc-empty-wait'))
+    return;
+
+  const empty = document.createElement('p');
+  empty.className = 'empty cc-empty-wait';
+  empty.textContent = 'пусто';
+  heading?.after(empty);
+}
+
+async function dropHistoryRow(button: HTMLButtonElement): Promise<void> {
+  const row = button.closest('li');
+  const list = row?.parentElement;
+  const key = readWaitingKey(button);
+  button.disabled = true;
+  row?.remove();
+  const left = list?.querySelectorAll('li').length ?? 0;
+  if (left === 0)
+    paintHistoryWaitEmpty();
+
+  try {
+    await browser.runtime.sendMessage({ type: 'drop-waiting', ...key });
+  }
+  finally {
+    await renderHistory();
+  }
+}
+
+async function clearHistoryWait(): Promise<void> {
+  const clear = historyEl?.querySelector<HTMLButtonElement>('.cc-clear');
+  if (clear)
+    clear.disabled = true;
+
+  paintHistoryWaitEmpty();
+  try {
+    await browser.runtime.sendMessage({ type: 'clear-waiting' });
+  }
+  finally {
+    await renderHistory();
+  }
 }
 
 function parseConnectLink(raw: string): { url: string; key: string } | null {

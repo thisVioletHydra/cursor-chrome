@@ -1,5 +1,5 @@
 import { askCloud } from './answer';
-import { appendApply, getSyncKey, getSyncUrl, listApplies, setSyncKey, setSyncUrl, todayCount, waitingHuman } from './apply-log';
+import { appendApply, clearWaiting, dropWaiting, getSyncKey, getSyncUrl, listApplies, setSyncKey, setSyncUrl, sweepDismissedWaiting, todayCount, waitingHuman } from './apply-log';
 import { getFlags, setFlags } from './flags';
 import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from './human-review';
 import { syncNegotiations } from './negotiations';
@@ -30,9 +30,28 @@ async function applyLog(message: Record<string, unknown>): Promise<unknown> {
 
 async function applyHistory(): Promise<unknown> {
   await backfillUnpinnedReviews();
+  await sweepDismissedWaiting();
   const log = await listApplies();
 
   return { log, today: await todayCount(), waiting: waitingHuman(log) };
+}
+
+async function dropWaitingMessage(message: Record<string, unknown>): Promise<unknown> {
+  const sentAt = typeof message.sentAt === 'number' ? message.sentAt : Number(message.sentAt);
+  await dropWaiting({
+    vacancyId: String(message.vacancyId || ''),
+    sentAt: Number.isFinite(sentAt) ? sentAt : 0,
+    title: String(message.title || ''),
+    company: String(message.company || ''),
+  });
+
+  return { ok: true };
+}
+
+async function clearWaitingMessage(): Promise<unknown> {
+  await clearWaiting();
+
+  return { ok: true };
 }
 
 async function readSyncUrl(): Promise<unknown> {
@@ -99,6 +118,16 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
   },
   'apply-history': (_message, reply) => {
     replyJob(reply, applyHistory());
+
+    return true;
+  },
+  'drop-waiting': (message, reply) => {
+    replyJob(reply, dropWaitingMessage(message));
+
+    return true;
+  },
+  'clear-waiting': (_message, reply) => {
+    replyJob(reply, clearWaitingMessage());
 
     return true;
   },

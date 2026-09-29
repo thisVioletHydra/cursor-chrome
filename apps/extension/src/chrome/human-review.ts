@@ -1,7 +1,7 @@
 import type { ApplyRecord } from './apply-log';
 
 import { browser } from '../browser-host';
-import { appendApply, isJunkApply, listApplies, todayCount, waitingHuman } from './apply-log';
+import { appendApply, forgetWaitDismiss, isJunkApply, listApplies, todayCount, waitingHuman } from './apply-log';
 import { getWorkerTabId, handoffWorkerToHuman, isHhUrl, openHhDetached } from './worker-tab';
 
 export async function isHhWorkerTab(tabId?: number): Promise<{ worker: boolean }> {
@@ -69,12 +69,14 @@ export async function backfillUnpinnedReviews(): Promise<void> {
     if (vacancyId.length === 0)
       continue;
 
-    await logDetachedReview({ url, vacancyId, tabTitle: tab.title || '' });
+    await logDetachedReview({ url, vacancyId, tabTitle: tab.title || '' }, { backfill: true });
   }
 }
 
-export async function logDetachedReview(meta: { url: string; title?: string; company?: string; vacancyId?: string; hints?: unknown; tabTitle?: string; }): Promise<ApplyRecord[]> {
+export async function logDetachedReview(meta: { url: string; title?: string; company?: string; vacancyId?: string; hints?: unknown; tabTitle?: string }, opts?: { backfill?: boolean }): Promise<ApplyRecord[]> {
   const vacancyId = String(meta.vacancyId || '') || vacancyIdOf(meta.url);
+  if (opts?.backfill !== true)
+    await forgetWaitDismiss(vacancyId);
   const parsed = parseTabTitle(meta.tabTitle || '', String(meta.title || ''), String(meta.company || ''));
   const hints = asHints(meta.hints);
   const title = parsed.title.length > 0 && isJunkApply({ title: parsed.title, company: '' }) === false

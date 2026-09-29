@@ -5,8 +5,25 @@ export type HistoryItem = {
   company: string;
   url: string;
   vacancyId: string;
+  sentAt?: number;
   hints?: string[];
 };
+
+export function readWaitingKey(button: HTMLButtonElement): {
+  vacancyId: string;
+  sentAt: number;
+  title: string;
+  company: string;
+} {
+  const sentAt = Number(button.dataset.sentAt);
+
+  return {
+    vacancyId: button.dataset.vacancyId || '',
+    sentAt: Number.isFinite(sentAt) ? sentAt : 0,
+    title: button.dataset.title || '',
+    company: button.dataset.company || '',
+  };
+}
 
 export function labeledApplies<T extends HistoryItem>(items: T[]): T[] {
   return items.filter((item) => {
@@ -27,6 +44,7 @@ export function paintApplyGroup(
     kind?: string;
     empty?: string;
     emptyClass?: string;
+    drop?: boolean;
   } = {},
 ): number {
   if (items.length === 0 && opts.empty === undefined)
@@ -59,10 +77,43 @@ export function paintApplyGroup(
     const hint = item.hints?.[0] ? ` · ${item.hints[0]}` : '';
     link.textContent = `${item.title || item.vacancyId}${who}${hint}`;
     row.append(link);
+    if (opts.drop === true)
+      row.append(dropWaitButton(item));
+
     list.append(row);
   }
 
-  root.append(heading, list);
+  root.append(heading);
+  if (opts.drop === true && items.length > 0)
+    root.append(clearWaitButton());
+
+  root.append(list);
 
   return start + items.length;
+}
+
+function clearWaitButton(): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'cc-clear';
+  button.dataset.ccClearWait = '';
+  button.textContent = 'очистить';
+
+  return button;
+}
+
+function dropWaitButton(item: HistoryItem): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'cc-drop';
+  button.dataset.ccDrop = '';
+  button.dataset.vacancyId = item.vacancyId;
+  button.dataset.sentAt = String(item.sentAt ?? 0);
+  button.dataset.title = item.title;
+  button.dataset.company = item.company;
+  button.title = 'убрать';
+  button.setAttribute('aria-label', 'убрать');
+  button.textContent = '×';
+
+  return button;
 }

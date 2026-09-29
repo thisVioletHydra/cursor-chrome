@@ -1,7 +1,7 @@
 import type { ApplyPayload } from './bridge';
 
 import { ask, localDay } from './bridge';
-import { labeledApplies, paintApplyGroup } from './history-list';
+import { labeledApplies, paintApplyGroup, readWaitingKey } from './history-list';
 import { pullRemoteNegotiations } from './negotiations';
 
 type Overlay = {
@@ -12,12 +12,16 @@ type Overlay = {
 let overlay: Overlay | null = null;
 let guarded = false;
 let refreshing = false;
+let holdPaint = false;
+let showWaitEmpty = false;
 let paintKey = '';
 
 export function mountOverlay(): void {
   paintOverlayCss();
   const stale = document.getElementById('cc-hh-overlay');
-  if (stale && stale.shadowRoot?.querySelector('[data-cc-wait-n]') === null) {
+  const card = stale?.shadowRoot?.querySelector('[data-cc-card]');
+  const fresh = card instanceof HTMLElement && card.dataset.ccCard === 'drop';
+  if (stale && fresh === false) {
     stale.remove();
     overlay = null;
   }
@@ -49,6 +53,11 @@ export function mountOverlay(): void {
       :host { display: block; }
       .cc-card { width: 220px; background: #111; border: 1px solid #333; border-radius: 10px; padding: 8px 10px; box-shadow: 0 8px 24px #0008; font: 12px/1.35 ui-sans-serif, system-ui, sans-serif; color: #eee; }
       button { width: 100%; margin: 0 0 6px; padding: 8px; border: 0; border-radius: 6px; background: #222; color: #eee; cursor: pointer; font: inherit; }
+      button.cc-drop { width: auto; flex: 0 0 auto; margin: 0; padding: 0 4px; background: transparent; color: #9ca3af; font-size: 14px; line-height: 1; }
+      button.cc-clear { width: auto; margin: 0 0 6px; padding: 0; background: transparent; color: #fbbf24; font-size: 11px; text-align: left; }
+      button.cc-drop:hover, button.cc-clear:hover { color: #fff; }
+      button.cc-drop:active, button.cc-clear:active { opacity: 0.6; }
+      button.cc-drop:focus-visible, button.cc-clear:focus-visible { outline: 1px solid #fbbf24; outline-offset: 1px; }
       .cc-today { margin: 0 0 4px; }
       .cc-flag { margin: 0 0 6px; color: #9ca3af; font-size: 11px; }
       .cc-list { max-height: 180px; overflow: auto; margin: 8px 0 0; }
@@ -57,7 +66,8 @@ export function mountOverlay(): void {
       a { color: #93c5fd; text-decoration: none; overflow-wrap: anywhere; }
       h4 { margin: 10px 0 4px; font-size: 11px; color: #9ca3af; letter-spacing: 0.03em; text-transform: uppercase; }
       ol { margin: 0 0 4px; padding: 0; list-style: none; }
-      li { display: flex; gap: 0.4em; margin: 0 0 6px; color: #9ca3af; }
+      li { display: flex; align-items: baseline; gap: 0.4em; margin: 0 0 6px; color: #9ca3af; }
+      li a { flex: 1 1 auto; min-width: 0; }
       li::before { content: counter(apply) "."; counter-increment: apply; flex: 0 0 2.25ch; text-align: right; font-variant-numeric: tabular-nums; }
       .cc-wait { margin: 6px 0 8px; padding: 6px 0 0; border-top: 1px solid #333; max-height: 140px; overflow: auto; }
       .cc-wait[hidden] { display: none; }
@@ -66,7 +76,7 @@ export function mountOverlay(): void {
       .cc-list h4:first-child { margin-top: 0; }
       [data-cc-wait-n] { color: #fbbf24; }
     </style>
-    <div class="cc-card">
+    <div class="cc-card" data-cc-card="drop">
       <p class="cc-today">Сегодня: <strong data-cc-today>0</strong> · Ждут: <strong data-cc-wait-n>0</strong></p>
       <button type="button" data-cc-history>История</button>
       <p class="cc-flag" data-cc-junk>мусор: выкл</p>
@@ -104,7 +114,7 @@ export async function toggleOverlayHistory(): Promise<void> {
 type HistoryRow = ApplyPayload & { sentAt: number; status?: string; hints?: string[] };
 
 export async function refreshOverlay(): Promise<void> {
-  if (overlay === null || refreshing)
+  if (overlay === null || refreshing || holdPaint)
     return;
 
   refreshing = true;
@@ -117,7 +127,7 @@ export async function refreshOverlay(): Promise<void> {
 }
 
 async function paintOverlay(): Promise<void> {
-  if (overlay === null)
+  if (overlay === null || holdPaint)
     return;
 
   const flags = await ask<{ hideJunk?: boolean; showPop?: boolean }>({ type: 'get-flags' });
@@ -143,6 +153,9 @@ async function paintOverlay(): Promise<void> {
     return;
 
   const data = await ask<{ today?: number; log?: HistoryRow[]; waiting?: HistoryRow[] }>({ type: 'apply-history' });
+  if (holdPaint)
+    return;
+
   if (data === null) {
     todayEl.textContent = '?';
     if (waitN)
@@ -174,7 +187,7 @@ async function paintOverlay(): Promise<void> {
     waiting.map(rowKey).join('\n'),
     listOpen ? log.map(rowKey).join('\n') : 'shut',
   ].join('\u0001');
-  if (nextKey === paintKey)
+  if (nextKey === paintKey || holdPaint)
     return;
 
   paintKey = nextKey;
@@ -187,8 +200,17 @@ async function paintOverlay(): Promise<void> {
 
   if (waitEl) {
     waitEl.replaceChildren();
-    waitEl.hidden = waiting.length === 0;
-    paintApplyGroup(waitEl, 'Ждут ответа', waiting, 1, { heading: 'h4' });
+    if (waiting.length === 0) {
+      if (showWaitEmpty)
+        paintWaitEmpty();
+      else
+        waitEl.hidden = true;
+    }
+    else {
+      showWaitEmpty = false;
+      waitEl.hidden = false;
+      paintApplyGroup(waitEl, 'Ждут ответа', waiting, 1, { heading: 'h4', drop: true });
+    }
   }
 
   if (list === null || list.hidden)
@@ -286,10 +308,91 @@ function ours(event: Event): boolean {
   return event.composedPath().includes(overlay.host);
 }
 
+function paintWaitCount(count: number): void {
+  const waitN = overlay?.shadow.querySelector('[data-cc-wait-n]');
+  if (waitN)
+    waitN.textContent = String(count);
+}
+
+function paintWaitEmpty(): void {
+  showWaitEmpty = true;
+  const waitEl = overlay?.shadow.querySelector<HTMLElement>('[data-cc-wait]');
+  if (waitEl === null || waitEl === undefined)
+    return;
+
+  waitEl.hidden = false;
+  waitEl.replaceChildren();
+  const heading = document.createElement('h4');
+  heading.textContent = 'Ждут ответа';
+  const empty = document.createElement('p');
+  empty.className = 'cc-empty';
+  empty.textContent = 'пусто';
+  waitEl.append(heading, empty);
+}
+
+async function settleWaitEdit(): Promise<void> {
+  holdPaint = false;
+  paintKey = '';
+  const until = Date.now() + 2000;
+  while (refreshing && Date.now() < until)
+    await new Promise(resolve => setTimeout(resolve, 30));
+
+  await refreshOverlay();
+}
+
+async function dropOverlayRow(button: HTMLButtonElement): Promise<void> {
+  if (holdPaint || overlay === null)
+    return;
+
+  const row = button.closest('li');
+  const waitEl = overlay.shadow.querySelector('[data-cc-wait]');
+  const key = readWaitingKey(button);
+  row?.remove();
+  const left = waitEl?.querySelectorAll('li').length ?? 0;
+  paintWaitCount(left);
+  if (left === 0)
+    paintWaitEmpty();
+
+  holdPaint = true;
+  try {
+    await ask({ type: 'drop-waiting', ...key });
+  }
+  finally {
+    await settleWaitEdit();
+  }
+}
+
+async function clearOverlayWait(): Promise<void> {
+  if (holdPaint || overlay === null)
+    return;
+
+  paintWaitCount(0);
+  paintWaitEmpty();
+  holdPaint = true;
+  try {
+    await ask({ type: 'clear-waiting' });
+  }
+  finally {
+    await settleWaitEdit();
+  }
+}
+
 function handleOverlayClick(event: Event): void {
   for (const node of event.composedPath()) {
     if (node instanceof HTMLButtonElement && node.hasAttribute('data-cc-history')) {
       void toggleOverlayHistory();
+
+      return;
+    }
+
+    if (node instanceof HTMLButtonElement && node.hasAttribute('data-cc-drop')) {
+      void dropOverlayRow(node);
+
+      return;
+    }
+
+    if (node instanceof HTMLButtonElement && node.hasAttribute('data-cc-clear-wait')) {
+      void clearOverlayWait();
 
       return;
     }
