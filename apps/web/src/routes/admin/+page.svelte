@@ -205,7 +205,6 @@ const allGreen = $derived(checks.every(row => row.ok));
     <p class="flex min-w-0 items-center gap-2 overflow-hidden border-b border-white/10 px-3 py-2 whitespace-nowrap">
       <span class="shrink-0 text-zinc-500">&gt;</span>
       <span class="min-w-0 truncate {liveStep.length > 0 ? 'text-[#9dccab]' : 'text-zinc-500'}">{liveStep.length > 0 ? liveStep : 'пульса ещё нет'}</span>
-      <span class="term-cursor shrink-0" aria-hidden="true"></span>
     </p>
     {#if watchLog.length === 0}
       <p class="px-3 py-2 text-zinc-500">Пока тихо. Сюда попадают смена шага и поломки, не каждая секунда.</p>
@@ -293,24 +292,3 @@ const allGreen = $derived(checks.every(row => row.ok));
     {/each}
   </div>
 </section>
-
-<style>
-  .term-cursor {
-    width: 0.5rem;
-    height: 0.9em;
-    background: #9dccab;
-    animation: term-blink 1.1s steps(1) infinite;
-  }
-
-  @keyframes term-blink {
-    50% {
-      opacity: 0;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .term-cursor {
-      animation: none;
-    }
-  }
-</style>
