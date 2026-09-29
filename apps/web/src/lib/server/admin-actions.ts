@@ -254,7 +254,7 @@ export async function scanAtsAdmin({ cookies }: RequestEvent) {
     return { ok: false, detail: 'текста резюме ещё нет', wait: 0 };
 
   try {
-    const picked = await limitSuggest(scoreAts(chain, resume.text));
+    const picked = await limitFor(scoreAts(chain, resume.text), 56_000);
     const via = providerName(picked.provider);
     const at = Date.now();
     await writeAtsScan(login, { score: picked.score, flags: picked.flags, via, at, letter: '', resumeAt: resume.at });
@@ -267,8 +267,12 @@ export async function scanAtsAdmin({ cookies }: RequestEvent) {
 }
 
 function limitSuggest<T>(work: Promise<T>): Promise<T> {
+  return limitFor(work, SUGGEST_LIMIT_MS);
+}
+
+function limitFor<T>(work: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('модель не ответила, время вышло')), SUGGEST_LIMIT_MS);
+    const timer = setTimeout(() => reject(new Error('модель не ответила, время вышло')), ms);
     work.then(value => {
       clearTimeout(timer);
       resolve(value);

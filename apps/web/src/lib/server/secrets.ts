@@ -1,6 +1,6 @@
-import type { Provider } from '@cursor-chrome/hh';
+import type { AtsFlag, Provider } from '@cursor-chrome/hh';
 
-import { parseChain, parseJsonLoose, writeJsonAtomic } from '@cursor-chrome/hh';
+import { asAtsFlags, parseChain, parseJsonLoose, writeJsonAtomic } from '@cursor-chrome/hh';
 import crypto from 'node:crypto';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -162,11 +162,12 @@ export async function writeAccount(login: string, next: Account): Promise<void> 
 
 export type AtsScan = {
   score: number;
-  flags: string[];
+  flags: AtsFlag[];
   via: string;
   at: number;
   letter: string;
   resumeAt: number;
+  outdated: boolean;
 };
 
 function atsPath(login: string): string {
@@ -189,7 +190,7 @@ export async function readAtsScan(login: string): Promise<AtsScan | null> {
   return atsScanOf(parsed.value);
 }
 
-export async function writeAtsScan(login: string, scan: AtsScan): Promise<void> {
+export async function writeAtsScan(login: string, scan: Omit<AtsScan, 'outdated'>): Promise<void> {
   await writeJsonAtomic(atsPath(login), scan);
 }
 
@@ -255,18 +256,19 @@ function atsScanOf(value: unknown): AtsScan | null {
     return null;
   if (typeof row.letter !== 'string')
     return null;
-  if (Array.isArray(row.flags) === false)
-    return null;
-
-  const flags = row.flags
-    .filter((item): item is string => typeof item === 'string')
-    .map(item => item.trim())
-    .filter(item => item.length > 0 && item.length <= 180)
-    .slice(0, 5);
-
+  const flags = asAtsFlags(row.flags);
+  const outdated = flags.length < 6;
   const resumeAt = typeof row.resumeAt === 'number' && Number.isFinite(row.resumeAt) ? row.resumeAt : 0;
 
-  return { score: row.score, flags, via: row.via.trim(), at: row.at, letter: row.letter, resumeAt };
+  return {
+    score: row.score,
+    flags: outdated ? [] : flags,
+    via: row.via.trim(),
+    at: row.at,
+    letter: row.letter,
+    resumeAt,
+    outdated,
+  };
 }
 
 export async function accountFileStat(login: string): Promise<{ bytes: number; mtimeMs: number } | null> {

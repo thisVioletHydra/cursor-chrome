@@ -126,7 +126,7 @@ export async function completion(provider: Provider, prompt: string, opts: { tim
   return body.choices?.[0]?.message?.content ?? '';
 }
 
-export async function askChain(chain: Provider[], prompt: string, timeoutMs = PING_MS, budgetMs?: number): Promise<{ text: string; provider: Provider }> {
+export async function askChain(chain: Provider[], prompt: string, timeoutMs = PING_MS, budgetMs?: number, maxTokens?: number): Promise<{ text: string; provider: Provider }> {
   if (chain.length === 0)
     throw new Error('нет ключа модели');
 
@@ -150,7 +150,7 @@ export async function askChain(chain: Provider[], prompt: string, timeoutMs = PI
       attempt = another ? Math.min(timeoutMs, left) : left;
 
     try {
-      const text = await completion(provider, prompt, { timeoutMs: attempt });
+      const text = await completion(provider, prompt, { timeoutMs: attempt, maxTokens });
 
       return { text, provider };
     }

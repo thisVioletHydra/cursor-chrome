@@ -2,13 +2,32 @@
 import { invalidateAll } from '$app/navigation';
 import { enhance } from '$app/forms';
 
+type Flag = {
+  level: 'red' | 'orange' | 'yellow';
+  risk: string;
+  think: string;
+};
+
 type Scan = {
   score: number;
-  flags: string[];
+  flags: Flag[];
   via: string;
   at: number;
   stale: boolean;
+  outdated: boolean;
 };
+
+const DOT = {
+  red: 'bg-rose-400',
+  orange: 'bg-orange-400',
+  yellow: 'bg-amber-300',
+} as const;
+
+const LEVEL = {
+  red: 'красный',
+  orange: 'оранжевый',
+  yellow: 'жёлтый',
+} as const;
 
 let { data } = $props();
 let scanning = $state(false);
@@ -18,16 +37,30 @@ let pullError = $state('');
 let fresh = $state<Scan | null>(null);
 const scan = $derived(fresh ?? data.scan);
 const hasText = $derived(data.text.trim().length > 0);
-const SCAN_WAIT_MS = 35_000;
+const SCAN_WAIT_MS = 62_000;
 const PULL_WAIT_MS = 40_000;
-const askName = $derived(data.providers[0]?.name ?? 'модель');
+const askName = $derived(data.askName);
 const whenOf = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Asia/Bishkek', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
-function flagsOf(value: unknown): string[] {
+function flagsOf(value: unknown): Flag[] {
   if (Array.isArray(value) === false)
     return [];
 
-  return value.filter((item): item is string => typeof item === 'string');
+  const flags: Flag[] = [];
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null || Object.hasOwn(item, 'level') === false)
+      continue;
+
+    const level = Reflect.get(item, 'level');
+    const risk = Reflect.get(item, 'risk');
+    const think = Reflect.get(item, 'think');
+    if ((level !== 'red' && level !== 'orange' && level !== 'yellow') || typeof risk !== 'string' || typeof think !== 'string')
+      continue;
+
+    flags.push({ level, risk, think });
+  }
+
+  return flags;
 }
 
 function takeResume() {
@@ -101,16 +134,22 @@ function takeResume() {
   </section>
 
   <section class="min-w-0 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
-    <h2 class="text-base font-semibold text-white">Для робота</h2>
+    <h2 class="text-base font-semibold text-white">Разбор</h2>
     {#if scan}
-      <p class="mt-3 text-4xl font-semibold tracking-tight">{scan.score} из 100</p>
-      <p class="mt-1 text-xs text-zinc-500">100 — робот пропустит. 0 — мусор.</p>
-      {#if scan.flags.length === 0}
-        <p class="mt-4 text-sm text-zinc-300">красных флагов нет</p>
+      <p class="mt-3 text-4xl font-semibold tracking-tight {scan.outdated ? 'text-zinc-500' : ''}">{scan.score} из 100</p>
+      {#if scan.outdated}
+        <p class="mt-2 text-sm text-amber-200">Старый скан, без разбора. Просканируй ещё раз.</p>
       {:else}
-        <ul class="mt-4 grid min-w-0 grid-cols-1 gap-2">
+        <p class="mt-1 text-xs text-zinc-500">100 — читают дальше. 0 — откладывают.</p>
+        <ul class="mt-4 divide-y divide-white/6">
           {#each scan.flags as flag}
-            <li class="min-w-0 rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm break-words text-rose-100">{flag}</li>
+            <li class="flex min-w-0 gap-3 py-2.5">
+              <span class="mt-1.5 size-2 shrink-0 rounded-full {DOT[flag.level]}" title={LEVEL[flag.level]}></span>
+              <div class="min-w-0">
+                <p class="text-sm break-words text-zinc-100">{flag.risk}</p>
+                <p class="mt-0.5 text-sm break-words text-zinc-400">{flag.think}</p>
+              </div>
+            </li>
           {/each}
         </ul>
       {/if}
@@ -164,17 +203,19 @@ function takeResume() {
           }
 
           const score = typeof body.score === 'number' ? body.score : Number.NaN;
-          if (Number.isInteger(score) === false) {
-            error = 'ответ без оценки';
+          const flags = flagsOf(body.flags);
+          if (Number.isInteger(score) === false || flags.length < 6) {
+            error = 'ответ без разбора';
             return;
           }
 
           fresh = {
             score,
-            flags: flagsOf(body.flags),
+            flags,
             via: typeof body.via === 'string' ? body.via : askName,
             at: typeof body.at === 'number' ? body.at : Date.now(),
             stale: false,
+            outdated: false,
           };
           await update();
           fresh = null;
