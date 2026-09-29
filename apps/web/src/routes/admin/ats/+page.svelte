@@ -36,7 +36,7 @@ let error = $state('');
 let pullError = $state('');
 let fresh = $state<Scan | null>(null);
 const scan = $derived(fresh ?? data.scan);
-const hasText = $derived(data.text.trim().length > 0);
+const hasText = $derived(data.chars > 0);
 const SCAN_WAIT_MS = 62_000;
 const PULL_WAIT_MS = 40_000;
 const askName = $derived(data.askName);
@@ -113,7 +113,25 @@ function takeResume() {
   <section class="min-w-0 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
     <h2 class="text-base font-semibold text-white">Резюме</h2>
     {#if hasText}
-      <pre class="mt-4 max-h-[calc(100dvh-16rem)] min-w-0 overflow-x-hidden overflow-y-auto font-sans text-sm leading-6 break-words whitespace-pre-wrap text-zinc-200">{data.text}</pre>
+      <div class="mt-3 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+        <p class="inline-flex items-center gap-1.5 text-sm text-white">
+          <svg class="size-5 shrink-0 text-zinc-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+            <path d="M14 3v6h6" />
+          </svg>
+          <svg class="size-4 shrink-0 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true">
+            <path d="M5 13l4 4L19 7" />
+          </svg>
+          Резюме сохранено
+        </p>
+        <a
+          class="link link-hover min-w-0 truncate text-sm focus-visible:outline-2 focus-visible:outline-offset-2"
+          href="https://hh.ru/resume/{data.resumeId}"
+          target="_blank"
+          rel="noreferrer"
+        >https://hh.ru/resume/{data.resumeId}</a>
+      </div>
+      <p class="mt-1 text-xs text-zinc-500">{whenOf.format(data.fetchedAt)} · {data.chars.toLocaleString('ru-RU')} знаков</p>
     {:else if data.linked}
       <p class="mt-2 text-sm text-zinc-400">Ссылка сохранена. Текста резюме тут ещё нет.</p>
       {#if pullError}
