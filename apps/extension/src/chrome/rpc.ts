@@ -143,6 +143,9 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
     return true;
   },
   'run-queue': (_message, reply) => {
+    if (queueBusy() === false)
+      clearHangHalt();
+
     replyJob(reply, runQueue());
 
     return true;

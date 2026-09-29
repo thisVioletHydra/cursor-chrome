@@ -1,20 +1,22 @@
 import type { Provider } from './model.ts';
 
-import { FACTS } from './copy.ts';
 import { askChain } from './model.ts';
 
 const ATS_TRY_MS = 9_000;
 const ATS_MS = 28_000;
 const MAX_FLAGS = 5;
+const SOURCE_MAX = 12_000;
 
-export function atsSource(letter: string): string {
-  const cover = letter.replace(/\r\n/g, '\n').trim().slice(0, 4000);
-
-  return [FACTS, cover].filter(part => part.length > 0).join('\n\n');
+export function atsSource(resume: string): string {
+  return resume.replace(/\r\n/g, '\n').trim().slice(0, SOURCE_MAX);
 }
 
-export async function scoreAts(chain: Provider[], letter: string): Promise<{ score: number; flags: string[]; provider: Provider }> {
-  const { text, provider } = await askChain(chain, atsPrompt(letter), ATS_TRY_MS, ATS_MS);
+export async function scoreAts(chain: Provider[], resume: string): Promise<{ score: number; flags: string[]; provider: Provider }> {
+  const source = atsSource(resume);
+  if (source.length === 0)
+    throw new Error('текста резюме ещё нет');
+
+  const { text, provider } = await askChain(chain, atsPrompt(source), ATS_TRY_MS, ATS_MS);
   const parsed = parseAts(text);
   if (parsed === null)
     throw new Error(`ответ без оценки: ${text.slice(0, 80)}`);
@@ -22,14 +24,14 @@ export async function scoreAts(chain: Provider[], letter: string): Promise<{ sco
   return { ...parsed, provider };
 }
 
-function atsPrompt(letter: string): string {
+function atsPrompt(resume: string): string {
   return [
-    'Ты ATS-робот. Оцени текст: насколько он проходит автоматический фильтр резюме.',
+    'Ты ATS-робот. Оцени резюме: насколько оно проходит автоматический фильтр.',
     '100 — робот вытащит роль и стек. 0 — мусор, робот отсеет.',
     'Красные флаги: до 5 коротких фраз по-русски. Только то, что видно в тексте. Навыки не выдумывай.',
     'Если флагов нет, flags пустой.',
-    'Текст:',
-    atsSource(letter),
+    'Резюме:',
+    resume,
     'Ответ только JSON: {"score":72,"flags":["..."]}',
   ].join('\n');
 }

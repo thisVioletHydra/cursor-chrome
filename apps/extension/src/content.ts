@@ -5,6 +5,7 @@ import { byRef, bySelector, snapshot } from './page/snapshot';
 import { browser } from './browser-host';
 
 startHhJob();
+watchResumePull();
 
 const logs: Array<{ type: string; text: string; time: number }> = [];
 const MAX_LOGS = 200;
@@ -56,6 +57,47 @@ browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   return onPageMessage[type]?.(message, sendResponse) ?? false;
 });
+
+function watchResumePull(): void {
+  if (window !== window.top)
+    return;
+
+  window.addEventListener('message', (event) => {
+    if (event.source !== window || event.origin !== location.origin)
+      return;
+
+    const data = event.data;
+    if (typeof data !== 'object' || data === null || data.type !== 'cc-pull-resume')
+      return;
+
+    void browser.runtime.sendMessage({ type: 'pull-resume' }).then((reply) => {
+      window.postMessage({
+        type: 'cc-pull-resume-result',
+        ok: replyOk(reply),
+        reason: replyReason(reply),
+      }, location.origin);
+    }).catch(() => {
+      window.postMessage({ type: 'cc-pull-resume-result', ok: false, reason: 'расширение не ответило' }, location.origin);
+    });
+  });
+}
+
+function replyOk(reply: unknown): boolean {
+  return typeof reply === 'object' && reply !== null && 'ok' in reply && reply.ok === true;
+}
+
+function replyReason(reply: unknown): string {
+  if (typeof reply !== 'object' || reply === null)
+    return '';
+
+  if ('reason' in reply && typeof reply.reason === 'string' && reply.reason.length > 0)
+    return reply.reason;
+
+  if ('error' in reply && typeof reply.error === 'string')
+    return reply.error;
+
+  return '';
+}
 
 function hookConsole(): void {
   for (const type of ['log', 'warn', 'error', 'info'] as const) {

@@ -78,6 +78,42 @@ async function getQueue(base: string, key: string): Promise<{ items?: unknown; l
   }
 }
 
+export async function fetchResumeId(base: string, key: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${base}/api/resume`, { headers: { authorization: `Bearer ${key}` } });
+    if (res.ok === false)
+      return null;
+
+    const body = await res.json() as { id?: unknown };
+
+    return typeof body.id === 'string' ? body.id : '';
+  }
+  catch {
+    return null;
+  }
+}
+
+export async function postResume(base: string, key: string, id: string, text: string): Promise<{ ok: boolean; reason: string }> {
+  try {
+    const res = await fetch(`${base}/api/resume`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ id, text }),
+    });
+    const body = await res.json().catch(() => null) as { ok?: unknown; reason?: unknown; error?: unknown } | null;
+    const reason = typeof body?.reason === 'string'
+      ? body.reason
+      : typeof body?.error === 'string' ? body.error : '';
+    if (res.ok === false)
+      return { ok: false, reason: reason.length > 0 ? reason : `сервер ${res.status}` };
+
+    return { ok: body?.ok !== false, reason };
+  }
+  catch {
+    return { ok: false, reason: 'сервер не ответил' };
+  }
+}
+
 function stringsOf(value: unknown): string[] {
   if (Array.isArray(value) === false)
     return [];

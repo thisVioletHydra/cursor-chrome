@@ -6,7 +6,7 @@ import type { Provider } from '@cursor-chrome/hh';
 import { asProvider, COVER_LETTER, distillCorpus, parseRules, providerName, scoreAts, splitQueries, splitWords, suggestQueries } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
-import { chainOf, collapseChain, imitationFromFields, isCreator, newExtToken, publishSecrets, readAccount, withChain, writeAccount, writeAtsScan } from './secrets';
+import { chainOf, collapseChain, imitationFromFields, isCreator, newExtToken, publishSecrets, readAccount, readResume, withChain, writeAccount, writeAtsScan } from './secrets';
 import { allowedLogins, readSession } from './session';
 
 const sections = ['telegram', 'model', 'hh'] as const;
@@ -249,12 +249,15 @@ export async function scanAtsAdmin({ cookies }: RequestEvent) {
   if (chain.length === 0)
     return { ok: false, detail: 'нет ключа модели', wait: 0 };
 
-  const letter = saved.coverLetter || COVER_LETTER;
+  const resume = await readResume(login);
+  if (resume === null || resume.id !== saved.hhResumeId)
+    return { ok: false, detail: 'текста резюме ещё нет', wait: 0 };
+
   try {
-    const picked = await limitSuggest(scoreAts(chain, letter));
+    const picked = await limitSuggest(scoreAts(chain, resume.text));
     const via = providerName(picked.provider);
     const at = Date.now();
-    await writeAtsScan(login, { score: picked.score, flags: picked.flags, via, at, letter });
+    await writeAtsScan(login, { score: picked.score, flags: picked.flags, via, at, letter: '', resumeAt: resume.at });
 
     return { ok: true, score: picked.score, flags: picked.flags, via, at, detail: '', wait: 0 };
   }

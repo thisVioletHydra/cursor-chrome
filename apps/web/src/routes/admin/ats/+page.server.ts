@@ -1,33 +1,33 @@
 import type { Actions, PageServerLoad } from './$types';
 
-import { atsSource } from '@cursor-chrome/hh';
 import { scanAtsAdmin } from '$lib/server/admin-actions';
-import { readAtsScan } from '$lib/server/secrets';
+import { readAtsScan, readResume } from '$lib/server/secrets';
 import { readSession } from '$lib/server/session';
 
 export const load: PageServerLoad = async ({ parent, cookies }) => {
-  const { preview, coverLetter } = await parent();
-  const letter = preview ? '' : coverLetter;
-  const source = atsSource(letter);
+  const { preview, resumeId } = await parent();
   if (preview)
-    return { source, scan: null };
+    return { linked: false, text: '', scan: null };
 
   const session = readSession(cookies.get('session'));
   if (session === null)
-    return { source, scan: null };
+    return { linked: resumeId.length > 0, text: '', scan: null };
 
+  const resume = await readResume(session.login);
+  const text = resume !== null && resume.id === resumeId ? resume.text : '';
   const saved = await readAtsScan(session.login);
-  if (saved === null)
-    return { source, scan: null };
+  if (saved === null || saved.resumeAt === 0 || text.length === 0 || resume === null)
+    return { linked: resumeId.length > 0, text, scan: null };
 
   return {
-    source,
+    linked: true,
+    text,
     scan: {
       score: saved.score,
       flags: saved.flags,
       via: saved.via,
       at: saved.at,
-      stale: saved.letter !== letter,
+      stale: saved.resumeAt !== resume.at,
     },
   };
 };

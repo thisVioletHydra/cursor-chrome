@@ -166,6 +166,7 @@ export type AtsScan = {
   via: string;
   at: number;
   letter: string;
+  resumeAt: number;
 };
 
 function atsPath(login: string): string {
@@ -192,6 +193,55 @@ export async function writeAtsScan(login: string, scan: AtsScan): Promise<void> 
   await writeJsonAtomic(atsPath(login), scan);
 }
 
+export type SavedResume = {
+  id: string;
+  text: string;
+  at: number;
+};
+
+function resumePath(login: string): string {
+  return path.join(rootDir(), 'accounts', `${safeLogin(login)}.resume.json`);
+}
+
+export async function readResume(login: string): Promise<SavedResume | null> {
+  let text: string;
+  try {
+    text = await fsPromises.readFile(resumePath(login), 'utf8');
+  }
+  catch {
+    return null;
+  }
+
+  const parsed = parseJsonLoose(text);
+  if (parsed === null)
+    return null;
+
+  return resumeOf(parsed.value);
+}
+
+export async function writeResume(login: string, resume: SavedResume): Promise<void> {
+  await writeJsonAtomic(resumePath(login), resume);
+}
+
+function resumeOf(value: unknown): SavedResume | null {
+  if (typeof value !== 'object' || value === null)
+    return null;
+
+  const row = value as Partial<SavedResume>;
+  if (typeof row.id !== 'string' || /^[A-Za-z0-9]{8,}$/.test(row.id) === false)
+    return null;
+  if (typeof row.text !== 'string')
+    return null;
+
+  const text = row.text.replace(/\r\n/g, '\n').trim();
+  if (text.length < 80)
+    return null;
+  if (typeof row.at !== 'number' || Number.isFinite(row.at) === false)
+    return null;
+
+  return { id: row.id, text, at: row.at };
+}
+
 function atsScanOf(value: unknown): AtsScan | null {
   if (typeof value !== 'object' || value === null)
     return null;
@@ -214,7 +264,9 @@ function atsScanOf(value: unknown): AtsScan | null {
     .filter(item => item.length > 0 && item.length <= 180)
     .slice(0, 5);
 
-  return { score: row.score, flags, via: row.via.trim(), at: row.at, letter: row.letter };
+  const resumeAt = typeof row.resumeAt === 'number' && Number.isFinite(row.resumeAt) ? row.resumeAt : 0;
+
+  return { score: row.score, flags, via: row.via.trim(), at: row.at, letter: row.letter, resumeAt };
 }
 
 export async function accountFileStat(login: string): Promise<{ bytes: number; mtimeMs: number } | null> {
