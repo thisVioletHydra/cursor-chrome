@@ -275,11 +275,11 @@ export function imitationOf(value: unknown): Imitation {
   for (const [minKey, maxKey] of RANGES) {
     const min = whole(row[minKey], 0, SEC_MAX);
     const max = whole(row[maxKey], 0, SEC_MAX);
-    if (min === null || max === null || min > max)
+    if (min === null || max === null)
       continue;
 
-    pace[minKey] = min;
-    pace[maxKey] = max;
+    pace[minKey] = Math.min(min, max);
+    pace[maxKey] = Math.max(min, max);
   }
   for (const [key] of EVERIES) {
     const every = whole(row[key], 1, EVERY_MAX);
@@ -301,11 +301,8 @@ export function imitationFromFields(fields: Record<string, string>): { ok: true;
     if (max.ok === false)
       return max;
 
-    if (min.n > max.n)
-      return { ok: false, detail: `${label}: от больше до` };
-
-    pace[minKey] = min.n;
-    pace[maxKey] = max.n;
+    pace[minKey] = Math.min(min.n, max.n);
+    pace[maxKey] = Math.max(min.n, max.n);
   }
   for (const [key, label] of EVERIES) {
     const every = takeEvery(fields[key] ?? '', label);
@@ -333,11 +330,11 @@ function takeSec(raw: string, label: string): { ok: true; n: number } | { ok: fa
 function takeEvery(raw: string, label: string): { ok: true; n: number } | { ok: false; detail: string } {
   const text = raw.trim();
   if (/^\d+$/.test(text) === false)
-    return { ok: false, detail: `${label}: «1 из» — целое число` };
+    return { ok: false, detail: `${label}: нужно целое число вакансий` };
 
   const n = Number(text);
   if (n < 1 || n > EVERY_MAX)
-    return { ok: false, detail: `${label}: «1 из» от 1 до 100` };
+    return { ok: false, detail: `${label}: раз на вакансий — от 1 до 100` };
 
   return { ok: true, n };
 }
