@@ -404,8 +404,8 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
 const DOWN = 'все модели недоступны';
 const RETRY_MS = 60_000;
 
-const REST_MIN_SEC = 10;
-const REST_MAX_SEC = 50;
+const REST_MIN_SEC = 0;
+const REST_MAX_SEC = 60;
 
 export async function paceBeforeHunt(): Promise<void> {
   const span = REST_MAX_SEC - REST_MIN_SEC + 1;

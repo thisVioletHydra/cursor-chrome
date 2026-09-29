@@ -57,8 +57,8 @@ const OPEN_MIN_MS = 700;
 const OPEN_MAX_MS = 2_600;
 const SEND_MIN_MS = 900;
 const SEND_MAX_MS = 3_200;
-const REST_MIN_SEC = 10;
-const REST_MAX_SEC = 50;
+const REST_MIN_SEC = 0;
+const REST_MAX_SEC = 60;
 const TWO_HOURS = 2 * 3600;
 const EIGHT_HOURS = 8 * 3600;
 
