@@ -1,11 +1,12 @@
+import type { QueueItem } from './admin-api';
+
+import { fetchHunt, fetchQueue, postFound } from './admin-api';
 import { getSyncKey, getSyncUrl } from './apply-log';
 import { runHhApply } from './hh-apply-cmd';
+import { collectVacancies } from './hh-search';
 import { requireTabId } from './inject';
 import { adoptHhWorker, requireWorkerTab, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
-import { setCoverLetter } from '../hh/letter';
-
-type QueueItem = { id: string; company: string; title: string; url: string };
 
 type ApplyReply = { status?: string; reason?: string; hints?: unknown };
 
@@ -74,7 +75,23 @@ async function drain(): Promise<QueueRun> {
   if (base.length === 0 || key.length === 0)
     return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason: 'нет адреса или ключа админки', lines: [] };
 
-  const items = await fetchQueue(base, key);
+  const hunt = await fetchHunt(base, key);
+  if (hunt === null)
+    return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason: 'админка не отдала очередь', lines: [] };
+
+  if (hunt.want && hunt.queries.length > 0) {
+    const found = await collectVacancies(hunt.queries);
+    if (found.login) {
+      await pauseUntilMorning();
+
+      return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason: 'hh.ru просит войти (login)', lines: [] };
+    }
+
+    if (found.cards.length > 0)
+      await postFound(base, key, found.cards);
+  }
+
+  const items = hunt.want ? await fetchQueue(base, key) : hunt.items;
   if (items === null)
     return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason: 'админка не отдала очередь', lines: [] };
 
@@ -214,26 +231,6 @@ function humanPause(): number {
   return PAUSE_MIN_MS + Math.floor(Math.random() * (PAUSE_MAX_MS - PAUSE_MIN_MS + 1));
 }
 
-async function fetchQueue(base: string, key: string): Promise<QueueItem[] | null> {
-  try {
-    const res = await fetch(`${base}/api/queue`, { headers: { authorization: `Bearer ${key}` } });
-    if (res.ok === false)
-      return null;
-
-    const body = await res.json() as { items?: unknown; letter?: unknown };
-    if (typeof body.letter === 'string')
-      await setCoverLetter(body.letter);
-
-    if (Array.isArray(body.items) === false)
-      return [];
-
-    return body.items.filter(isItem);
-  }
-  catch {
-    return null;
-  }
-}
-
 async function report(base: string, key: string, item: QueueItem, extra: Record<string, unknown>): Promise<void> {
   try {
     await fetch(`${base}/api/applied`, {
@@ -272,15 +269,6 @@ function asReply(raw: unknown): ApplyReply {
     reason: typeof rec.reason === 'string' ? rec.reason : '',
     hints: rec.hints,
   };
-}
-
-function isItem(value: unknown): value is QueueItem {
-  if (typeof value !== 'object' || value === null)
-    return false;
-
-  const row = value as Record<string, unknown>;
-
-  return typeof row.id === 'string' && typeof row.url === 'string' && typeof row.company === 'string' && typeof row.title === 'string';
 }
 
 function delay(ms: number): Promise<void> {

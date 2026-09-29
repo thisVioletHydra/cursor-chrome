@@ -1,6 +1,4 @@
-import type { Report } from '@cursor-chrome/hh';
-
-import { pendingCount, pingReasons, readMemory, readState, scan, scanBlock, SCAN_EVERY_MS, SEND_PER_DAY, startTicker, WORK_FROM_HOUR, WORK_TO_HOUR, writeJsonAtomic, writeState } from '@cursor-chrome/hh';
+import { SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR, writeJsonAtomic, writeState } from '@cursor-chrome/hh';
 
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -19,9 +17,7 @@ type Update = {
 };
 
 let offset = 0;
-let stopScan: AbortController | null = null;
 let started = false;
-let ticking = false;
 let polling = false;
 let onApply: ((item: { id: string; company: string; url: string }) => Promise<boolean>) | null = null;
 
@@ -31,6 +27,13 @@ export function telegramOn(): boolean {
 
 export function setApplyGate(gate: (item: { id: string; company: string; url: string }) => Promise<boolean>): void {
   onApply = gate;
+}
+
+export async function chargeQueued(item: { id: string; company: string; url: string }): Promise<boolean> {
+  if (onApply === null)
+    return true;
+
+  return onApply(item);
 }
 
 function token(): string {
@@ -145,8 +148,6 @@ async function onUpdate(update: Update): Promise<void> {
   }
 
   if (text === 'стоп') {
-    stopScan?.abort();
-    stopScan = null;
     await writeState({ auto: false });
     await send(message.chat.id, 'Стоп. Автопилот выключен, очередь расширение дорабатывает само.');
 
@@ -157,39 +158,11 @@ async function onUpdate(update: Update): Promise<void> {
     return;
 
   await writeState({ auto: true });
-  if (stopScan) {
-    await send(message.chat.id, 'Автопилот включён, скан уже идёт.');
-    return;
-  }
-
-  await send(message.chat.id, `Автопилот включён: скан каждые ${SCAN_EVERY_MS / 60_000} мин с ${WORK_FROM_HOUR}:00 до ${WORK_TO_HOUR}:00 МСК, до ${SEND_PER_DAY} откликов в день.`);
-  await run(message.chat.id);
+  await send(message.chat.id, `Автопилот включён. Вакансии принесёт Chrome, пока открыта вкладка hh и включён автопилот расширения. С ${WORK_FROM_HOUR}:00 до ${WORK_TO_HOUR}:00 МСК, до ${SEND_PER_DAY} откликов в день.`);
 }
 
 export function startAutopilot(): void {
-  if (ticking)
-    return;
-
-  ticking = true;
-  startTicker(tick);
-}
-
-async function tick(): Promise<void> {
-  const chatId = await readOwner();
-  if (chatId === null || token().length === 0)
-    return;
-
-  const [state, memory, queued] = await Promise.all([readState(), readMemory(), pendingCount()]);
-  const block = scanBlock({ state, memory, pendingCount: queued, scanning: stopScan !== null });
-  if (block !== null) {
-    if (block !== state.lastNote)
-      await writeState({ lastNote: block });
-
-    return;
-  }
-
-  await writeState({ lastScanAt: Date.now(), lastNote: '' });
-  await run(chatId);
+  return;
 }
 
 export async function notifyOwner(text: string): Promise<void> {
@@ -198,61 +171,6 @@ export async function notifyOwner(text: string): Promise<void> {
     return;
 
   await send(chatId, text).catch(() => undefined);
-}
-
-async function run(chatId: number): Promise<void> {
-  const reasons = await pingReasons();
-  if (reasons.length > 0) {
-    await send(chatId, `Не стартую: ${reasons.join(', ')}.`);
-    return;
-  }
-
-  stopScan = new AbortController();
-  const live = process.env.HH_LIVE === '1';
-  const query = process.env.HH_QUERY || 'typescript react nestjs';
-  let run: Awaited<ReturnType<typeof scan>>;
-  try {
-    run = await scan({
-      query,
-      dry: live === false,
-      live,
-      signal: stopScan.signal,
-    });
-  }
-  catch (error) {
-    stopScan = null;
-    await send(chatId, `Упал: ${error instanceof Error ? error.message : 'без причины'}.`);
-    return;
-  }
-  stopScan = null;
-  const reports = run.reports;
-  if (reports.length === 0 && run.already === 0) {
-    await send(chatId, 'Пусто, свежих вакансий по запросам нет.');
-    return;
-  }
-
-  for (const report of reports) {
-    if (report.verdict === 'apply' && live && onApply !== null) {
-      const paid = await onApply({ id: report.id, company: report.company, url: report.url });
-      if (paid === false) {
-        await send(chatId, 'Баланс кончился. Вакансия стоит 1 ₽.');
-        break;
-      }
-    }
-
-    if (report.verdict === 'human')
-      await send(chatId, report.line);
-  }
-
-  const queued = await pendingCount();
-  await send(chatId, summaryOf(reports, live, queued, run.already));
-}
-
-function summaryOf(reports: Report[], live: boolean, queued: number, already: number): string {
-  const count = (verdict: Report['verdict']) => reports.filter(report => report.verdict === verdict).length;
-  const head = live ? 'Добавил' : 'Откликнулся бы';
-
-  return `${head} ${count('apply')}, мимо ${count('skip')}, уже было ${already}, ждут ${count('human')}, смотрел ${reports.length}, в очереди ${queued}.`;
 }
 
 async function allow(chatId: number, username: string): Promise<boolean> {
