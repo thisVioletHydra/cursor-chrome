@@ -185,81 +185,126 @@ async function drain(): Promise<QueueRun> {
   if (base.length === 0)
     return blank('нет адреса админки');
 
-  const hunt = await fetchHunt(base, key);
-  if (hangHalted())
-    return blank('расширение зависло');
-
-  if (hunt === null)
-    return blank('админка не отдала очередь');
-
-  const filled = await fillHunt(base, key, hunt);
-  if (hangHalted())
-    return blank('расширение зависло');
-  if ('stop' in filled)
-    return blank(filled.stop);
-
   const run: QueueRun = { ok: true, sent: 0, human: 0, skipped: 0, left: 0, reason: '', lines: [] };
-  if (filled.note.length > 0)
-    run.lines.push(filled.note);
+  let started = false;
+  let advance = false;
 
+  while (hoursOpen()) {
+    if (await cycleOpen() === false) {
+      if (hangHalted())
+        run.reason = 'расширение зависло';
+
+      break;
+    }
+
+    const hunt = await fetchHunt(base, key, advance);
+    if (hangHalted()) {
+      run.reason = 'расширение зависло';
+      break;
+    }
+
+    if (hunt === null) {
+      if (await restCycle() === false) {
+        run.reason = 'админка не отдала очередь';
+        break;
+      }
+
+      continue;
+    }
+
+    const filled = await fillHunt(base, key, hunt);
+    if (hangHalted()) {
+      run.reason = 'расширение зависло';
+      break;
+    }
+
+    if ('stop' in filled) {
+      run.reason = filled.stop;
+      break;
+    }
+
+    if (filled.note.length > 0 && run.lines.includes(filled.note) === false)
+      run.lines.push(filled.note);
+
+    const applied = await applyPending(base, key, run);
+    if (applied.started)
+      started = true;
+
+    if (applied.stop) {
+      run.reason = applied.reason;
+      break;
+    }
+
+    if (filled.more)
+      continue;
+
+    advance = filled.done;
+    if (await restCycle() === false)
+      break;
+  }
+
+  if (started === false) {
+    if (run.reason.length > 0)
+      return blank(run.reason);
+
+    const note = run.lines.find(line => line.length > 0) ?? '';
+
+    return blank(note.length > 0 ? note : 'выдача есть, в очередь ничего не встало');
+  }
+
+  if (run.reason.length === 0 && hoursOpen() === false)
+    run.reason = 'рабочие часы закрыты';
+
+  return run;
+}
+
+type ApplyPass = { started: boolean; stop: boolean; reason: string };
+
+async function applyPending(base: string, key: string, run: QueueRun): Promise<ApplyPass> {
   const seen = new Set<string>();
   let started = false;
 
   while (hoursOpen()) {
-    if (hangHalted()) {
-      run.reason = 'расширение зависло';
-      break;
-    }
+    if (hangHalted())
+      return { started, stop: true, reason: 'расширение зависло' };
 
     const items = await fetchQueue(base, key);
-    if (hangHalted()) {
-      run.reason = 'расширение зависло';
-      break;
-    }
+    if (hangHalted())
+      return { started, stop: true, reason: 'расширение зависло' };
 
     if (items === null) {
       if (started === false)
-        return blank('админка не отдала очередь');
+        return { started, stop: true, reason: 'админка не отдала очередь' };
 
-      run.reason = 'админка не отдала очередь';
-      break;
+      return { started, stop: true, reason: 'админка не отдала очередь' };
     }
 
     const fresh = items.filter(item => seen.has(item.id) === false);
     if (fresh.length === 0)
-      break;
+      return { started, stop: false, reason: '' };
 
     run.left += fresh.length;
-    let stopped = false;
     for (const item of fresh) {
-      if (hangHalted()) {
-        run.reason = 'расширение зависло';
-        stopped = true;
-        break;
-      }
+      if (hangHalted())
+        return { started, stop: true, reason: 'расширение зависло' };
 
-      if (hoursOpen() === false) {
-        run.reason = 'рабочие часы закрыты';
-        stopped = true;
-        break;
-      }
+      if (hoursOpen() === false)
+        return { started, stop: true, reason: 'рабочие часы закрыты' };
 
       seen.add(item.id);
       started = true;
       const reply = await applyOne(item);
       if (hangHalted()) {
         run.left -= 1;
-        run.reason = 'расширение зависло';
-        stopped = true;
-        break;
+
+        return { started, stop: true, reason: 'расширение зависло' };
       }
 
       if (captchaReply(reply)) {
         run.left -= 1;
         await holdCaptcha(false);
-        run.reason = 'капча, позови человека';
-        stopped = true;
-        break;
+
+        return { started, stop: true, reason: 'капча, позови человека' };
       }
 
       run.left -= 1;
@@ -285,35 +330,34 @@ async function drain(): Promise<QueueRun> {
       if (stop.length > 0) {
         await pauseUntilMorning();
         await report(base, key, item, { status: 'stop', reason: stop });
-        run.reason = `Стоп до утра: ${stop}`;
-        stopped = true;
-        break;
+
+        return { started, stop: true, reason: `Стоп до утра: ${stop}` };
       }
     }
-
-    if (stopped)
-      break;
   }
 
-  if (started === false)
-    return blank(filled.note.length > 0 ? filled.note : 'выдача есть, в очередь ничего не встало');
+  return { started, stop: hoursOpen() === false, reason: hoursOpen() ? '' : 'рабочие часы закрыты' };
+}
 
-  if (run.reason.length === 0 && hoursOpen() === false)
-    run.reason = 'рабочие часы закрыты';
+async function cycleOpen(): Promise<boolean> {
+  if (hangHalted() || await isPaused())
+    return false;
 
-  return run;
+  const flags = await getFlags();
+
+  return flags.autoQueue === true && hoursOpen();
 }
 
 function blank(reason: string): QueueRun {
   return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason, lines: [] };
 }
 
-async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: string } | { note: string }> {
+async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: string } | { note: string; more: boolean; done: boolean }> {
   if (hunt.want === false)
-    return { note: 'сервер не просит поиск' };
+    return { note: 'сервер не просит поиск', more: false, done: false };
 
   if (hunt.queries.length === 0)
-    return { note: 'сервер не прислал запрос' };
+    return { note: 'сервер не прислал запрос', more: false, done: false };
 
   const found = await collectVacancies(hunt.queries, hunt.seen);
   if (hangHalted())
@@ -332,8 +376,13 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
     return { stop: 'hh.ru просит войти (login)' };
   }
 
-  if (found.cards.length === 0)
-    return { note: found.reason.length > 0 ? found.reason : 'пустая выдача' };
+  if (found.cards.length === 0) {
+    const walked = found.reason.length === 0
+      || found.reason === 'нет вакансий по запросу'
+      || found.reason === 'пустая выдача';
+
+    return { note: found.reason, more: false, done: walked };
+  }
 
   await browser.storage.local.remove(STOP_NOTE_KEY);
   const posted = await sendFound(base, key, found.cards);
@@ -344,25 +393,36 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
     const note = posted.reason.length > 0 ? posted.reason : 'сервер не принял вакансии';
     await tellPage(note);
 
-    return { note };
+    return { note, more: false, done: false };
   }
 
   await tellPage(`в очереди ${posted.added}`);
 
-  return { note: '' };
+  return { note: '', more: found.more, done: found.more === false };
 }
 
 const DOWN = 'все модели недоступны';
 const RETRY_MS = 60_000;
 
+const REST_MIN_SEC = 10;
+const REST_MAX_SEC = 50;
+
 export async function paceBeforeHunt(): Promise<void> {
-  if (hangHalted())
-    return;
+  const span = REST_MAX_SEC - REST_MIN_SEC + 1;
+  const sec = REST_MIN_SEC + Math.floor(Math.random() * span);
+  await tickPage('жду', sec * 1000);
+}
+
+async function restCycle(): Promise<boolean> {
+  if (await cycleOpen() === false)
+    return false;
 
   if (await guardCaptcha())
-    return;
+    return false;
 
-  await tickPage('жду', 15_000 + Math.floor(Math.random() * 150_000), 'hunt');
+  await paceBeforeHunt();
+
+  return cycleOpen();
 }
 
 async function sendFound(base: string, key: string, cards: unknown[]): Promise<{ ok: boolean; added: number; reason: string }> {

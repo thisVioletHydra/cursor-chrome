@@ -17,9 +17,6 @@ export type QueryCursor = {
 export const FRONT_TAKE = 3;
 export const LESS_TAKE = 2;
 
-// Короче паузы между поисками: один заход extension берёт один и тот же срез.
-const PASS_MS = 12 * 60_000;
-
 const LESS = /(?:^|[^\p{L}\p{N}])(?:backend|back\s*end|бэкенд|бекенд|fullstack|full\s*stack|фул+ст[еэ]к|node(?:\s*js)?|nest(?:\s*js)?|php|python|java|express)(?=$|[^\p{L}\p{N}])/iu;
 const FRONT = /(?:^|[^\p{L}\p{N}])(?:frontend|front\s*end|фронтенд|фронтэнд|vue|react)(?=$|[^\p{L}\p{N}])/iu;
 const SCRIPT = /(?:^|[^\p{L}\p{N}])(?:javascript|typescript)(?=$|[^\p{L}\p{N}])/iu;
@@ -97,17 +94,27 @@ export function mixBatch<T>(items: readonly T[], tasteOf: (item: T) => Taste): T
   return ordered;
 }
 
-export function serveQueries(queries: readonly string[], cursor: QueryCursor, now: number): { queries: string[]; cursor: QueryCursor } {
-  const pass = Math.floor(now / PASS_MS);
-  if (cursor.queryPass === pass)
-    return { queries: sliceQueries(queries, cursor.frontAt, cursor.lessAt).queries, cursor };
+// Один цикл ходит по текущему срезу 3+2. Следующий срез только по явной просьбе, не по таймеру.
+export function serveQueries(queries: readonly string[], cursor: QueryCursor, advance = false): { queries: string[]; cursor: QueryCursor } {
+  if (advance === false) {
+    const shown = sliceQueries(queries, cursor.frontAt, cursor.lessAt);
+    if (cursor.queryPass >= 0)
+      return { queries: shown.queries, cursor };
 
-  const start = cursor.queryPass < 0
+    return {
+      queries: shown.queries,
+      cursor: { frontAt: cursor.frontAt, lessAt: cursor.lessAt, queryPass: 0 },
+    };
+  }
+
+  const skipped = cursor.queryPass < 0
     ? { frontAt: cursor.frontAt, lessAt: cursor.lessAt }
     : sliceQueries(queries, cursor.frontAt, cursor.lessAt);
-  const next = { frontAt: start.frontAt, lessAt: start.lessAt, queryPass: pass };
 
-  return { queries: sliceQueries(queries, next.frontAt, next.lessAt).queries, cursor: next };
+  return {
+    queries: sliceQueries(queries, skipped.frontAt, skipped.lessAt).queries,
+    cursor: { frontAt: skipped.frontAt, lessAt: skipped.lessAt, queryPass: cursor.queryPass + 1 },
+  };
 }
 
 function sliceQueries(queries: readonly string[], frontAt: number, lessAt: number): { queries: string[]; frontAt: number; lessAt: number } {

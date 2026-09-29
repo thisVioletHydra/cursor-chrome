@@ -24,7 +24,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
   const queued = await pendingCount();
   const want = account.hhLive === '1' && state.auto && queued < QUEUE_TARGET;
-  const queries = want && listen === false ? await shownPass(saved, state) : saved;
+  const cycle = url.searchParams.get('cycle') === '1';
+  const queries = want && listen === false ? await shownPass(saved, state, cycle) : saved;
   const items = await pending(10);
   const seen = listen ? null : await huntDiary(memory.seen);
 
@@ -42,12 +43,12 @@ export const GET: RequestHandler = async ({ request, url }) => {
   });
 };
 
-async function shownPass(saved: string[], state: { frontAt: number; lessAt: number; queryPass: number }): Promise<string[]> {
+async function shownPass(saved: string[], state: { frontAt: number; lessAt: number; queryPass: number }, advance: boolean): Promise<string[]> {
   const served = serveQueries(saved, {
     frontAt: state.frontAt,
     lessAt: state.lessAt,
     queryPass: state.queryPass,
-  }, Date.now());
+  }, advance);
   if (served.cursor.frontAt !== state.frontAt || served.cursor.lessAt !== state.lessAt || served.cursor.queryPass !== state.queryPass)
     await writeState({ frontAt: served.cursor.frontAt, lessAt: served.cursor.lessAt, queryPass: served.cursor.queryPass });
 

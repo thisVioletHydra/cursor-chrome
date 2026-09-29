@@ -9,7 +9,7 @@ import { postNative as sendNative } from './chrome/native-post';
 import { syncNegotiations } from './chrome/negotiations';
 import { ensureOffscreen, setBadge, waitOffscreen } from './chrome/offscreen-ctl';
 import { bindPilotWake, clearHangHalt, hangHalted, pulseNow } from './chrome/page-log';
-import { clearSearchBusy, clearSearchSoon, isPaused, kickedRecently, markKicked, markSearchSoon, paceBeforeHunt, runQueue } from './chrome/queue-run';
+import { clearSearchBusy, clearSearchSoon, isPaused, kickedRecently, markKicked, markSearchSoon, queueBusy, runQueue } from './chrome/queue-run';
 import { rpc } from './chrome/rpc';
 import { closePinnedHh } from './chrome/worker-tab';
 import { browser } from './browser-host';
@@ -17,7 +17,8 @@ import { browser } from './browser-host';
 const ALARM = 'cc-keepalive';
 const QUEUE_ALARM = 'cc-queue';
 const SOON_ALARM = 'cc-queue-soon';
-const QUEUE_PERIOD_MIN = 15;
+// Хром не будит чаще 30 с. Отдых между циклами в очереди, это только подъём, если воркер умер.
+const QUEUE_PERIOD_MIN = 0.5;
 const SOON_MIN_MS = 35_000;
 const SOON_SPAN_MS = 15_000;
 const NEGOTIATIONS_AT_KEY = 'negotiationsAt';
@@ -222,16 +223,11 @@ async function hangUp(): Promise<{ ok: true }> {
 
 async function onQueueAlarm(): Promise<void> {
   const flags = await getFlags();
-  if (flags.autoQueue !== true || hangHalted())
+  if (flags.autoQueue !== true || hangHalted() || queueBusy())
     return;
 
   await syncNegotiationsIfDue();
-  if (await isPaused() || hangHalted())
-    return;
-
-  await paceBeforeHunt();
-
-  if (hangHalted() || await isPaused())
+  if (await isPaused() || hangHalted() || queueBusy())
     return;
 
   const again = await getFlags();

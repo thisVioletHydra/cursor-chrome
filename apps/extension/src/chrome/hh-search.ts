@@ -4,6 +4,7 @@ import { getWorkerTabId, isHhUrl, requireWorkerTab, waitTab } from './worker-tab
 import { browser } from '../browser-host';
 
 const LOOK = 40;
+const PAGE_CAP = 5;
 let sawCaptcha = false;
 const PAGE_MS = 45_000;
 const SEARCH = 'https://hh.ru/search/vacancy';
@@ -13,6 +14,7 @@ export type SearchHit = {
   login: boolean;
   captcha: boolean;
   cards: FoundCard[];
+  more: boolean;
   reason: string;
 };
 
@@ -34,40 +36,37 @@ export async function collectVacancies(queries: string[], seenIds: readonly stri
   sawCaptcha = false;
   const pinned = await getWorkerTabId();
   if (pinned !== null && await tabShowsCaptcha(pinned))
-    return { login: false, captcha: true, cards: [], reason: '' };
+    return miss(true, false, '');
 
   const tabId = await searchTab();
   if (sawCaptcha)
-    return { login: false, captcha: true, cards: [], reason: '' };
+    return miss(true, false, '');
 
   if (tabId === null)
-    return { login: false, captcha: false, cards: [], reason: 'нет запиненной вкладки hh' };
+    return miss(false, false, 'нет запиненной вкладки hh');
 
   const here = await browser.tabs.get(tabId).catch(() => null);
   if (here !== null && isLogin(here.url || '', ''))
-    return { login: true, captcha: false, cards: [], reason: '' };
+    return { login: true, captcha: false, cards: [], more: false, reason: '' };
 
   const cards: FoundCard[] = [];
   const seen = new Set<string>();
   const known = new Set(seenIds.filter(id => /^\d+$/.test(id)));
+  const share = Math.max(1, Math.ceil(LOOK / Math.max(queries.length, 1)));
   let knownHits = 0;
   let sawCards = false;
   let unread = false;
+  let more = false;
   const login = await whileSearching(async () => {
     for (const query of queries) {
-      if (cards.length >= LOOK)
-        return false;
-
-      for (const page of [0, 1]) {
-        if (cards.length >= LOOK)
-          return false;
-
+      let kept = 0;
+      for (let page = 0; page < PAGE_CAP; page += 1) {
         const pulled = await pull(tabId, searchUrl(query, page));
         if (sawCaptcha)
           return false;
 
         if (pulled === null) {
-          if (cards.length === 0 && knownHits === 0) {
+          if (sawCards === false && cards.length === 0 && knownHits === 0) {
             unread = true;
 
             return false;
@@ -85,7 +84,7 @@ export async function collectVacancies(queries: string[], seenIds: readonly stri
 
         sawCards = true;
         for (const card of batch) {
-          if (cards.length >= LOOK || fitsTitle(card.title, queries) === false)
+          if (fitsTitle(card.title, queries) === false)
             continue;
 
           if (seen.has(card.id))
@@ -97,60 +96,68 @@ export async function collectVacancies(queries: string[], seenIds: readonly stri
             continue;
           }
 
+          if (kept >= share || cards.length >= LOOK) {
+            more = true;
+            continue;
+          }
+
           card.query = query;
           cards.push(card);
+          kept += 1;
         }
 
-        await pause(1500, 4000);
+        if (page + 1 >= PAGE_CAP)
+          break;
       }
+    }
+
+    for (const card of cards) {
+      if (sawCaptcha || await tabShowsCaptcha(tabId)) {
+        sawCaptcha = true;
+
+        return false;
+      }
+
+      await tellPage(`открыл ${cardTitle(card)}`);
+      const pulled = await pull(tabId, card.url);
+      if (sawCaptcha)
+        return false;
+
+      if (pulled !== null && isLogin(pulled.url, pulled.html))
+        return true;
+
+      if (pulled !== null)
+        fillText(card, pulled.html);
+
+      await pause(400, 1200);
     }
 
     return false;
   });
 
   if (sawCaptcha)
-    return { login: false, captcha: true, cards: [], reason: '' };
+    return miss(true, false, '');
 
   if (login)
-    return { login: true, captcha: false, cards, reason: '' };
+    return { login: true, captcha: false, cards, more: false, reason: '' };
 
   if (unread) {
     await tellPage('не прочиталась страница hh');
 
-    return { login: false, captcha: false, cards, reason: 'не прочиталась страница hh' };
+    return miss(false, false, 'не прочиталась страница hh');
   }
 
-  if (cards.length === 0 && knownHits > 0) {
-    await tellPage(`уже видели, ${knownHits}`);
-
-    return { login: false, captcha: false, cards, reason: `уже видели, ${knownHits}` };
-  }
+  if (cards.length === 0 && knownHits > 0)
+    return miss(false, false, '');
 
   if (cards.length === 0)
-    return { login: false, captcha: false, cards, reason: sawCards ? 'нет вакансий по запросу' : 'пустая выдача' };
+    return miss(false, false, sawCards ? 'нет вакансий по запросу' : 'пустая выдача');
 
-  for (const card of cards) {
-    if (sawCaptcha || await tabShowsCaptcha(tabId))
-      return { login: false, captcha: true, cards: [], reason: '' };
+  return { login: false, captcha: false, cards, more, reason: '' };
+}
 
-    await tellPage(`открыл ${cardTitle(card)}`);
-    const pulled = await pull(tabId, card.url);
-    if (sawCaptcha)
-      return { login: false, captcha: true, cards: [], reason: '' };
-
-    if (pulled !== null && isLogin(pulled.url, pulled.html))
-      return { login: true, captcha: false, cards, reason: '' };
-
-    if (pulled !== null)
-      fillText(card, pulled.html);
-
-    await pause(400, 1200);
-  }
-
-  if (sawCaptcha)
-    return { login: false, captcha: true, cards: [], reason: '' };
-
-  return { login: false, captcha: false, cards, reason: '' };
+function miss(captcha: boolean, login: boolean, reason: string): SearchHit {
+  return { login, captcha, cards: [], more: false, reason };
 }
 
 function cardTitle(card: FoundCard): string {
