@@ -2,8 +2,6 @@
 import { enhance } from '$app/forms';
 
 let { data } = $props();
-let importMessage = $state('');
-let importOk = $state(false);
 
 const cards = $derived([
   { href: '/admin/telegram', light: data.links.find(item => item.name === 'Телега') },
@@ -86,31 +84,33 @@ const allGreen = $derived(checks.every(row => row.ok));
   </form>
 </section>
 
-<section class="mb-8 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
-  <h2 class="text-base font-semibold">Импорт</h2>
-  <p class="mt-2 text-sm text-zinc-400">Файл из local-debug. Живёт 2 часа, потом прод его не примет.</p>
-  {#if importMessage}
-    <p class="mt-3 font-mono text-xs {importOk ? 'text-emerald-300' : 'text-rose-300'}">{importMessage}</p>
-  {/if}
-  <form
-    class="mt-4 flex flex-wrap items-center gap-3"
-    method="POST"
-    action="?/import"
-    enctype="multipart/form-data"
-    use:enhance={() => {
-      importMessage = '';
-      return async ({ result, update }) => {
-        const body = result.type === 'success' ? result.data : null;
-        importOk = body?.ok === true;
-        importMessage = typeof body?.detail === 'string' ? body.detail : 'не вышло';
-        if (importOk)
-          await update();
-      };
-    }}
-  >
-    <input class="text-sm text-zinc-300" name="config" type="file" accept="application/json,.json" required />
-    <button class="btn btn-primary h-11 min-h-11 px-4" type="submit">Импортировать</button>
-  </form>
+<section class="mb-8">
+  <div class="max-h-[26rem] overflow-x-auto overflow-y-auto rounded-2xl border border-white/8 bg-[#151922]">
+    {#if data.stats.rows.length > 0}
+      <table class="table">
+        <thead class="sticky top-0 z-10">
+          <tr class="bg-[#151922] text-xs text-zinc-500">
+            <th>Вакансия</th>
+            <th>Статус</th>
+            <th>Когда</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each data.stats.rows as row (row.id)}
+            <tr>
+              <td class="max-w-xs truncate">
+                <a class="text-zinc-200 underline-offset-4 hover:underline" href={row.url} target="_blank" rel="noreferrer">{row.company} · {row.title}</a>
+              </td>
+              <td><span class="badge badge-sm {statusBadge[row.status] ?? 'badge-ghost'}">{statusText[row.status] ?? row.status}</span></td>
+              <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {:else}
+      <p class="px-5 py-8 text-sm text-zinc-500">Очередь пустая. Напиши боту «старт».</p>
+    {/if}
+  </div>
 </section>
 
 <header class="mb-8">
@@ -152,31 +152,5 @@ const allGreen = $derived(checks.every(row => row.ok));
         <div class="stat-value text-3xl font-semibold text-white">{figure.value}</div>
       </div>
     {/each}
-  </div>
-  <div class="mt-3 overflow-x-auto rounded-2xl border border-white/8 bg-[#151922]">
-    {#if data.stats.rows.length > 0}
-      <table class="table">
-        <thead>
-          <tr class="text-xs text-zinc-500">
-            <th>Вакансия</th>
-            <th>Статус</th>
-            <th>Когда</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each data.stats.rows as row (row.id)}
-            <tr>
-              <td class="max-w-xs truncate">
-                <a class="text-zinc-200 underline-offset-4 hover:underline" href={row.url} target="_blank" rel="noreferrer">{row.company} · {row.title}</a>
-              </td>
-              <td><span class="badge badge-sm {statusBadge[row.status] ?? 'badge-ghost'}">{statusText[row.status] ?? row.status}</span></td>
-              <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    {:else}
-      <p class="px-5 py-8 text-sm text-zinc-500">Очередь пустая. Напиши боту «старт».</p>
-    {/if}
   </div>
 </section>
