@@ -84,17 +84,47 @@ export function imitationPicture(pace: Pace): PacePicture {
   const fastSometimes = fastBranch && fastAlways === false;
   const slotMean = (readBranch ? (1 - pFast) * read.mean : 0) + (fastBranch ? pFast * fast.mean : 0);
   const teaMean = pTea * tea.mean;
-  const slowSlot = slower(read, fast, readBranch, fastBranch);
-  const quickSlot = quicker(read, fast, readBranch, fastBranch);
+  const slowSlot = edgeSlot(read, fast, readBranch, fastBranch, 'max');
+  const quickSlot = edgeSlot(read, fast, readBranch, fastBranch, 'min');
   const teaOnFast = teaAlways ? tea.min : 0;
+  const slotName = readBranch ? 'чтение' : 'быстро';
   const perFast = quickSlot + open.min + send.min + distract.min + teaOnFast;
   const perMid = slotMean + teaMean + distract.mean + open.mean + send.mean;
-  const perSlow = slowSlot + open.max + send.max + distract.max + (teaEvery > 0 ? tea.max / teaEvery : 0);
   const slowBody = slowSlot + open.max + send.max + distract.max;
+  const teaShare = teaEvery > 0 ? tea.max / teaEvery : 0;
+  const perSlow = slowBody + teaShare;
   const teaHits = teaEvery > 0 ? Math.floor(DAY_CAP / teaEvery) : 0;
   const idleFast = DAY_CAP * perFast;
   const idleMid = DAY_CAP * perMid;
   const idleSlow = DAY_CAP * slowBody + teaHits * tea.max;
+  const midTerms = [
+    readExpect(slotName, read, fast, fastEvery, fastSometimes, fastAlways),
+    teaExpect(tea, teaEvery),
+    `отвлечение ${secText(distract.mean)}`,
+    `клик ${secText(open.mean)}`,
+    `отправка ${secText(send.mean)}`,
+  ].filter(term => term.length > 0);
+  const fastTerms = termList([
+    [slotName, quickSlot],
+    ['клик', open.min],
+    ['отправка', send.min],
+    ['отвлечение', distract.min],
+    ['чай', teaOnFast],
+  ]);
+  const slowTerms = termList([
+    [slotName, slowSlot],
+    ['клик', open.max],
+    ['отправка', send.max],
+    ['отвлечение', distract.max],
+  ]);
+  const slowTea = teaEvery > 0 && tea.max > 0 ? `чай ${secText(tea.max)}/${teaEvery}` : '';
+  const midFormula = joinTerms(midTerms);
+  const fastFormula = joinTerms(fastTerms);
+  const slowFormula = slowTea.length > 0 ? `${joinTerms(slowTerms)} + ${slowTea}` : joinTerms(slowTerms);
+  const slowDay = teaHits > 0 && tea.max > 0
+    ? `${DAY_CAP} × (${joinTerms(slowTerms)}) с + ${teaHits} × ${secText(tea.max)} с чая = ${secText(idleSlow)} с`
+    : `${DAY_CAP} × (${slowFormula}) с = ${secText(idleSlow)} с`;
+  const fastDay = `${DAY_CAP} × (${fastFormula}) с = ${secText(idleFast)} с${teaOnFast > 0 ? '' : ', без чая'}`;
   const chainRead = fastAlways ? fast.mean : read.mean;
   const chainLabel = fastAlways ? 'быстро' : 'читаю';
   const chainNote = fastAlways ? rangeNote(fast) : rangeNote(read);
@@ -135,21 +165,9 @@ export function imitationPicture(pace: Pace): PacePicture {
     dayCap: DAY_CAP,
     lanes,
     scenarios: [
-      scenario('Средний', perMid, partsLine([
-        ['чтение', slotMean],
-        ['чай', teaMean],
-        ['отвлечение', distract.mean],
-        ['клик', open.mean],
-        ['отправка', send.mean],
-      ])),
-      scenario('Худший', perSlow, slowPaceLine(slowBody, tea.max, teaEvery)),
-      scenario('Самый быстрый', perFast, partsLine([
-        [quickSlot === fast.min && fastBranch ? 'быстро' : 'чтение', quickSlot],
-        ['клик', open.min],
-        ['отправка', send.min],
-        ['отвлечение', distract.min],
-        ['чай', teaOnFast],
-      ])),
+      scenario('Средний', perMid, `${midFormula} с`),
+      scenario('Худший', perSlow, `${slowFormula} с`),
+      scenario('Самый быстрый', perFast, `${fastFormula} с`),
     ],
     cap: figure('Потолок дня', `${DAY_CAP} в день`, 'лимит откликов за день'),
     windows: [
@@ -157,22 +175,14 @@ export function imitationPicture(pace: Pace): PacePicture {
       windowFigure(8, EIGHT_HOURS, perMid, perFast, slowBody, teaEvery, tea.max),
     ],
     hours: [
-      figure('Самый быстрый', clockOf(idleFast), `${DAY_CAP} × ${secText(perFast)} с = ${secText(idleFast)} с`),
-      figure('Ожидается', clockOf(idleMid), `${DAY_CAP} × ${secText(perMid)} с = ${secText(idleMid)} с`),
-      figure('Худший', clockOf(idleSlow), `${DAY_CAP} × ${secText(slowBody)} с + ${teaHits} × ${secText(tea.max)} с = ${secText(idleSlow)} с`),
+      figure('Самый быстрый', clockOf(idleFast), fastDay),
+      figure('Ожидается', clockOf(idleMid), `${DAY_CAP} × (${midFormula}) с = ${secText(idleMid)} с`),
+      figure('Худший', clockOf(idleSlow), slowDay),
     ],
     idle: [
-      figure('В среднем', clockOf(idleMid), `${DAY_CAP} × (${namedSum([
-        ['чтение', slotMean],
-        ['чай', teaMean],
-        ['отвлечение', distract.mean],
-        ['клик', open.mean],
-        ['отправка', send.mean],
-      ])}) с = ${secText(idleMid)} с`),
-      figure('Худший', clockOf(idleSlow), `${DAY_CAP} × ${secText(slowBody)} с + ${teaHits} × ${secText(tea.max)} с чая = ${secText(idleSlow)} с`),
-      figure('Самый быстрый', clockOf(idleFast), teaOnFast > 0
-        ? `${DAY_CAP} × ${secText(perFast)} с = ${secText(idleFast)} с`
-        : `${DAY_CAP} × ${secText(perFast)} с = ${secText(idleFast)} с, без чая`),
+      figure('В среднем', clockOf(idleMid), `${DAY_CAP} × (${midFormula}) с = ${secText(idleMid)} с`),
+      figure('Худший', clockOf(idleSlow), slowDay),
+      figure('Самый быстрый', clockOf(idleFast), fastDay),
     ],
     rest: figure(
       'Отдых между кругами',
@@ -218,38 +228,40 @@ function teaExtra(count: number, every: number, add: number): number {
   return Math.floor(count / every) * add;
 }
 
-function slower(read: Span, fast: Span, readOn: boolean, fastOn: boolean): number {
-  return Math.max(readOn ? read.max : 0, fastOn ? fast.max : 0);
+function edgeSlot(read: Span, fast: Span, readOn: boolean, fastOn: boolean, edge: 'min' | 'max'): number {
+  const span = readOn ? read : fastOn ? fast : null;
+  if (span === null)
+    return 0;
+
+  return span[edge];
 }
 
-function quicker(read: Span, fast: Span, readOn: boolean, fastOn: boolean): number {
-  const picks = [readOn ? read.min : Number.POSITIVE_INFINITY, fastOn ? fast.min : Number.POSITIVE_INFINITY];
-  const best = Math.min(...picks);
+function readExpect(name: string, read: Span, fast: Span, every: number, sometimes: boolean, always: boolean): string {
+  if (always)
+    return `${name} ${secText(fast.mean)}`;
 
-  return best === Number.POSITIVE_INFINITY ? 0 : best;
+  if (sometimes)
+    return `${name} ((${every - 1}/${every})×${secText(read.mean)} + (1/${every})×${secText(fast.mean)})`;
+
+  return `${name} ${secText(read.mean)}`;
 }
 
-function slowPaceLine(body: number, teaMax: number, every: number): string {
-  if (every < 1)
-    return `${secText(body)} с, без чая`;
+function teaExpect(tea: Span, every: number): string {
+  if (every < 1 || tea.mean <= 0)
+    return '';
 
-  return `${secText(body)} с + ${secText(teaMax)} / ${every} с чая`;
+  if (every === 1)
+    return `чай ${secText(tea.mean)}`;
+
+  return `чай (1/${every})×${secText(tea.mean)}`;
 }
 
-function namedSum(parts: Array<[string, number]>): string {
-  const shown = parts.filter(([, value]) => value > 0);
-  if (shown.length === 0)
-    return '0';
-
-  return shown.map(([name, value]) => `${name} ${secText(value)}`).join(' + ');
+function termList(parts: Array<[string, number]>): string[] {
+  return parts.filter(([, value]) => value > 0).map(([name, value]) => `${name} ${secText(value)}`);
 }
 
-function partsLine(parts: Array<[string, number]>): string {
-  const shown = parts.filter(([, value]) => value > 0);
-  if (shown.length === 0)
-    return '0 с';
-
-  return `${shown.map(([name, value]) => `${name} ${secText(value)}`).join(' + ')} с`;
+function joinTerms(terms: string[]): string {
+  return terms.length > 0 ? terms.join(' + ') : '0';
 }
 
 function bar(label: string, tag: string, start: number, seconds: number, note: string, tone: LaneTone, gap: boolean): Lane {
