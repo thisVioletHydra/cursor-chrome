@@ -1,4 +1,5 @@
 <script lang="ts">
+import { enhance } from '$app/forms';
 import KeyConnect from '$lib/KeyConnect.svelte';
 import Mark from '$lib/Mark.svelte';
 import Out from '$lib/Out.svelte';
@@ -7,6 +8,8 @@ let { data } = $props();
 const link = $derived(data.links.find(item => item.name === 'Телега'));
 const username = $derived(link?.detail.match(/@([A-Za-z0-9_]+)/)?.[1] ?? '');
 let ask = $state(false);
+let connecting = $state(false);
+let connectError = $state('');
 </script>
 
 <header class="mb-5">
@@ -28,6 +31,41 @@ let ask = $state(false);
     </div>
     <button class="ml-auto cursor-pointer rounded-lg px-3 py-1.5 text-sm text-rose-400 transition hover:bg-rose-500 hover:text-white focus-visible:bg-rose-500 focus-visible:text-white focus-visible:outline-none" type="button" onclick={() => ask = true}>Отвязать</button>
   </div>
+{/if}
+
+{#if link?.ok && data.owner === false}
+  <form
+    class="mt-3"
+    method="POST"
+    action="?/connect"
+    use:enhance={() => {
+      connecting = true;
+      connectError = '';
+      return async ({ result, update }) => {
+        connecting = false;
+        if (result.type === 'failure') {
+          connectError = typeof result.data?.detail === 'string' ? result.data.detail : 'Личного чата нет.';
+          return;
+        }
+
+        if (result.type !== 'success') {
+          connectError = 'Личного чата нет.';
+          return;
+        }
+
+        await update();
+      };
+    }}
+  >
+    <button class="btn btn-primary btn-sm" type="submit" disabled={connecting}>
+      {connecting ? 'Подключаю…' : 'Подключить чат'}
+    </button>
+    {#if connectError}
+      <p class="mt-2 text-sm text-rose-300">{connectError}</p>
+    {/if}
+  </form>
+{:else if link?.ok && data.owner}
+  <p class="mt-3 text-sm text-emerald-300">Чат подключён</p>
 {/if}
 
 <KeyConnect

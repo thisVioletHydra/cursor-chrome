@@ -5,25 +5,71 @@ import path from 'node:path';
 import process from 'node:process';
 import url from 'node:url';
 
-const OWNER_NAME = 'rtxroman';
-
 type Update = {
   update_id: number;
   message?: {
     text?: string;
-    chat: { id: number };
-    from?: { username?: string };
+    chat: { id: number; type?: string };
   };
 };
 
 let offset = 0;
 let started = false;
 let polling = false;
+let updatesBusy = false;
 let ownerChat: number | null = null;
+let lastPrivate: number | null = null;
+let notedGap = '';
 let onApply: ((item: { id: string; company: string; url: string }) => Promise<boolean>) | null = null;
 
 export function telegramOn(): boolean {
   return polling;
+}
+
+export async function ownerSaved(): Promise<boolean> {
+  return (await readOwner()) !== null;
+}
+
+export async function connectOwner(): Promise<{ ok: true } | { ok: false; detail: string }> {
+  if (token().length === 0)
+    return { ok: false, detail: 'Нет токена бота.' };
+
+  const saved = await readOwner();
+  if (saved !== null)
+    return { ok: true };
+
+  if (lastPrivate !== null) {
+    try {
+      await writeOwner(lastPrivate);
+    }
+    catch {
+      return { ok: false, detail: 'Чат не записался.' };
+    }
+
+    return { ok: true };
+  }
+
+  if (polling || updatesBusy)
+    return { ok: false, detail: 'Личного чата нет.' };
+
+  let updates: Update[] | null;
+  try {
+    updates = await takeUpdates(0);
+  }
+  catch {
+    return { ok: false, detail: 'Личного чата нет.' };
+  }
+
+  if (updates === null)
+    return { ok: false, detail: 'Личного чата нет.' };
+
+  for (const update of updates)
+    await onUpdate(update);
+
+  if ((await readOwner()) === null)
+    return { ok: false, detail: 'Личного чата нет.' };
+
+  return { ok: true };
 }
 
 export function setApplyGate(gate: (item: { id: string; company: string; url: string }) => Promise<boolean>): void {
@@ -113,7 +159,12 @@ async function loop(): Promise<void> {
 
     polling = true;
     try {
-      const updates = await getUpdates();
+      const updates = await takeUpdates(30);
+      if (updates === null) {
+        await delay(200);
+        continue;
+      }
+
       for (const update of updates)
         await onUpdate(update);
     }
@@ -125,9 +176,22 @@ async function loop(): Promise<void> {
   }
 }
 
-async function getUpdates(): Promise<Update[]> {
+async function takeUpdates(timeout: number): Promise<Update[] | null> {
+  if (updatesBusy)
+    return null;
+
+  updatesBusy = true;
+  try {
+    return await fetchUpdates(timeout);
+  }
+  finally {
+    updatesBusy = false;
+  }
+}
+
+async function fetchUpdates(timeout: number): Promise<Update[]> {
   const updatesUrl = new URL(`${api()}/getUpdates`);
-  updatesUrl.searchParams.set('timeout', '30');
+  updatesUrl.searchParams.set('timeout', String(timeout));
   updatesUrl.searchParams.set('offset', String(offset));
   const res = await fetch(updatesUrl);
   if (res.ok === false)
@@ -141,12 +205,10 @@ async function getUpdates(): Promise<Update[]> {
 async function onUpdate(update: Update): Promise<void> {
   offset = update.update_id + 1;
   const message = update.message;
-  if (message === undefined)
+  if (message === undefined || message.chat.type !== 'private')
     return;
 
-  const allowed = await allow(message.chat.id, message.from?.username ?? '');
-  if (allowed === false)
-    return;
+  await keepPrivate(message.chat.id);
 
   const text = (message.text ?? '').trim().toLowerCase();
   if (text === '/start' || text.startsWith('/start ')) {
@@ -175,7 +237,11 @@ export function startAutopilot(): void {
 export async function notifyOwner(text: string): Promise<void> {
   const chatId = await readOwner();
   if (chatId === null || token().length === 0) {
-    watchDeath('telegram', chatId === null ? 'нет чата владельца' : 'нет токена бота');
+    const line = chatId === null ? 'нет чата владельца' : 'нет токена бота';
+    if (notedGap !== line) {
+      notedGap = line;
+      watchDeath('telegram', line);
+    }
 
     return;
   }
@@ -183,20 +249,16 @@ export async function notifyOwner(text: string): Promise<void> {
   await send(chatId, text).catch(() => undefined);
 }
 
-async function allow(chatId: number, username: string): Promise<boolean> {
+async function keepPrivate(chatId: number): Promise<void> {
+  lastPrivate = chatId;
+  if (ownerChat === chatId)
+    return;
+
   const saved = await readOwner();
   if (saved === chatId)
-    return true;
-
-  if (saved !== null)
-    return false;
-
-  if (username.toLowerCase() !== OWNER_NAME)
-    return false;
+    return;
 
   await writeOwner(chatId);
-
-  return true;
 }
 
 async function readOwner(): Promise<number | null> {
@@ -233,8 +295,9 @@ async function readOwnerFile(file: string): Promise<number | null> {
 }
 
 async function writeOwner(chatId: number): Promise<void> {
-  ownerChat = chatId;
   await writeJsonAtomic(ownerFile(), { chatId });
+  ownerChat = chatId;
+  lastPrivate = chatId;
 }
 
 async function send(chatId: number, text: string, keys = false): Promise<void> {
