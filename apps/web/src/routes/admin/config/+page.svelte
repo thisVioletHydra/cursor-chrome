@@ -8,24 +8,6 @@ let importMessage = $state('');
 let importOk = $state(false);
 let importing = $state(false);
 
-const scope = [
-  'Telegram',
-  'Модели',
-  'Резюме',
-  'Запросы поиска',
-  'Правила',
-  'Сопроводительное',
-  'Боевой режим',
-  'Ссылка расширения',
-];
-
-const sample = `{
-  "kind": "cursor-chrome-setup",
-  "telegramToken": "••••",
-  "gemini": { "model": "gemini-…" },
-  "hhResumeId": "…"
-}`;
-
 function openFile() {
   if (fileInput === undefined)
     return;
@@ -107,9 +89,13 @@ function onImport() {
 
 <section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Что сохранено</h2>
-  <ul class="mt-3 grid gap-1 text-sm text-zinc-300">
-    {#each scope as item}
-      <li>{item}</li>
+  <ul class="mt-3 flex flex-col gap-2">
+    {#each data.rows as row}
+      <li class="flex min-w-0 items-center gap-2 text-sm">
+        <span class="size-1.5 shrink-0 rounded-full {row.on ? 'bg-emerald-400' : 'bg-zinc-600'}" aria-hidden="true"></span>
+        <span class="shrink-0 text-zinc-200">{row.label}</span>
+        <span class="min-w-0 flex-1 truncate text-right text-zinc-400">{row.fact}</span>
+      </li>
     {/each}
   </ul>
 </section>
@@ -126,6 +112,6 @@ function onImport() {
 
 <section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Пример</h2>
-  <p class="mt-2 text-sm text-zinc-400">Образец формы файла из local-debug. Это не твой конфиг.</p>
-  <pre class="mt-3 overflow-x-auto rounded-xl border border-white/10 bg-black/30 px-4 py-3 font-mono text-xs leading-5 text-zinc-300">{sample}</pre>
+  <p class="mt-2 text-sm text-zinc-400">Твой конфиг, ключи скрыты</p>
+  <pre class="mt-3 overflow-x-auto rounded-xl border border-white/10 bg-black/30 px-4 py-3 font-mono text-xs leading-5 text-zinc-300">{data.redacted}</pre>
 </section>
