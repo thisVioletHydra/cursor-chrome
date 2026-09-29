@@ -61,7 +61,8 @@ export const POST: RequestHandler = async ({ request }) => {
   if (status === 'sent') {
     await takeVacancy(login, { company, url });
     const title = done?.title || String(body?.title ?? '').trim();
-    notifyDigest('sent', `• ${company}${title.length > 0 ? ` — ${title}` : ''}\n  ${url}`);
+    const head = title.length > 0 ? `${company} — ${title}` : company;
+    await notifyOwner(`Отклик. ${head}\n${url}`);
   }
   else {
     const tail = hints.length > 0 ? ` ${hints.join('; ')}` : '';
