@@ -66,7 +66,7 @@ function onImport() {
   <h1 class="mt-1 text-3xl font-semibold tracking-tight">Конфиг</h1>
 </header>
 
-<section class="max-w-xl rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+<section class="rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Импорт</h2>
   <p class="mt-2 text-sm text-zinc-400">Экспорт собирается в local-debug и импортируется сюда. Через 2 часа файл больше не принимается.</p>
   <form
@@ -105,7 +105,7 @@ function onImport() {
   </form>
 </section>
 
-<section class="mt-4 max-w-xl rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+<section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Что сохранено</h2>
   <ul class="mt-3 grid gap-1 text-sm text-zinc-300">
     {#each scope as item}
@@ -114,7 +114,7 @@ function onImport() {
   </ul>
 </section>
 
-<section class="mt-4 max-w-xl rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+<section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Файл</h2>
   {#if data.bytes === null}
     <p class="mt-2 text-sm text-zinc-400">Файла нет.</p>
@@ -124,7 +124,7 @@ function onImport() {
   {/if}
 </section>
 
-<section class="mt-4 max-w-xl rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+<section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Пример</h2>
   <p class="mt-2 text-sm text-zinc-400">Образец формы файла из local-debug. Это не твой конфиг.</p>
   <pre class="mt-3 overflow-x-auto rounded-xl border border-white/10 bg-black/30 px-4 py-3 font-mono text-xs leading-5 text-zinc-300">{sample}</pre>
