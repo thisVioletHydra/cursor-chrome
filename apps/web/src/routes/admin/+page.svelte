@@ -1,12 +1,14 @@
 <script lang="ts">
 import { enhance } from '$app/forms';
-import { onMount } from 'svelte';
+import { onMount, tick } from 'svelte';
 
 let { data } = $props();
 let stats = $state(data.stats);
 let polling = $state(data.polling);
 let pulseLine = $state('');
 let watchLog = $state<{ at: number; who: string; text: string; death: boolean }[]>([]);
+let watchList = $state<HTMLUListElement>();
+let followLog = true;
 
 const whoName: Record<string, string> = {
   extension: 'расширение',
@@ -54,6 +56,26 @@ async function refresh(): Promise<void> {
 function clock(at: number): string {
   return new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(at);
 }
+
+function onLogScroll(): void {
+  if (watchList === undefined)
+    return;
+
+  followLog = watchList.scrollHeight - watchList.scrollTop - watchList.clientHeight < 40;
+}
+
+$effect(() => {
+  const rows = watchLog;
+  if (followLog === false || rows.length === 0)
+    return;
+
+  void tick().then(() => {
+    if (watchList === undefined)
+      return;
+
+    watchList.scrollTop = watchList.scrollHeight;
+  });
+});
 
 const cards = $derived([
   { href: '/admin/telegram', light: data.links.find(item => item.name === 'Телега') },
@@ -171,7 +193,7 @@ const allGreen = $derived(checks.every(row => row.ok));
   {#if watchLog.length === 0}
     <p class="mt-3 text-xs text-zinc-500">Пока тихо. Сюда попадают смена шага и поломки, не каждая секунда.</p>
   {:else}
-    <ul class="mt-3 max-h-40 overflow-y-auto font-mono text-xs">
+    <ul bind:this={watchList} class="mt-3 max-h-40 overflow-y-auto font-mono text-xs" onscroll={onLogScroll}>
       {#each watchLog as row (row.at + row.text)}
         <li class={row.death ? 'text-rose-300' : 'text-zinc-400'}>{clock(row.at)} {whoName[row.who] ?? row.who} {row.text}</li>
       {/each}
