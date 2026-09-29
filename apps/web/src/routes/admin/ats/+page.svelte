@@ -76,11 +76,11 @@ function takeResume() {
   <h1 class="mt-1 text-3xl font-semibold tracking-tight">ATS</h1>
 </header>
 
-<div class="grid items-start gap-4 lg:grid-cols-2">
-  <section class="rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+<div class="grid min-w-0 items-start gap-4 lg:grid-cols-2">
+  <section class="min-w-0 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
     <h2 class="text-base font-semibold text-white">Резюме</h2>
     {#if hasText}
-      <pre class="mt-4 max-h-[calc(100dvh-16rem)] overflow-y-auto font-sans text-sm leading-6 whitespace-pre-wrap text-zinc-200">{data.text}</pre>
+      <pre class="mt-4 max-h-[calc(100dvh-16rem)] min-w-0 overflow-x-hidden overflow-y-auto font-sans text-sm leading-6 break-words whitespace-pre-wrap text-zinc-200">{data.text}</pre>
     {:else if data.linked}
       <p class="mt-2 text-sm text-zinc-400">Ссылка сохранена. Текста резюме тут ещё нет.</p>
       {#if pullError}
@@ -100,7 +100,7 @@ function takeResume() {
     {/if}
   </section>
 
-  <section class="rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+  <section class="min-w-0 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
     <h2 class="text-base font-semibold text-white">Для робота</h2>
     {#if scan}
       <p class="mt-3 text-4xl font-semibold tracking-tight">{scan.score} из 100</p>
@@ -108,9 +108,9 @@ function takeResume() {
       {#if scan.flags.length === 0}
         <p class="mt-4 text-sm text-zinc-300">красных флагов нет</p>
       {:else}
-        <ul class="mt-4 grid gap-2">
+        <ul class="mt-4 grid min-w-0 grid-cols-1 gap-2">
           {#each scan.flags as flag}
-            <li class="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">{flag}</li>
+            <li class="min-w-0 rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm break-words text-rose-100">{flag}</li>
           {/each}
         </ul>
       {/if}
