@@ -1,0 +1,14 @@
+---
+description: Поднимать версию расширения в том же изменении
+alwaysApply: true
+---
+
+# Версия расширения
+
+Одно поле: `version` в корневом `package.json`. Сборка (`apps/extension/scripts/copy-static.mjs`) пишет его в `dist/manifest.json`. Это значение показывает chrome://extensions и попап (`#ver` через `browser.runtime.getManifest().version`). Второе поле не заводи: ни в `apps/extension/src/manifest.json`, ни в `apps/extension/package.json`.
+
+Когда меняешь `apps/extension` или отдаёшь сборку расширения, подними это поле в том же изменении, до коммита. Патч, если не просили minor или major.
+
+Если bumpp, changeset, semantic-release или tsdown уже подняли это же поле в текущем изменении, второй раз не поднимай. Отдельной версии расширения нет.
+
+После бампа собери расширение, версия попадает в dist на билде: `pnpm --filter @cursor-chrome/extension build`. `dist` не коммитить.
