@@ -158,7 +158,6 @@ async function drain(): Promise<QueueRun> {
     run.lines.push(filled.note);
 
   const seen = new Set<string>();
-  let distract = false;
   let started = false;
 
   while (hoursOpen()) {
@@ -184,10 +183,6 @@ async function drain(): Promise<QueueRun> {
         break;
       }
 
-      if (distract)
-        await tickPage('отвлёкся', await distractWait());
-
-      distract = false;
       seen.add(item.id);
       started = true;
       const reply = await applyOne(item);
@@ -196,12 +191,19 @@ async function drain(): Promise<QueueRun> {
       count(run, status);
       run.lines.push(`${item.company}: ${describe(status, reply)}`);
 
+      const stop = stopReason(status, reply);
+      if (stop.length > 0)
+        await tellPage(stop);
+      else if (status === 'sent')
+        await tickPage('отвлёкся', await distractWait());
+      else
+        await tellPage(describe(status, reply));
+
       if (status === 'needsHuman')
         await report(base, key, item, { status, hints: hintsOf(reply) });
       else if (status === 'skip')
         await report(base, key, item, { status: 'failed', reason: reply.reason || '', hints: hintsOf(reply) });
 
-      const stop = stopReason(status, reply);
       if (stop.length > 0) {
         await pauseUntilMorning();
         await report(base, key, item, { status: 'stop', reason: stop });
@@ -209,9 +211,6 @@ async function drain(): Promise<QueueRun> {
         stopped = true;
         break;
       }
-
-      if (status === 'sent')
-        distract = true;
     }
 
     if (stopped)

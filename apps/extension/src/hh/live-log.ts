@@ -7,8 +7,8 @@ let shown: string[] = [];
 let paints = 0;
 let listening = false;
 
-export function noteLive(line: string): void {
-  void ask({ type: 'page-log', line });
+export function noteLive(line: string): Promise<void> {
+  return ask({ type: 'page-log', line }).then(() => undefined);
 }
 
 export function mountLiveLog(): void {

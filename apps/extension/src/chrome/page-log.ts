@@ -74,9 +74,21 @@ export async function tellPage(line: string): Promise<void> {
   await broadcast(lines);
 }
 
+const STAGE: Record<string, string> = {
+  читаю: 'читаю вакансию',
+  быстро: 'пролистал',
+  чай: 'ушёл курить',
+  отвлёкся: 'отвлёкся',
+  жду: 'жду очередь',
+};
+
 export async function tickPage(label: string, ms: number): Promise<void> {
   if (ms <= 0)
     return;
+
+  const stage = STAGE[label];
+  if (stage !== undefined)
+    await tellPage(stage);
 
   const steps = Math.max(1, Math.round(ms / 1000));
   const started = Date.now();
@@ -134,7 +146,7 @@ async function broadcast(rows: string[]): Promise<void> {
   }));
 }
 
-const TICK = /^(читаю|быстро|чай|отвлёкся|жду) /;
+const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
 
 function sameTick(previous: string, next: string): boolean {
   const was = previous.match(TICK);

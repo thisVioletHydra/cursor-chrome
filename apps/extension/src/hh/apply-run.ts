@@ -4,7 +4,7 @@ import { ctaApplied, findSubmit, formErrors, freshSuccess, pageSkip, planOpen } 
 import { applyBlocker, formReady, humanPayload } from './apply-detect';
 import { asHumanBlock, fillApply } from './apply-fill';
 import { ask } from './bridge';
-import { pause, until } from './dom';
+import { sleep, until } from './dom';
 import { noteLive } from './live-log';
 import { murkyBlock, vacancyAndFormText } from './murky';
 import { markReviewing, setApplyLock } from './screen-questions';
@@ -93,9 +93,10 @@ async function clickOpen(plan: ReturnType<typeof planOpen>): Promise<ApplyResult
   if (plan.kind !== 'click')
     return fail('нет кнопки Откликнуться');
 
-  await pause(700, 2_600);
+  await noteLive('жму откликнуться');
+  await beat('жду', between(700, 2_600), () => false);
   click(plan.el);
-  const ok = await until(() => formReady() || freshSuccess(hadToast), 8000);
+  const ok = await beat('жду', 8_000, () => formReady() || freshSuccess(hadToast));
   if (freshSuccess(hadToast))
     return sentResult();
 
@@ -122,10 +123,11 @@ async function submitStep(): Promise<ApplyResult> {
   if (btn === null)
     return fail('нет кнопки отправки');
 
-  noteLive('отправляю отклик');
-  await pause(900, 3_200);
+  await noteLive('отправляю отклик');
+  await noteLive('жду ответ');
+  await beat('жду', between(900, 3_200), () => false);
   click(btn);
-  await until(() => freshSuccess(hadToast) || formErrors().length > 0, 8000);
+  await beat('жду', 8_000, () => freshSuccess(hadToast) || formErrors().length > 0);
   const errors = formErrors();
   const outcomes: Array<[boolean, () => ApplyResult]> = [
     [errors.length > 0, () => humanResult({ reason: errors[0] || 'ошибка формы', hints: errors.slice(0, 8) })],
@@ -161,6 +163,30 @@ async function sentResult(): Promise<ApplyResult> {
   await ask({ type: 'apply-log', ...meta });
 
   return { ok: true, status: 'sent', reason: 'отклик отправлен', ...meta };
+}
+
+function between(min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+async function beat(label: string, ms: number, done: () => boolean): Promise<boolean> {
+  const end = Date.now() + ms;
+  let sec = 0;
+  let next = 0;
+  while (Date.now() < end) {
+    if (done())
+      return true;
+
+    if (Date.now() >= next) {
+      sec += 1;
+      next = Date.now() + 1000;
+      await noteLive(`${label} ${sec}`);
+    }
+
+    await sleep(150);
+  }
+
+  return done();
 }
 
 function fail(reason: string): ApplyResult {
