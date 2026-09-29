@@ -167,7 +167,13 @@ export async function askChain(chain: Provider[], prompt: string, timeoutMs = PI
   if (timedOut)
     throw new Error('модель не ответила, время вышло');
 
-  throw new Error(reasons.length > 0 ? reasons.join(', ') : 'все провайдеры отдыхают');
+  const detail = reasons.length > 0 ? reasons.join(', ') : 'все провайдеры отдыхают';
+
+  throw new Error(`все модели недоступны: ${detail}`);
+}
+
+export function modelsDown(text: string): boolean {
+  return text.startsWith('все модели недоступны');
 }
 
 function failReason(provider: Provider, error: unknown): string {

@@ -182,23 +182,31 @@ export async function tickPage(label: string, ms: number): Promise<void> {
   if (halted || ms <= 0)
     return;
 
-  const stage = STAGE[label];
-  if (stage !== undefined)
-    await tellPage(stage);
+  namedWait = true;
+  planStall();
+  try {
+    const stage = STAGE[label];
+    if (stage !== undefined)
+      await tellPage(stage);
 
-  const steps = Math.max(1, Math.round(ms / 1000));
-  const started = Date.now();
-  for (let sec = 1; sec <= steps; sec++) {
-    if (halted)
-      return;
+    const steps = Math.max(1, Math.round(ms / 1000));
+    const started = Date.now();
+    for (let sec = 1; sec <= steps; sec++) {
+      if (halted)
+        return;
 
-    await tellPage(`${label} ${sec}`);
-    if (halted)
-      return;
+      await tellPage(`${label} ${sec}`);
+      if (halted)
+        return;
 
-    const pause = started + Math.round(ms * sec / steps) - Date.now();
-    if (pause > 0)
-      await delay(pause);
+      const pause = started + Math.round(ms * sec / steps) - Date.now();
+      if (pause > 0)
+        await delay(pause);
+    }
+  }
+  finally {
+    namedWait = false;
+    planStall();
   }
 }
 
@@ -207,7 +215,7 @@ function planStall(): void {
     clearTimeout(stall);
 
   stall = undefined;
-  if (armed === 0 || halted)
+  if (namedWait || armed === 0 || halted)
     return;
 
   const limit = stallLimit();
@@ -257,6 +265,7 @@ function sameTick(previous: string, next: string): boolean {
   return was[1] === now[1];
 }
 
+let namedWait = false;
 let pulseTimer: ReturnType<typeof setTimeout> | undefined;
 let pulseLine = '';
 let waking = false;

@@ -36,6 +36,7 @@ export async function collectVacancies(queries: string[]): Promise<SearchHit> {
 
   const cards: FoundCard[] = [];
   const seen = new Set<string>();
+  let sawCards = false;
   for (const query of queries) {
     if (cards.length >= LOOK)
       break;
@@ -56,12 +57,13 @@ export async function collectVacancies(queries: string[]): Promise<SearchHit> {
       if (isLogin(pulled.url, pulled.html))
         return { login: true, cards, reason: '' };
 
-      const batch = cardsOf(pulled.html);
+      const batch = cardsOf(serpHtml(pulled.html));
       if (batch.length === 0)
         break;
 
+      sawCards = true;
       for (const card of batch) {
-        if (seen.has(card.id) || cards.length >= LOOK)
+        if (seen.has(card.id) || cards.length >= LOOK || fitsTitle(card.title, queries) === false)
           continue;
 
         seen.add(card.id);
@@ -73,7 +75,7 @@ export async function collectVacancies(queries: string[]): Promise<SearchHit> {
   }
 
   if (cards.length === 0)
-    return { login: false, cards, reason: 'пустая выдача' };
+    return { login: false, cards, reason: sawCards ? 'нет вакансий по запросу' : 'пустая выдача' };
 
   for (const card of cards) {
     await tellPage(`открыл ${cardTitle(card)}`);
@@ -250,6 +252,88 @@ function isGuard(html: string): boolean {
 
 function isLogin(url: string, html: string): boolean {
   return url.includes('/account/login') || html.includes('data-qa="account-login"');
+}
+
+const SIDE = [
+  'Вам подойдут',
+  'Подходящие вакансии',
+  'Вакансии для вас',
+  'Также смотрят',
+  'Похожие вакансии',
+  'Рекомендуемые вакансии',
+];
+
+const TITLE_WORD: Record<string, string[]> = {
+  frontend: ['frontend', 'фронтенд', 'фронтэнд'],
+  vuejs: ['vue'],
+  typescript: ['typescript'],
+  javascript: ['javascript'],
+  nodejs: ['nodejs', 'node'],
+  fullstack: ['fullstack', 'фулстек', 'фуллстек', 'фулстэк'],
+  nestjs: ['nestjs'],
+  graphql: ['graphql'],
+};
+
+function serpHtml(html: string): string {
+  const firstCard = html.indexOf('data-qa="vacancy-serp__vacancy"');
+  if (firstCard < 0)
+    return html;
+
+  let cut = html.length;
+  for (const label of SIDE) {
+    const at = html.indexOf(label, firstCard);
+    if (at >= 0 && at < cut)
+      cut = at;
+  }
+
+  return html.slice(0, cut);
+}
+
+function fitsTitle(title: string, queries: string[]): boolean {
+  const hay = fold(title);
+
+  return queries.some(query => queryFits(hay, query));
+}
+
+function queryFits(hay: string, query: string): boolean {
+  const glued = fold(query).replace(/ /g, '');
+  if (glued.length === 0)
+    return false;
+
+  const needles = TITLE_WORD[glued] ?? [glued];
+
+  return needles.some(needle => hasWord(hay, needle));
+}
+
+function hasWord(hay: string, needle: string): boolean {
+  if (bounded(hay, needle))
+    return true;
+
+  const gluedNeedle = needle.replace(/ /g, '');
+  if (gluedNeedle.length < 4)
+    return false;
+
+  return hay.replace(/ /g, '').includes(gluedNeedle);
+}
+
+function bounded(hay: string, needle: string): boolean {
+  if (needle.length === 0)
+    return false;
+
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escapeRe(needle)}`, 'iu').test(hay);
+}
+
+function escapeRe(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function fold(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/[.\-_/+]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function cardsOf(html: string): FoundCard[] {

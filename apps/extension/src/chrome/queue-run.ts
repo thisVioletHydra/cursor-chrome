@@ -311,8 +311,10 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
     return { note: found.reason.length > 0 ? found.reason : 'пустая выдача' };
 
   await browser.storage.local.remove(STOP_NOTE_KEY);
-  await noteServerBatch();
-  const posted = await postFound(base, key, found.cards).finally(doneServerBatch);
+  const posted = await sendFound(base, key, found.cards);
+  if (hangHalted())
+    return { stop: 'расширение зависло' };
+
   if (posted.ok === false || posted.added === 0) {
     const note = posted.reason.length > 0 ? posted.reason : 'сервер не принял вакансии';
     await tellPage(note);
@@ -323,6 +325,33 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
   await tellPage(`в очереди ${posted.added}`);
 
   return { note: '' };
+}
+
+const DOWN = 'все модели недоступны';
+const RETRY_MS = 60_000;
+
+export async function paceBeforeHunt(): Promise<void> {
+  if (hangHalted())
+    return;
+
+  await tickPage('жду', 15_000 + Math.floor(Math.random() * 150_000));
+}
+
+async function sendFound(base: string, key: string, cards: unknown[]): Promise<{ ok: boolean; added: number; reason: string }> {
+  await noteServerBatch();
+  let posted = await postFound(base, key, cards).finally(doneServerBatch);
+  if (posted.added > 0 || posted.reason.startsWith(DOWN) === false)
+    return posted;
+
+  await tellPage(posted.reason);
+  await tickPage('жду', RETRY_MS);
+  if (hangHalted())
+    return posted;
+
+  await noteServerBatch();
+  posted = await postFound(base, key, cards).finally(doneServerBatch);
+
+  return posted;
 }
 
 async function tellStop(base: string, key: string, reason: string): Promise<void> {

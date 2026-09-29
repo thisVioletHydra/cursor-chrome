@@ -9,7 +9,7 @@ import { judge, packReport } from './judge.ts';
 import { searchVacancies } from './hh-api.ts';
 import { LOOK_PER_START, MODEL_PER_START, QUEUE_TARGET, SEND_PER_DAY } from './limits.ts';
 import { readMemory, remember, writeMemory } from './memory.ts';
-import { modelFromEnv } from './model.ts';
+import { modelFromEnv, modelsDown } from './model.ts';
 import { pendingCount } from './queue.ts';
 import { hardSkip } from './rules.ts';
 import { byScore, ruleSkip, rulesFromEnv, scoreOf } from './score.ts';
@@ -64,6 +64,11 @@ export async function scan(opts: ScanOpts): Promise<ScanRun> {
             modelUsed += 1;
           },
         });
+
+    if (modelsDown(report.reason)) {
+      reports.push(report);
+      break;
+    }
 
     const final = opts.live && report.verdict === 'apply'
       ? await finish(vacancy, report, scoreOf(vacancy, rules))

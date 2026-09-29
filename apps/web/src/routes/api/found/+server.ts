@@ -1,7 +1,7 @@
 import type { Vacancy } from '@cursor-chrome/hh';
 import type { RequestHandler } from './$types';
 
-import { dayOpen, LOOK_PER_START, pendingCount, QUEUE_TARGET, readMemory, readState, scan, watchDeath, workHours } from '@cursor-chrome/hh';
+import { dayOpen, fitsTitle, LOOK_PER_START, modelsDown, pendingCount, QUEUE_TARGET, readMemory, readState, scan, splitQueries, watchDeath, watchNote, workHours } from '@cursor-chrome/hh';
 import { chargeQueued, notifyOwner } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
@@ -36,11 +36,15 @@ export const POST: RequestHandler = async ({ request }) => {
   if (body === null || Array.isArray(body.vacancies) === false || body.vacancies.length === 0)
     return json({ ok: true, added: 0, reason: 'пустое тело' });
 
-  const list = vacanciesOf(body.vacancies);
-  if (list.length === 0)
+  const parsed = vacanciesOf(body.vacancies);
+  if (parsed.length === 0)
     return json({ ok: true, added: 0, reason: 'не те id' });
 
   const query = account.hhQuery || '';
+  const queries = splitQueries(query);
+  const list = queries.length === 0 ? parsed : parsed.filter(vacancy => fitsTitle(vacancy.title, queries));
+  if (list.length === 0)
+    return json({ ok: true, added: 0, reason: 'нет вакансий по запросу' });
   let result: Awaited<ReturnType<typeof scan>>;
   try {
     result = await scan({
@@ -61,6 +65,9 @@ export const POST: RequestHandler = async ({ request }) => {
   let added = 0;
   try {
     for (const report of result.reports) {
+      if (report.verdict === 'skip')
+        watchNote('model', `${report.company}: ${report.reason}`);
+
       if (report.verdict === 'apply') {
         added += 1;
         const paid = await chargeQueued({ id: report.id, company: report.company, url: report.url });
@@ -70,7 +77,7 @@ export const POST: RequestHandler = async ({ request }) => {
         }
       }
 
-      if (report.verdict === 'human')
+      if (report.verdict === 'human' && modelsDown(report.reason) === false)
         await notifyOwner(report.line);
     }
   }

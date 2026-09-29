@@ -73,8 +73,15 @@ export async function watchPulse(line: string): Promise<boolean> {
     return pilotStop();
 
   silenceNoted = false;
+  const previous = pulse.line;
   const step = shortStep(text);
-  const kept = shortStep(pulse.line) ? pulse.line : '';
+  const kept = shortStep(previous) ? previous : '';
+  if (text === 'я завис' && queueWait(previous)) {
+    pulse = { at: Date.now(), line: previous };
+
+    return pilotStop();
+  }
+
   pulse = { at: Date.now(), line: step ? text : kept };
   if (text === 'я завис' || text === 'сервер молчит') {
     if (holdHang())
@@ -184,6 +191,9 @@ async function silence(): Promise<void> {
 
   silenceNoted = true;
   const where = shortStep(pulse.line) ? pulse.line : 'нет пульса';
+  if (queueWait(where))
+    return;
+
   try {
     await mark('extension', `замолчало на шаге ${where}`, true);
   }
@@ -284,6 +294,10 @@ function holdHang(): boolean {
 
 function hangLine(text: string): boolean {
   return text === 'я завис' || text.startsWith('замолчало');
+}
+
+function queueWait(text: string): boolean {
+  return text === 'жду очередь' || /^жду \d+$/.test(text);
 }
 
 function dropHangDeaths(): void {

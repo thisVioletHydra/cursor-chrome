@@ -8,8 +8,8 @@ import { runMakeGood } from './chrome/make-good';
 import { postNative as sendNative } from './chrome/native-post';
 import { syncNegotiations } from './chrome/negotiations';
 import { ensureOffscreen, setBadge, waitOffscreen } from './chrome/offscreen-ctl';
-import { armLiveLog, bindPilotWake, clearHangHalt, disarmLiveLog, hangHalted, pulseNow, tickPage } from './chrome/page-log';
-import { clearSearchBusy, clearSearchSoon, isPaused, kickedRecently, markKicked, markSearchSoon, runQueue } from './chrome/queue-run';
+import { bindPilotWake, clearHangHalt, hangHalted, pulseNow } from './chrome/page-log';
+import { clearSearchBusy, clearSearchSoon, isPaused, kickedRecently, markKicked, markSearchSoon, paceBeforeHunt, runQueue } from './chrome/queue-run';
 import { rpc } from './chrome/rpc';
 import { closePinnedHh } from './chrome/worker-tab';
 import { browser } from './browser-host';
@@ -229,13 +229,7 @@ async function onQueueAlarm(): Promise<void> {
   if (await isPaused() || hangHalted())
     return;
 
-  armLiveLog();
-  try {
-    await tickPage('жду', 15_000 + Math.floor(Math.random() * 150_000));
-  }
-  finally {
-    disarmLiveLog();
-  }
+  await paceBeforeHunt();
 
   if (hangHalted() || await isPaused())
     return;
