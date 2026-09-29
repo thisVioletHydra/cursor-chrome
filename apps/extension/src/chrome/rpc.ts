@@ -5,6 +5,7 @@ import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from './huma
 import { syncNegotiations } from './negotiations';
 import { clearHangHalt, liveLines, tellPage } from './page-log';
 import { queueBusy, readPausedUntil, readQueueReport, runQueue } from './queue-run';
+import { pullSavedResume } from './resume-pull';
 import { checkWorker, listJobTabs, openHhBackground, pinWorker } from './worker-tab';
 import { openPinnedWorker } from './worker-open';
 
@@ -147,6 +148,11 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
       clearHangHalt();
 
     replyJob(reply, runQueue());
+
+    return true;
+  },
+  'pull-resume': (_message, reply, sender) => {
+    replyJob(reply, pullSavedResume(sender?.tab?.url || ''));
 
     return true;
   },
