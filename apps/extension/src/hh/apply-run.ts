@@ -5,6 +5,7 @@ import { applyBlocker, formReady, humanPayload } from './apply-detect';
 import { asHumanBlock, fillApply } from './apply-fill';
 import { ask } from './bridge';
 import { pause, until } from './dom';
+import { murkyBlock, vacancyAndFormText } from './murky';
 import { markReviewing, setApplyLock } from './screen-questions';
 
 export type ApplyStatus = 'sent' | 'needsHuman' | 'skip';
@@ -45,8 +46,10 @@ async function applyOnce(resume: boolean): Promise<ApplyResult> {
   const steps: Array<() => Promise<ApplyResult | null>> = [
     async () => hhHostStep(),
     async () => pageSkip(),
+    async () => murkyStep(),
     async () => humanOrNull(applyBlocker()),
     async () => openStep(),
+    async () => murkyStep(),
     async () => humanOrNull(applyBlocker()),
     async () => fillStep(),
     async () => submitStep(),
@@ -129,6 +132,12 @@ async function submitStep(): Promise<ApplyResult> {
   const hit = outcomes.find(([on]) => on);
 
   return hit ? hit[1]() : fail('нет подтверждения отправки');
+}
+
+function murkyStep(): ApplyResult | null {
+  const block = murkyBlock(vacancyAndFormText());
+
+  return block ? humanResult(block) : null;
 }
 
 function humanOrNull(block: ReturnType<typeof applyBlocker>): ApplyResult | null {

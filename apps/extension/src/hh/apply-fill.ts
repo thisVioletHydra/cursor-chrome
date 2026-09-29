@@ -5,6 +5,7 @@ import { applyBlocker } from './apply-detect';
 import { ask } from './bridge';
 import { compact, pause, until, visible } from './dom';
 import { coverLetter } from './letter';
+import { pickResume, resumeKind, vacancyBody, vacancyTitle } from './resume';
 import { applyRoot, isCoverLetter, isStandardQuestion, promptFields } from './screen-questions';
 
 export type FillFail = {
@@ -47,6 +48,10 @@ const CUSTOM_REASON = 'свои вопросы HH';
 const FIELD_SEL = 'textarea, input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]):not([type="file"]):not([type="submit"])';
 
 export async function fillApply(): Promise<FillFail | null> {
+  const kind = resumeKind(vacancyTitle(), vacancyBody());
+  if (kind !== null)
+    await pickResume(kind);
+
   const letterOk = await insertLetter();
   if (letterOk === false)
     return { ok: false, status: 'skip', reason: 'нет поля сопроводительного' };

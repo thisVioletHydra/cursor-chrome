@@ -30,12 +30,14 @@ const STOP_NOTE_KEY = 'huntStopNote';
 const KICK_GAP_MS = 10 * 60_000;
 const REPORT_TTL_MS = 12 * 60 * 60_000;
 
-const PER_RUN_MIN = 2;
-const PER_RUN_MAX = 3;
-const PAUSE_MIN_MS = 40_000;
-const PAUSE_MAX_MS = 90_000;
+const READ_MIN_MS = 10_000;
+const READ_MAX_MS = 40_000;
+const DISTRACT_MIN_MS = 5_000;
+const DISTRACT_MAX_MS = 55_000;
 const PAUSED_KEY = 'pausedUntil';
 const MORNING_HOUR = 9;
+const WORK_FROM_HOUR = 9;
+const WORK_TO_HOUR = 22;
 const LOGIN_URL = 'https://hh.ru/account/login';
 
 const CAPTCHA = /captcha|капча/i;
@@ -151,40 +153,76 @@ async function drain(): Promise<QueueRun> {
   if ('stop' in filled)
     return blank(filled.stop);
 
-  const items = hunt.want ? await fetchQueue(base, key) : hunt.items;
-  if (items === null)
-    return blank('админка не отдала очередь');
-
-  if (items.length === 0)
-    return blank(filled.note.length > 0 ? filled.note : 'выдача есть, в очередь ничего не встало');
-
-  const run: QueueRun = { ok: true, sent: 0, human: 0, skipped: 0, left: items.length, reason: '', lines: [] };
+  const run: QueueRun = { ok: true, sent: 0, human: 0, skipped: 0, left: 0, reason: '', lines: [] };
   if (filled.note === 'сервер не принял вакансии')
     run.lines.push(filled.note);
-  const batch = items.slice(0, batchSize());
-  for (const [index, item] of batch.entries()) {
-    const reply = await applyOne(item);
-    run.left -= 1;
-    const status = normStatus(reply.status);
-    count(run, status);
-    run.lines.push(`${item.company}: ${describe(status, reply)}`);
 
-    if (status === 'needsHuman')
-      await report(base, key, item, { status, hints: hintsOf(reply) });
-    else if (status === 'skip')
-      await report(base, key, item, { status: 'failed', reason: reply.reason || '', hints: hintsOf(reply) });
+  const seen = new Set<string>();
+  let distract = false;
+  let started = false;
 
-    const stop = stopReason(status, reply);
-    if (stop.length > 0) {
-      await pauseUntilMorning();
-      await report(base, key, item, { status: 'stop', reason: stop });
-      run.reason = `Стоп до утра: ${stop}`;
+  while (hoursOpen()) {
+    const items = await fetchQueue(base, key);
+    if (items === null) {
+      if (started === false)
+        return blank('админка не отдала очередь');
+
+      run.reason = 'админка не отдала очередь';
       break;
     }
 
-    if (index < batch.length - 1)
-      await delay(humanPause());
+    const fresh = items.filter(item => seen.has(item.id) === false);
+    if (fresh.length === 0)
+      break;
+
+    run.left += fresh.length;
+    let stopped = false;
+    for (const item of fresh) {
+      if (hoursOpen() === false) {
+        run.reason = 'рабочие часы закрыты';
+        stopped = true;
+        break;
+      }
+
+      if (distract)
+        await delay(between(DISTRACT_MIN_MS, DISTRACT_MAX_MS));
+
+      distract = false;
+      seen.add(item.id);
+      started = true;
+      const reply = await applyOne(item);
+      run.left -= 1;
+      const status = normStatus(reply.status);
+      count(run, status);
+      run.lines.push(`${item.company}: ${describe(status, reply)}`);
+
+      if (status === 'needsHuman')
+        await report(base, key, item, { status, hints: hintsOf(reply) });
+      else if (status === 'skip')
+        await report(base, key, item, { status: 'failed', reason: reply.reason || '', hints: hintsOf(reply) });
+
+      const stop = stopReason(status, reply);
+      if (stop.length > 0) {
+        await pauseUntilMorning();
+        await report(base, key, item, { status: 'stop', reason: stop });
+        run.reason = `Стоп до утра: ${stop}`;
+        stopped = true;
+        break;
+      }
+
+      if (status === 'sent')
+        distract = true;
+    }
+
+    if (stopped)
+      break;
   }
+
+  if (started === false)
+    return blank(filled.note.length > 0 ? filled.note : 'выдача есть, в очередь ничего не встало');
+
+  if (run.reason.length === 0 && hoursOpen() === false)
+    run.reason = 'рабочие часы закрыты';
 
   return run;
 }
@@ -271,10 +309,11 @@ async function applyOne(item: QueueItem): Promise<ApplyReply> {
   const loaded = waitTab(tabId, 15_000);
   await browser.tabs.update(tabId, { url: item.url, active: false });
   await loaded;
-  await delay(800 + Math.floor(Math.random() * 3_200));
+  if (await loginPage(tabId))
+    return { status: 'skip', reason: 'hh.ru просит войти (login)' };
 
-  const fresh = await browser.tabs.get(tabId).catch(() => null);
-  if ((fresh?.url || '').startsWith(LOGIN_URL))
+  await delay(between(READ_MIN_MS, READ_MAX_MS));
+  if (await loginPage(tabId))
     return { status: 'skip', reason: 'hh.ru просит войти (login)' };
 
   const raw = await runHhApply().catch((error: unknown) => ({
@@ -357,12 +396,25 @@ function nextMorning(now = new Date()): number {
   return morning.getTime();
 }
 
-function batchSize(): number {
-  return PER_RUN_MIN + Math.floor(Math.random() * (PER_RUN_MAX - PER_RUN_MIN + 1));
+function hoursOpen(now = new Date()): boolean {
+  const text = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Moscow',
+    hour: '2-digit',
+    hourCycle: 'h23',
+  }).format(now);
+  const hour = Number(text);
+
+  return hour >= WORK_FROM_HOUR && hour < WORK_TO_HOUR;
 }
 
-function humanPause(): number {
-  return PAUSE_MIN_MS + Math.floor(Math.random() * (PAUSE_MAX_MS - PAUSE_MIN_MS + 1));
+function between(min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+async function loginPage(tabId: number): Promise<boolean> {
+  const fresh = await browser.tabs.get(tabId).catch(() => null);
+
+  return (fresh?.url || '').startsWith(LOGIN_URL);
 }
 
 async function report(base: string, key: string, item: QueueItem, extra: Record<string, unknown>): Promise<void> {
