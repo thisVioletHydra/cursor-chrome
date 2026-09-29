@@ -73,7 +73,7 @@ function takeResume() {
 
 <header class="mb-5">
   <p class="text-xs tracking-wide text-zinc-500 uppercase">HeadHunter</p>
-  <h1 class="mt-1 text-3xl font-semibold tracking-tight">ATS</h1>
+  <h1 class="mt-1 bg-[linear-gradient(to_bottom,#fff_0%,#fff_30%,#c6c6cc_56%,#2a2a2e_82%,#1c1c1c_100%)] bg-clip-text text-7xl leading-none font-semibold tracking-tight text-transparent">ATS</h1>
 </header>
 
 <div class="grid min-w-0 items-start gap-4 lg:grid-cols-2">
