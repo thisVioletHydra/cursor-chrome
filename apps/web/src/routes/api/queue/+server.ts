@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 
-import { COVER_LETTER, dayOpen, diaryIds, pending, pendingCount, QUEUE_TARGET, readMemory, readQueue, readState, splitQueries, takePilotStart, workHours } from '@cursor-chrome/hh';
+import { COVER_LETTER, dayOpen, diaryIds, pending, pendingCount, QUEUE_TARGET, readMemory, readQueue, readState, serveQueries, splitQueries, takePilotStart, workHours, writeState } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { DEFAULT_QUERY, readAccount } from '$lib/server/secrets';
@@ -12,7 +12,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
   const [memory, account, state] = await Promise.all([readMemory(), readAccount(login), readState()]);
   const letter = account.coverLetter || COVER_LETTER;
-  const queries = splitQueries(account.hhQuery || DEFAULT_QUERY);
+  const saved = splitQueries(account.hhQuery || DEFAULT_QUERY);
   const stop = state.hung === true && state.auto === false;
   const auto = state.auto === true;
   const listen = url.searchParams.get('listen') === '1';
@@ -20,10 +20,11 @@ export const GET: RequestHandler = async ({ request, url }) => {
   const hours = account.hhHours !== '0';
   const open = (hours === false || workHours()) && dayOpen(memory);
   if (open === false)
-    return json({ items: [], letter, queries, want: false, imitation: account.imitation, stop, hours, auto, start });
+    return json({ items: [], letter, queries: saved, want: false, imitation: account.imitation, stop, hours, auto, start });
 
   const queued = await pendingCount();
   const want = account.hhLive === '1' && state.auto && queued < QUEUE_TARGET;
+  const queries = want && listen === false ? await shownPass(saved, state) : saved;
   const items = await pending(10);
   const seen = listen ? null : await huntDiary(memory.seen);
 
@@ -40,6 +41,18 @@ export const GET: RequestHandler = async ({ request, url }) => {
     ...(seen === null ? {} : { seen }),
   });
 };
+
+async function shownPass(saved: string[], state: { frontAt: number; lessAt: number; queryPass: number }): Promise<string[]> {
+  const served = serveQueries(saved, {
+    frontAt: state.frontAt,
+    lessAt: state.lessAt,
+    queryPass: state.queryPass,
+  }, Date.now());
+  if (served.cursor.frontAt !== state.frontAt || served.cursor.lessAt !== state.lessAt || served.cursor.queryPass !== state.queryPass)
+    await writeState({ frontAt: served.cursor.frontAt, lessAt: served.cursor.lessAt, queryPass: served.cursor.queryPass });
+
+  return served.queries;
+}
 
 async function huntDiary(seen: string[]): Promise<string[]> {
   const queue = await readQueue();

@@ -9,9 +9,20 @@ export type State = {
   lastScanAt: number;
   lastNote: string;
   hung: boolean;
+  frontAt: number;
+  lessAt: number;
+  queryPass: number;
 };
 
-const EMPTY: State = { auto: false, lastScanAt: 0, lastNote: '', hung: false };
+const EMPTY: State = {
+  auto: false,
+  lastScanAt: 0,
+  lastNote: '',
+  hung: false,
+  frontAt: 0,
+  lessAt: 0,
+  queryPass: -1,
+};
 
 export function statePath(): string {
   return path.join(path.dirname(storePath()), 'state.json');
@@ -37,7 +48,17 @@ export async function readState(): Promise<State> {
     lastScanAt: typeof raw.lastScanAt === 'number' ? raw.lastScanAt : 0,
     lastNote: typeof raw.lastNote === 'string' ? raw.lastNote : '',
     hung: raw.hung === true,
+    frontAt: atOf(raw.frontAt),
+    lessAt: atOf(raw.lessAt),
+    queryPass: typeof raw.queryPass === 'number' && Number.isFinite(raw.queryPass) ? raw.queryPass : -1,
   };
+}
+
+function atOf(value: unknown): number {
+  if (typeof value !== 'number' || Number.isFinite(value) === false || value < 0)
+    return 0;
+
+  return Math.floor(value);
 }
 
 export async function writeState(patch: Partial<State>): Promise<State> {

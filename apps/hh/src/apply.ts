@@ -16,6 +16,7 @@ export async function sendApply(vacancy: Vacancy, reason: string, score = 0): Pr
     url: vacancy.url,
     reason,
     score,
+    ...(vacancy.foundBy ? { foundBy: vacancy.foundBy } : {}),
   });
 
   return added ? 'queued' : 'again';

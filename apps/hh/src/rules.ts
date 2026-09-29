@@ -14,6 +14,7 @@ export type Vacancy = {
   remote: boolean;
   employerId: string;
   experience: string;
+  foundBy?: string;
 };
 
 export const NO_META: Pick<Vacancy, 'salaryFrom' | 'salaryTo' | 'currency' | 'remote' | 'employerId' | 'experience'> = {

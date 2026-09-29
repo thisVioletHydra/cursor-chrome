@@ -1,5 +1,6 @@
 import { MAX_ATTEMPTS } from './limits.ts';
 import { storePath } from './memory.ts';
+import { mixBatch, taste } from './mix.ts';
 import { parseJsonLoose, writeJsonAtomic } from './store.ts';
 
 import fsPromises from 'node:fs/promises';
@@ -24,6 +25,7 @@ export type QueueItem = {
   lastError?: string;
   outcome?: Outcome;
   outcomeAt?: number;
+  foundBy?: string;
 };
 
 const MAX = 600;
@@ -67,10 +69,11 @@ export async function enqueue(item: Omit<QueueItem, 'at' | 'status'>): Promise<b
 export async function pending(limit = 10): Promise<QueueItem[]> {
   const queue = await readQueue();
 
-  return queue
+  const rows = queue
     .filter(row => row.status === 'pending')
-    .sort((left, right) => (right.score ?? 0) - (left.score ?? 0) || left.at - right.at)
-    .slice(0, limit);
+    .sort((left, right) => (right.score ?? 0) - (left.score ?? 0) || left.at - right.at);
+
+  return mixBatch(rows, row => taste(row.title, typeof row.foundBy === 'string' ? row.foundBy : '')).slice(0, limit);
 }
 
 export async function pendingCount(): Promise<number> {

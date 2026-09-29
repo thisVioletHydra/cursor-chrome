@@ -13,6 +13,8 @@ export type { ProbeNote } from './probe-log.ts';
 export type { Preset, Provider, ProviderId } from './model.ts';
 export { connectApp } from './hh-token.ts';
 export { ping, pingReasons } from './ping.ts';
+export { serveQueries } from './mix.ts';
+export type { QueryCursor } from './mix.ts';
 export { splitQueries, suggestQueries } from './queries.ts';
 export { fitsTitle } from './title-fit.ts';
 export { applyOutcomes, markDone, markFailed, pending, pendingCount, readQueue } from './queue.ts';

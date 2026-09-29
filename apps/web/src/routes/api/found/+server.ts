@@ -18,6 +18,7 @@ type Incoming = {
   currency?: unknown;
   remote?: unknown;
   experience?: unknown;
+  query?: unknown;
 };
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -156,6 +157,7 @@ function vacancyOf(value: unknown): Vacancy | null {
   const url = typeof row.url === 'string' && row.url.includes('/vacancy/')
     ? row.url.split('?')[0]
     : `https://hh.ru/vacancy/${id}`;
+  const foundBy = queryOf(row.query);
 
   return {
     id,
@@ -171,7 +173,15 @@ function vacancyOf(value: unknown): Vacancy | null {
     remote: row.remote === true,
     employerId: '',
     experience: textOf(row.experience, '').slice(0, 80),
+    ...(foundBy.length > 0 ? { foundBy } : {}),
   };
+}
+
+function queryOf(value: unknown): string {
+  if (typeof value !== 'string')
+    return '';
+
+  return value.trim().slice(0, 80);
 }
 
 function idOf(value: unknown): string {

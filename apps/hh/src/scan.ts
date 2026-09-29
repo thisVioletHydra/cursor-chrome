@@ -1,3 +1,4 @@
+import type { Buckets, Slot } from './mix.ts';
 import type { Memory } from './memory.ts';
 import type { Model, Report, Vacancy } from './rules.ts';
 import type { Rules } from './score.ts';
@@ -9,6 +10,7 @@ import { judge, packReport } from './judge.ts';
 import { searchVacancies } from './hh-api.ts';
 import { LOOK_PER_START, MODEL_PER_START, QUEUE_TARGET, SEND_PER_DAY } from './limits.ts';
 import { readMemory, remember, writeMemory } from './memory.ts';
+import { FRONT_TAKE, hasSlot, roleJunk, stepSlot, takeSlot, taste } from './mix.ts';
 import { modelFromEnv, modelsDown } from './model.ts';
 import { pendingCount } from './queue.ts';
 import { hardSkip } from './rules.ts';
@@ -40,16 +42,41 @@ export async function scan(opts: ScanOpts): Promise<ScanRun> {
   const seen = memory?.seen;
   const already = seen === undefined ? 0 : found.filter(vacancy => seen.includes(vacancy.id)).length;
   const fresh = found.filter(vacancy => memory?.seen.includes(vacancy.id) !== true).sort(byScore(rules));
+  const junk = fresh.filter(vacancy => roleJunk(vacancy.title));
+  const open = fresh.filter(vacancy => roleJunk(vacancy.title) === false);
+  const buckets: Buckets<Vacancy> = {
+    front: open.filter(vacancy => taste(vacancy.title, vacancy.foundBy ?? '') === 'front'),
+    less: open.filter(vacancy => taste(vacancy.title, vacancy.foundBy ?? '') === 'less'),
+    rest: open.filter(vacancy => taste(vacancy.title, vacancy.foundBy ?? '') === 'out'),
+  };
 
-  for (const vacancy of fresh) {
+  for (const vacancy of junk) {
     if (opts.signal?.aborted)
       break;
 
+    if (memory)
+      memory = remember(memory, vacancy.id);
+
+    reports.push(packReport(vacancy, 'skip', 'не та роль', dry));
+  }
+
+  let prefer: Slot = 'front';
+  let left = FRONT_TAKE;
+
+  while (opts.signal?.aborted !== true && hasSlot(buckets)) {
     if (room <= 0) {
-      const why = memory !== null && memory.sent >= SEND_PER_DAY ? 'потолок на сегодня' : 'очередь полная';
-      reports.push(packReport(vacancy, 'human', why, dry));
+      const held = takeSlot(buckets, prefer);
+      if (held !== undefined) {
+        const why = memory !== null && memory.sent >= SEND_PER_DAY ? 'потолок на сегодня' : 'очередь полная';
+        reports.push(packReport(held, 'human', why, dry));
+      }
+
       break;
     }
+
+    const vacancy = takeSlot(buckets, prefer);
+    if (vacancy === undefined)
+      break;
 
     const ruled = ruleSkip(vacancy, rules);
     if (hardSkip(vacancy) === null && ruled === null)
@@ -77,8 +104,14 @@ export async function scan(opts: ScanOpts): Promise<ScanRun> {
     if (memory)
       memory = remember(memory, vacancy.id);
 
-    if (final.verdict === 'apply' && opts.live)
-      room -= 1;
+    if (final.verdict === 'apply') {
+      if (opts.live)
+        room -= 1;
+
+      const step = stepSlot(prefer, left);
+      prefer = step.prefer;
+      left = step.left;
+    }
 
     reports.push(final);
   }

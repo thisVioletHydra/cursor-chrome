@@ -24,6 +24,7 @@ export type FoundCard = {
   currency: string;
   remote: boolean;
   experience: string;
+  query: string;
 };
 
 export async function collectVacancies(queries: string[], seenIds: readonly string[] = []): Promise<SearchHit> {
@@ -82,6 +83,7 @@ export async function collectVacancies(queries: string[], seenIds: readonly stri
             continue;
           }
 
+          card.query = query;
           cards.push(card);
         }
 
@@ -408,6 +410,7 @@ function cardOf(chunk: string): FoundCard | null {
     currency: pay.currency,
     remote: /удал[её]н|remote/i.test(`${place} ${snippet}`),
     experience: '',
+    query: '',
   };
 }
 
