@@ -28,9 +28,10 @@
         </svg>
         <span class="cta-label">Поднять HH</span>
       </button>
-      <form id="connect-form" class="connect" autocomplete="off" hidden>
-        <p class="connect-title">Подключи админку</p>
-        <p class="connect-note">В админке открой Extension, скопируй ссылку и вставь сюда.</p>
+      <form id="connect-form" class="connect" autocomplete="off">
+        <p id="connect-title" class="connect-title">Подключи админку</p>
+        <p id="connect-host" class="connect-host" hidden></p>
+        <p id="connect-note" class="connect-note">В админке открой Extension, скопируй ссылку и вставь сюда.</p>
         <input id="connect-link" type="text" placeholder="https://…/connect#ключ" autocomplete="off" />
         <button id="connect-save" class="pin-primary" type="submit">Подключить</button>
         <p id="connect-error" class="connect-error" hidden></p>
@@ -43,7 +44,6 @@
         </span>
         <input id="flag-auto-queue" type="checkbox" />
       </label>
-      <p id="connect-line" class="connect-line" hidden></p>
       <p id="pill" class="status" hidden></p>
       <pre id="report" hidden></pre>
     </section>
@@ -78,12 +78,6 @@
         <input id="flag-keep-session" type="checkbox" />
       </label>
 
-      <details class="sync">
-        <summary>Админка вручную</summary>
-        <input id="sync-url" placeholder="https://…" type="url" />
-        <input id="sync-key" placeholder="ключ расширения" type="password" autocomplete="off" />
-        <button id="save-sync" class="ghost" type="button">Сохранить</button>
-      </details>
     </section>
 
     <form id="worker-url-form" class="worker-url" autocomplete="off">

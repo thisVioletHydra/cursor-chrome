@@ -45,13 +45,14 @@ const navs: Record<ViewName, HTMLElement | null> = {
   history: goHistory,
   settings: goSettings,
 };
-const syncEl = document.getElementById('sync-url') as HTMLInputElement | null;
-const syncKeyEl = document.getElementById('sync-key') as HTMLInputElement | null;
 const queueBtn = document.getElementById('run-queue') as HTMLButtonElement | null;
 const connectForm = document.getElementById('connect-form') as HTMLFormElement | null;
+const connectTitleEl = document.getElementById('connect-title');
+const connectHostEl = document.getElementById('connect-host');
+const connectNoteEl = document.getElementById('connect-note');
 const connectLinkEl = document.getElementById('connect-link') as HTMLInputElement | null;
+const connectSaveEl = document.getElementById('connect-save');
 const connectErrorEl = document.getElementById('connect-error') as HTMLElement | null;
-const connectLineEl = document.getElementById('connect-line') as HTMLElement | null;
 const hideJunkEl = document.getElementById('flag-hide-junk') as HTMLInputElement | null;
 const showPopEl = document.getElementById('flag-show-pop') as HTMLInputElement | null;
 const keepSessionEl = document.getElementById('flag-keep-session') as HTMLInputElement | null;
@@ -71,7 +72,6 @@ const clicks: Record<string, () => void> = {
   'go-main': () => show('main'),
   'go-history': () => show('history'),
   'go-settings': () => show('settings'),
-  'save-sync': () => void saveSync(),
   'run-queue': () => void runQueue(),
 };
 
@@ -254,19 +254,13 @@ async function renderHistory(): Promise<void> {
   paintApplyGroup(historyEl, 'Ранее', log.filter(item => localDay(item.sentAt) !== todayKey), n);
 }
 
-async function saveSync(): Promise<void> {
-  await browser.runtime.sendMessage({ type: 'set-sync-url', url: syncEl?.value || '', key: syncKeyEl?.value || '' });
-  if (syncKeyEl && syncKeyEl.value.length > 0) {
-    syncKeyEl.value = '';
-    syncKeyEl.placeholder = 'ключ сохранён';
-  }
-
-  await paintConnect();
-}
-
 function parseConnectLink(raw: string): { url: string; key: string } | null {
   try {
     const link = new URL(raw.trim());
+    const path = link.pathname.replace(/\/+$/, '');
+    if (path !== '/connect')
+      return null;
+
     const key = decodeURIComponent(link.hash.replace(/^#/, '')).trim();
     if (key.length < 16)
       return null;
@@ -304,25 +298,25 @@ async function paintConnect(): Promise<void> {
   const sync = await browser.runtime.sendMessage({ type: 'get-sync-url' }) as { url?: string; hasKey?: boolean };
   const url = sync?.url || '';
   const on = sync?.hasKey === true && url.length > 0;
-  if (connectForm)
-    connectForm.hidden = on;
-
   if (queueBtn)
     queueBtn.hidden = on === false;
 
   if (autoQueueBox)
     autoQueueBox.hidden = on === false;
 
-  if (connectLineEl) {
-    connectLineEl.hidden = on === false;
-    connectLineEl.textContent = on ? `Админка: ${hostOf(url)}` : '';
+  if (connectTitleEl)
+    connectTitleEl.textContent = on ? 'Админка' : 'Подключи админку';
+
+  if (connectHostEl) {
+    connectHostEl.hidden = on === false;
+    connectHostEl.textContent = on ? hostOf(url) : '';
   }
 
-  if (syncEl)
-    syncEl.value = url;
+  if (connectNoteEl)
+    connectNoteEl.hidden = on;
 
-  if (syncKeyEl && sync?.hasKey === true)
-    syncKeyEl.placeholder = 'ключ сохранён, вставь новый чтобы заменить';
+  if (connectSaveEl)
+    connectSaveEl.textContent = on ? 'Заменить' : 'Подключить';
 }
 
 function hostOf(url: string): string {

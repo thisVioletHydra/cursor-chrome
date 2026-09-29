@@ -428,38 +428,12 @@ body {
   font-size: 12px;
 }
 
-.connect-line {
-  margin: -4px 0 10px;
-  color: var(--fog);
-  font-size: 12px;
-  text-align: center;
-}
-
-.sync {
-  margin-top: 8px;
-  color: var(--fog);
-  font-size: 12px;
-}
-
-.sync summary {
-  cursor: pointer;
-  margin-bottom: 8px;
-}
-
-.sync input {
-  width: 100%;
-  margin: 0 0 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--glass-border);
-  border-radius: 999px;
-  background: var(--glass);
+.connect-host {
+  margin: 0 0 10px;
   color: #fff;
-  font: inherit;
-  outline: none;
-}
-
-.sync input:focus {
-  border-color: var(--pink);
+  font-size: 13px;
+  font-weight: 600;
+  word-break: break-all;
 }
 
 .worker-url {

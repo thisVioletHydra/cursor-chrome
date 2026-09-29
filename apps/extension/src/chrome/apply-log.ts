@@ -15,6 +15,7 @@ export type ApplyRecord = {
 const LOG_KEY = 'applyLog';
 const SYNC_KEY = 'applySyncUrl';
 const SYNC_TOKEN_KEY = 'applySyncKey';
+const MIN_SYNC_KEY = 16;
 const MAX = 200;
 
 const FOOTER_LABELS = new Set([
@@ -176,22 +177,87 @@ export function applyStatus(item: ApplyRecord): ApplyStatus {
   return item.status === 'needsHuman' ? 'needsHuman' : 'sent';
 }
 
-export async function getSyncUrl(): Promise<string> {
-  const stored = await browser.storage.local.get(SYNC_KEY);
-  const url = stored[SYNC_KEY];
+type StoredSync = { url: string; key: string };
 
-  return typeof url === 'string' ? url : '';
+function connectLinkParts(raw: string): { origin: string; key: string } | null {
+  try {
+    const link = new URL(raw.trim());
+    const path = link.pathname.replace(/\/+$/, '');
+    if (path !== '/connect')
+      return null;
+
+    const key = decodeURIComponent(link.hash.replace(/^#/, '')).trim();
+
+    return { origin: `${link.protocol}//${link.host}`, key };
+  }
+  catch {
+    return null;
+  }
+}
+
+async function readStoredSync(): Promise<StoredSync> {
+  const stored = await browser.storage.local.get([SYNC_KEY, SYNC_TOKEN_KEY]);
+  const url = stored[SYNC_KEY];
+  const key = stored[SYNC_TOKEN_KEY];
+
+  return {
+    url: typeof url === 'string' ? url : '',
+    key: typeof key === 'string' ? key : '',
+  };
+}
+
+async function healStoredSync(): Promise<StoredSync> {
+  const current = await readStoredSync();
+  const parts = connectLinkParts(current.url);
+  if (parts === null)
+    return current;
+
+  const key = current.key.length > 0
+    ? current.key
+    : (parts.key.length >= MIN_SYNC_KEY ? parts.key : '');
+  if (key !== current.key && key.length > 0)
+    await setSyncKey(key);
+
+  if (parts.origin !== current.url)
+    await setSyncUrl(parts.origin);
+
+  return { url: parts.origin, key };
+}
+
+let healing: Promise<StoredSync> | null = null;
+
+function settledSync(): Promise<StoredSync> {
+  if (healing === null) {
+    healing = healStoredSync().finally(() => {
+      healing = null;
+    });
+  }
+
+  return healing;
+}
+
+export async function getSyncUrl(): Promise<string> {
+  const sync = await settledSync();
+
+  return sync.url;
 }
 
 export async function setSyncUrl(url: string): Promise<void> {
-  await browser.storage.local.set({ [SYNC_KEY]: url.trim() });
+  const parts = connectLinkParts(url);
+  const next = parts === null ? url.trim() : parts.origin;
+  if (parts !== null && parts.key.length >= MIN_SYNC_KEY) {
+    const stored = await readStoredSync();
+    if (stored.key.length === 0)
+      await setSyncKey(parts.key);
+  }
+
+  await browser.storage.local.set({ [SYNC_KEY]: next });
 }
 
 export async function getSyncKey(): Promise<string> {
-  const stored = await browser.storage.local.get(SYNC_TOKEN_KEY);
-  const key = stored[SYNC_TOKEN_KEY];
+  const sync = await settledSync();
 
-  return typeof key === 'string' ? key : '';
+  return sync.key;
 }
 
 export async function setSyncKey(key: string): Promise<void> {
