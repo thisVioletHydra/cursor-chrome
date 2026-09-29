@@ -137,6 +137,18 @@ keepSessionEl?.addEventListener('change', () => {
   void browser.runtime.sendMessage({ type: 'set-flags', keepSession: keepSessionEl.checked === true });
 });
 
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || autoQueueEl === null || changes.flags === undefined)
+    return;
+
+  const next = changes.flags.newValue;
+  if (typeof next !== 'object' || next === null || !('autoQueue' in next))
+    return;
+
+  autoQueueEl.checked = next.autoQueue === true;
+  void paintAutoLine();
+});
+
 autoQueueEl?.addEventListener('change', () => {
   const on = autoQueueEl.checked === true;
   void browser.runtime.sendMessage({ type: 'set-flags', autoQueue: on })

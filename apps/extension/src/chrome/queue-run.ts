@@ -3,7 +3,7 @@ import type { Hunt, QueueItem } from './admin-api';
 import { fetchHunt, fetchQueue, postFound } from './admin-api';
 import { getSyncKey, getSyncUrl } from './apply-log';
 import { loadPace, rare, waitMs } from './pace';
-import { armLiveLog, disarmLiveLog, doneServerBatch, noteServerBatch, tellPage, tickPage } from './page-log';
+import { armLiveLog, disarmLiveLog, doneServerBatch, hangHalted, noteServerBatch, tellPage, tickPage } from './page-log';
 import { runHhApply } from './hh-apply-cmd';
 import { collectVacancies } from './hh-search';
 import { requireTabId } from './inject';
@@ -45,9 +45,16 @@ const TEST = /тест|тестов/i;
 
 let running = false;
 
+export function queueBusy(): boolean {
+  return running;
+}
+
 export async function runQueue(): Promise<QueueRun> {
   if (running)
-    return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason: 'уже идёт', lines: [] };
+    return blank(hangHalted() ? 'расширение зависло' : 'уже идёт');
+
+  if (hangHalted())
+    return blank('расширение зависло');
 
   running = true;
   armLiveLog();
@@ -146,10 +153,15 @@ async function drain(): Promise<QueueRun> {
     return blank('нет адреса админки');
 
   const hunt = await fetchHunt(base, key);
+  if (hangHalted())
+    return blank('расширение зависло');
+
   if (hunt === null)
     return blank('админка не отдала очередь');
 
   const filled = await fillHunt(base, key, hunt);
+  if (hangHalted())
+    return blank('расширение зависло');
   if ('stop' in filled)
     return blank(filled.stop);
 
@@ -161,7 +173,17 @@ async function drain(): Promise<QueueRun> {
   let started = false;
 
   while (hoursOpen()) {
+    if (hangHalted()) {
+      run.reason = 'расширение зависло';
+      break;
+    }
+
     const items = await fetchQueue(base, key);
+    if (hangHalted()) {
+      run.reason = 'расширение зависло';
+      break;
+    }
+
     if (items === null) {
       if (started === false)
         return blank('админка не отдала очередь');
@@ -177,6 +199,12 @@ async function drain(): Promise<QueueRun> {
     run.left += fresh.length;
     let stopped = false;
     for (const item of fresh) {
+      if (hangHalted()) {
+        run.reason = 'расширение зависло';
+        stopped = true;
+        break;
+      }
+
       if (hoursOpen() === false) {
         run.reason = 'рабочие часы закрыты';
         stopped = true;
@@ -186,6 +214,13 @@ async function drain(): Promise<QueueRun> {
       seen.add(item.id);
       started = true;
       const reply = await applyOne(item);
+      if (hangHalted()) {
+        run.left -= 1;
+        run.reason = 'расширение зависло';
+        stopped = true;
+        break;
+      }
+
       run.left -= 1;
       const status = normStatus(reply.status);
       const landed = status !== 'sent' || await report(base, key, item, { status: 'sent' });
@@ -240,6 +275,9 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
     return { note: 'сервер не прислал запрос' };
 
   const found = await collectVacancies(hunt.queries);
+  if (hangHalted())
+    return { stop: 'расширение зависло' };
+
   if (found.login) {
     await pauseUntilMorning();
     await tellStop(base, key, 'hh.ru просит войти (login)');
@@ -308,11 +346,17 @@ function runOf(raw: unknown): QueueRun | null {
 }
 
 async function applyOne(item: QueueItem): Promise<ApplyReply> {
+  if (hangHalted())
+    return { status: 'skip', reason: 'расширение зависло' };
+
   const tab = await requireWorkerTab().catch(async () => {
     await adoptHhWorker(item.url);
 
     return requireWorkerTab();
   });
+  if (hangHalted())
+    return { status: 'skip', reason: 'расширение зависло' };
+
   const tabId = requireTabId(tab);
   const loaded = waitTab(tabId, 15_000);
   await browser.tabs.update(tabId, { url: item.url, active: false });

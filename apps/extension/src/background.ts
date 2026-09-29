@@ -8,7 +8,7 @@ import { runMakeGood } from './chrome/make-good';
 import { postNative as sendNative } from './chrome/native-post';
 import { syncNegotiations } from './chrome/negotiations';
 import { ensureOffscreen, setBadge, waitOffscreen } from './chrome/offscreen-ctl';
-import { armLiveLog, disarmLiveLog, tickPage } from './chrome/page-log';
+import { armLiveLog, clearHangHalt, disarmLiveLog, hangHalted, tickPage } from './chrome/page-log';
 import { clearSearchBusy, clearSearchSoon, isPaused, kickedRecently, markKicked, markSearchSoon, runQueue } from './chrome/queue-run';
 import { rpc } from './chrome/rpc';
 import { closePinnedHh } from './chrome/worker-tab';
@@ -53,8 +53,10 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (changes.applyLog !== undefined)
     void setBadge(connected);
 
-  if (turnedAutoOn(changes.flags))
+  if (turnedAutoOn(changes.flags)) {
+    clearHangHalt();
     void armSearchSoon(true);
+  }
 
   if (turnedAutoOff(changes.flags)) {
     void browser.alarms.clear(SOON_ALARM);
@@ -207,11 +209,11 @@ async function hangUp(): Promise<{ ok: true }> {
 
 async function onQueueAlarm(): Promise<void> {
   const flags = await getFlags();
-  if (flags.autoQueue !== true)
+  if (flags.autoQueue !== true || hangHalted())
     return;
 
   await syncNegotiationsIfDue();
-  if (await isPaused())
+  if (await isPaused() || hangHalted())
     return;
 
   armLiveLog();
@@ -222,7 +224,11 @@ async function onQueueAlarm(): Promise<void> {
     disarmLiveLog();
   }
 
-  if (await isPaused())
+  if (hangHalted() || await isPaused())
+    return;
+
+  const again = await getFlags();
+  if (again.autoQueue !== true)
     return;
 
   void runQueue();
@@ -282,7 +288,7 @@ async function armSearchSoon(force: boolean): Promise<void> {
 
   armingSearch = true;
   const flags = await getFlags();
-  if (flags.autoQueue !== true || await isPaused()) {
+  if (hangHalted() || flags.autoQueue !== true || await isPaused()) {
     armingSearch = false;
 
     return;
@@ -303,7 +309,7 @@ async function armSearchSoon(force: boolean): Promise<void> {
 
 async function runSearchSoon(): Promise<void> {
   const flags = await getFlags();
-  if (flags.autoQueue !== true || await isPaused()) {
+  if (hangHalted() || flags.autoQueue !== true || await isPaused()) {
     await clearSearchSoon();
 
     return;

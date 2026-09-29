@@ -1,5 +1,5 @@
 import { getSyncKey, getSyncUrl } from './apply-log';
-import { getFlags } from './flags';
+import { getFlags, setFlags } from './flags';
 import { browser } from '../browser-host';
 
 const MAX_LINES = 12;
@@ -11,6 +11,7 @@ const lines: string[] = [];
 let armed = 0;
 let notedAt = 0;
 let serverWait = false;
+let halted = false;
 let stall: ReturnType<typeof setTimeout> | undefined;
 
 export function liveLines(): string[] {
@@ -47,7 +48,36 @@ export function doneServerBatch(): void {
   planStall();
 }
 
+export function hangHalted(): boolean {
+  return halted;
+}
+
+export function clearHangHalt(): void {
+  halted = false;
+}
+
+export async function haltHang(): Promise<void> {
+  if (halted)
+    return;
+
+  halted = true;
+  armed = 0;
+  serverWait = false;
+  if (stall !== undefined)
+    clearTimeout(stall);
+
+  stall = undefined;
+  if (pulseTimer !== undefined)
+    clearTimeout(pulseTimer);
+
+  pulseTimer = undefined;
+  await setFlags({ autoQueue: false });
+}
+
 export async function tellPage(line: string): Promise<void> {
+  if (halted)
+    return;
+
   const text = line.trim();
   if (text.length === 0)
     return;
@@ -83,7 +113,7 @@ const STAGE: Record<string, string> = {
 };
 
 export async function tickPage(label: string, ms: number): Promise<void> {
-  if (ms <= 0)
+  if (halted || ms <= 0)
     return;
 
   const stage = STAGE[label];
@@ -93,7 +123,13 @@ export async function tickPage(label: string, ms: number): Promise<void> {
   const steps = Math.max(1, Math.round(ms / 1000));
   const started = Date.now();
   for (let sec = 1; sec <= steps; sec++) {
+    if (halted)
+      return;
+
     await tellPage(`${label} ${sec}`);
+    if (halted)
+      return;
+
     const pause = started + Math.round(ms * sec / steps) - Date.now();
     if (pause > 0)
       await delay(pause);
@@ -105,13 +141,13 @@ function planStall(): void {
     clearTimeout(stall);
 
   stall = undefined;
-  if (armed === 0)
+  if (armed === 0 || halted)
     return;
 
   const limit = stallLimit();
   stall = setTimeout(() => {
     stall = undefined;
-    if (armed === 0)
+    if (armed === 0 || halted)
       return;
 
     if (Date.now() - notedAt < stallLimit() - 1000) {
@@ -161,6 +197,9 @@ let pulseTimer: ReturnType<typeof setTimeout> | undefined;
 let pulseLine = '';
 
 function schedulePulse(line: string, now: boolean): void {
+  if (halted)
+    return;
+
   pulseLine = line;
   if (now) {
     if (pulseTimer !== undefined)
@@ -182,6 +221,9 @@ function schedulePulse(line: string, now: boolean): void {
 }
 
 export async function pulseNow(): Promise<void> {
+  if (halted)
+    return;
+
   const flags = await getFlags();
   if (flags.autoQueue !== true)
     return;
@@ -190,6 +232,9 @@ export async function pulseNow(): Promise<void> {
 }
 
 async function postPulse(line: string): Promise<void> {
+  if (halted)
+    return;
+
   const raw = (await getSyncUrl()).trim();
   const key = await getSyncKey();
   if (raw.length === 0 || key.length === 0 || line.trim().length === 0)
@@ -204,11 +249,25 @@ async function postPulse(line: string): Promise<void> {
     return;
   }
 
-  await fetch(`${host}/api/pulse`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-    body: JSON.stringify({ line }),
-  }).catch(() => undefined);
+  try {
+    const res = await fetch(`${host}/api/pulse`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ line }),
+    });
+    if (res.ok === false)
+      return;
+
+    const body: unknown = await res.json();
+    if (stopFlag(body))
+      await haltHang();
+  }
+  catch {
+  }
+}
+
+function stopFlag(body: unknown): boolean {
+  return typeof body === 'object' && body !== null && 'stop' in body && body.stop === true;
 }
 
 function delay(ms: number): Promise<void> {

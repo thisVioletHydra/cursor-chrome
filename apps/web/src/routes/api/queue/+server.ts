@@ -13,9 +13,10 @@ export const GET: RequestHandler = async ({ request }) => {
   const [memory, account, state] = await Promise.all([readMemory(), readAccount(login), readState()]);
   const letter = account.coverLetter || COVER_LETTER;
   const queries = splitQueries(account.hhQuery || DEFAULT_QUERY);
+  const stop = state.hung === true && state.auto === false;
   const open = workHours() && dayOpen(memory);
   if (open === false)
-    return json({ items: [], letter, queries, want: false, imitation: account.imitation });
+    return json({ items: [], letter, queries, want: false, imitation: account.imitation, stop });
 
   const queued = await pendingCount();
   const want = account.hhLive === '1' && state.auto && queued < QUEUE_TARGET;
@@ -27,5 +28,6 @@ export const GET: RequestHandler = async ({ request }) => {
     queries,
     want,
     imitation: account.imitation,
+    stop,
   });
 };

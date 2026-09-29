@@ -14,7 +14,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (line.trim().length === 0)
     return json({ error: 'пусто' }, { status: 400 });
 
-  watchPulse(line);
+  const stop = await watchPulse(line);
 
-  return json({ ok: true });
+  return json({ ok: true, stop });
 };

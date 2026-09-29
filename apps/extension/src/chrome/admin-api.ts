@@ -1,4 +1,5 @@
 import { setCoverLetter } from '../hh/letter';
+import { haltHang } from './page-log';
 import { rememberPace } from './pace';
 
 export type QueueItem = { id: string; company: string; title: string; url: string };
@@ -61,7 +62,10 @@ async function getQueue(base: string, key: string): Promise<{ items?: unknown; l
     if (res.ok === false)
       return null;
 
-    const body = await res.json() as { items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown };
+    const body = await res.json() as { items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; stop?: unknown };
+    if (body.stop === true)
+      await haltHang();
+
     if (typeof body.letter === 'string')
       await setCoverLetter(body.letter);
 
