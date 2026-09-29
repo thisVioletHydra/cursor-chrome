@@ -14,6 +14,10 @@ let notedAt = 0;
 let serverWait = false;
 let halted = false;
 let stall: ReturnType<typeof setTimeout> | undefined;
+let onHangClear: (() => Promise<boolean>) | undefined;
+
+const STALL_LINE = new Set(['я завис', 'сервер молчит']);
+const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
 
 export function liveLines(): string[] {
   return lines.slice();
@@ -57,6 +61,40 @@ export function clearHangHalt(): void {
   halted = false;
 }
 
+export function bindHangClear(fn: () => Promise<boolean>): void {
+  onHangClear = fn;
+}
+
+export function stalling(): boolean {
+  return STALL_LINE.has(lines[lines.length - 1] ?? '');
+}
+
+export function stallStep(): string {
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index] ?? '';
+    if (line.length === 0 || STALL_LINE.has(line) || TICK.test(line))
+      continue;
+
+    return line;
+  }
+
+  return '';
+}
+
+export function clearStuckHang(): void {
+  clearHangHalt();
+  while (lines.length > 0 && STALL_LINE.has(lines[lines.length - 1] ?? ''))
+    lines.pop();
+}
+
+export async function forgetStuckHang(): Promise<void> {
+  const had = stalling() || hangHalted();
+  clearStuckHang();
+  const dropped = onHangClear !== undefined ? await onHangClear() : false;
+  if (had || dropped)
+    await browser.runtime.sendMessage({ type: 'hang-clear' }).catch(() => {});
+}
+
 export async function haltHang(): Promise<void> {
   if (halted)
     return;
@@ -73,6 +111,8 @@ export async function haltHang(): Promise<void> {
 
   pulseTimer = undefined;
   await setFlags({ autoQueue: false });
+  if (onHangClear !== undefined)
+    await onHangClear();
 }
 
 export async function tellPage(line: string): Promise<void> {
@@ -103,6 +143,8 @@ export async function tellPage(line: string): Promise<void> {
   planStall();
   schedulePulse(text, sameTick(previous, text) === false);
   await broadcast(lines);
+  if (STALL_LINE.has(text))
+    await browser.runtime.sendMessage({ type: 'hang-status', step: stallStep() }).catch(() => {});
 }
 
 const STAGE: Record<string, string> = {
@@ -183,8 +225,6 @@ async function broadcast(rows: string[]): Promise<void> {
   }));
 }
 
-const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
-
 function sameTick(previous: string, next: string): boolean {
   const was = previous.match(TICK);
   const now = next.match(TICK);
@@ -257,8 +297,13 @@ async function postPulse(line: string): Promise<void> {
     return;
   }
 
-  if (stopFlag(body))
+  if (stopFlag(body)) {
     await haltHang();
+
+    return;
+  }
+
+  await forgetStuckHang();
 }
 
 async function listenPilot(): Promise<void> {
@@ -273,12 +318,14 @@ async function listenPilot(): Promise<void> {
 }
 
 async function pilotWake(): Promise<void> {
-  if (onWake === undefined || waking)
+  if (waking)
     return;
 
   waking = true;
   try {
-    await onWake();
+    await forgetStuckHang();
+    if (onWake !== undefined)
+      await onWake();
   }
   finally {
     waking = false;

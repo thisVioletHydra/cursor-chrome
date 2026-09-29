@@ -20,11 +20,15 @@ type GoodResult = {
 
 type ViewName = 'main' | 'history' | 'settings';
 
-const HH_LABEL = 'Поднять HH';
+const QUEUE_LABEL = 'Откликнуться сейчас';
+const CLOSE_TAB = 'Закрыть запиненную вкладку';
+const RAISE_HH = 'Поднять HH';
 
 const verEl = document.getElementById('ver');
 const mainBtn = document.getElementById('make-good') as HTMLButtonElement | null;
-const mainLabel = mainBtn?.querySelector('.cta-label');
+const powerBtn = document.getElementById('power') as HTMLButtonElement | null;
+const powerNoteEl = document.getElementById('power-note');
+const linkNoteEl = document.getElementById('link-note');
 const pillEl = document.getElementById('pill');
 const reportEl = document.getElementById('report');
 const viewMain = document.getElementById('view-main');
@@ -51,14 +55,11 @@ const connectTitleEl = document.getElementById('connect-title');
 const connectHostEl = document.getElementById('connect-host');
 const connectNoteEl = document.getElementById('connect-note');
 const connectLinkEl = document.getElementById('connect-link') as HTMLInputElement | null;
-const connectSaveEl = document.getElementById('connect-save');
+const connectSaveEl = document.getElementById('connect-save') as HTMLButtonElement | null;
 const connectErrorEl = document.getElementById('connect-error') as HTMLElement | null;
 const hideJunkEl = document.getElementById('flag-hide-junk') as HTMLInputElement | null;
 const showPopEl = document.getElementById('flag-show-pop') as HTMLInputElement | null;
 const keepSessionEl = document.getElementById('flag-keep-session') as HTMLInputElement | null;
-const autoQueueBox = document.getElementById('auto-queue') as HTMLElement | null;
-const autoQueueEl = document.getElementById('flag-auto-queue') as HTMLInputElement | null;
-const autoLineEl = document.getElementById('auto-line') as HTMLElement | null;
 const workerUrlForm = document.getElementById('worker-url-form') as HTMLFormElement | null;
 
 if (verEl)
@@ -66,10 +67,13 @@ if (verEl)
 
 let linked = false;
 let adminOn = false;
+let autoOn = false;
+let powering = false;
 let waitCleared = false;
 
 const clicks: Record<string, () => void> = {
   'make-good': () => void (linked ? hangUp() : makeGood()),
+  'power': () => void togglePower(),
   'pin-here': () => void pinHere(),
   'go-main': () => show('main'),
   'go-history': () => show('history'),
@@ -138,32 +142,26 @@ keepSessionEl?.addEventListener('change', () => {
 });
 
 browser.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || autoQueueEl === null || changes.flags === undefined)
+  if (area !== 'local' || changes.flags === undefined)
     return;
 
   const next = changes.flags.newValue;
   if (typeof next !== 'object' || next === null || !('autoQueue' in next))
     return;
 
-  autoQueueEl.checked = next.autoQueue === true;
-  void paintAutoLine();
-});
+  const on = next.autoQueue === true;
+  if (on === autoOn)
+    return;
 
-autoQueueEl?.addEventListener('change', () => {
-  const on = autoQueueEl.checked === true;
-  void browser.runtime.sendMessage({ type: 'set-flags', autoQueue: on })
-    .then(async () => {
-      await paintAutoLine();
-      if (on === false)
-        return;
+  autoOn = on;
+  paintPower();
+  if (powering)
+    return;
 
-      const state = await browser.runtime.sendMessage({ type: 'get-paused' }) as { pausedUntil?: number | null };
-      const until = typeof state?.pausedUntil === 'number' ? state.pausedUntil : 0;
-      if (until > Date.now())
-        return;
-
-      paintSearchWait('Поиск начнётся примерно через полминуты');
-    });
+  if (on === false)
+    paintStatus('Выключено');
+  else
+    void paintBootStatus();
 });
 
 browser.runtime.onMessage.addListener((message) => {
@@ -172,11 +170,15 @@ browser.runtime.onMessage.addListener((message) => {
 
   const type = 'type' in message ? message.type : '';
   if (type === 'queue-soon')
-    paintSearchWait('Поиск начнётся примерно через полминуты');
+    paintStatus('Поиск начнётся примерно через полминуты');
   else if (type === 'queue-busy')
-    paintSearchWait('Читаю вакансии в запиненной вкладке hh');
+    paintStatus('Читаю вакансии в запиненной вкладке hh');
   else if (type === 'queue-report' && 'run' in message)
-    paintQueue(message.run);
+    void paintQueue(message.run);
+  else if (type === 'hang-status')
+    void paintHang(message);
+  else if (type === 'hang-clear')
+    clearHangLabel();
 });
 
 workerUrlForm?.addEventListener('submit', (event) => {
@@ -218,11 +220,19 @@ function syncTabChip(): void {
 
 function paintCta(on: boolean): void {
   linked = on;
-  if (mainBtn === null || mainLabel === null)
+  if (mainBtn === null)
     return;
 
-  mainBtn.classList.toggle('stop', on);
-  mainLabel.textContent = on ? 'Отключить' : HH_LABEL;
+  mainBtn.textContent = on ? CLOSE_TAB : RAISE_HH;
+}
+
+function paintLink(text: string, ok: boolean): void {
+  if (linkNoteEl === null)
+    return;
+
+  linkNoteEl.hidden = false;
+  linkNoteEl.className = ok ? 'power-note ok' : 'power-note';
+  linkNoteEl.textContent = text;
 }
 
 async function hangUp(): Promise<void> {
@@ -230,19 +240,18 @@ async function hangUp(): Promise<void> {
     return;
 
   mainBtn.disabled = true;
+  mainBtn.textContent = 'Закрываю…';
+  let failed = '';
   try {
     await browser.runtime.sendMessage({ type: 'hangup' });
   }
-  catch {
+  catch (error) {
+    failed = error instanceof Error ? error.message : 'не вышло';
   }
 
-  paintCta(false);
-  if (pillEl) {
-    pillEl.hidden = false;
-    pillEl.className = 'status';
-    pillEl.textContent = 'OFF';
-  }
-
+  const state = await browser.runtime.sendMessage({ type: 'get-status' }) as { connected?: boolean };
+  paintCta(state?.connected === true);
+  paintLink(failed.length > 0 ? failed : 'Вкладка закрыта, Cursor отключён', failed.length === 0);
   if (reportEl)
     reportEl.hidden = true;
 
@@ -251,31 +260,23 @@ async function hangUp(): Promise<void> {
 }
 
 async function makeGood(): Promise<void> {
-  if (mainBtn === null)
-    return;
-
-  if (mainLabel === null || pillEl === null || reportEl === null)
+  if (mainBtn === null || reportEl === null)
     return;
 
   mainBtn.disabled = true;
-  mainLabel.textContent = 'Работаю…';
-  pillEl.hidden = true;
+  mainBtn.textContent = 'Работаю…';
   reportEl.hidden = true;
   try {
     const result = await browser.runtime.sendMessage({ type: 'make-good' }) as GoodResult;
     const report = result?.report || result?.error || 'нет ответа от service worker';
     const ok = result?.ok === true;
-    pillEl.hidden = false;
-    pillEl.className = `status ${ok ? 'ok' : 'fail'}`;
-    pillEl.textContent = ok ? 'CONNECT' : 'НЕ CONNECT';
+    paintLink(ok ? 'Поднял HH' : 'Не вышло', ok);
     reportEl.hidden = false;
     reportEl.textContent = report;
     paintCta(ok);
   }
   catch (error) {
-    pillEl.hidden = false;
-    pillEl.className = 'status fail';
-    pillEl.textContent = 'НЕ CONNECT';
+    paintLink('Не вышло', false);
     reportEl.hidden = false;
     reportEl.textContent = [
       'Cursor Chrome: FAIL',
@@ -465,12 +466,6 @@ async function paintConnect(): Promise<void> {
   const url = sync?.url || '';
   const on = sync?.hasKey === true && url.length > 0;
   adminOn = on;
-  if (queueBtn)
-    queueBtn.hidden = on === false;
-
-  if (autoQueueBox)
-    autoQueueBox.hidden = on === false;
-
   if (connectTitleEl)
     connectTitleEl.textContent = on ? 'Админка' : 'Подключи админку';
 
@@ -495,17 +490,6 @@ function hostOf(url: string): string {
   }
 }
 
-async function paintAutoLine(): Promise<void> {
-  if (autoLineEl === null)
-    return;
-
-  const state = await browser.runtime.sendMessage({ type: 'get-paused' }) as { pausedUntil?: number | null };
-  const until = typeof state?.pausedUntil === 'number' ? state.pausedUntil : 0;
-  const paused = until > Date.now();
-  autoLineEl.classList.toggle('paused', paused);
-  autoLineEl.textContent = paused ? `Пауза до ${clockOf(until)}` : 'Каждые 15 мин, пока в очереди есть вакансии';
-}
-
 function clockOf(ms: number): string {
   const date = new Date(ms);
   const hours = String(date.getHours()).padStart(2, '0');
@@ -525,91 +509,261 @@ type QueueRun = {
   error?: string;
 };
 
-function paintSearchWait(text: string): void {
-  if (pillEl === null || reportEl === null)
+function paintStatus(text: string, kind: 'ok' | 'fail' | 'plain' = 'plain'): void {
+  if (pillEl === null)
     return;
 
   pillEl.hidden = false;
-  pillEl.className = 'status';
-  pillEl.textContent = 'Ищу';
-  reportEl.hidden = false;
-  reportEl.textContent = text;
+  pillEl.className = kind === 'plain' ? 'status' : `status ${kind}`;
+  pillEl.textContent = text;
 }
 
-function paintQueue(run: QueueRun | unknown): void {
-  if (pillEl === null || reportEl === null || typeof run !== 'object' || run === null)
+function isHang(reason: string): boolean {
+  return reason === 'расширение зависло' || reason === 'я завис' || reason === 'сервер молчит' || reason.startsWith('замолчало');
+}
+
+function hangText(step: string): string {
+  if (step.length === 0)
+    return 'Зависло';
+
+  return `Зависло на шаге «${step}»`;
+}
+
+function paintPower(): void {
+  if (powerBtn === null)
     return;
+
+  powerBtn.disabled = false;
+  powerBtn.textContent = autoOn ? 'Выключить' : 'Включить';
+  powerBtn.classList.toggle('on', autoOn);
+  powerBtn.setAttribute('aria-pressed', autoOn ? 'true' : 'false');
+}
+
+function paintPowerNote(text: string): void {
+  if (powerNoteEl === null)
+    return;
+
+  powerNoteEl.hidden = false;
+  powerNoteEl.className = 'power-note';
+  powerNoteEl.textContent = text;
+}
+
+function clearPowerNote(): void {
+  if (powerNoteEl === null)
+    return;
+
+  powerNoteEl.hidden = true;
+  powerNoteEl.textContent = '';
+}
+
+function clearHangLabel(): void {
+  const text = pillEl?.textContent ?? '';
+  if (text.startsWith('Зависло') === false)
+    return;
+
+  paintStatus(autoOn ? 'Включено' : 'Выключено', autoOn ? 'ok' : 'plain');
+}
+
+async function readStall(): Promise<string | null> {
+  const data = await browser.runtime.sendMessage({ type: 'page-log-get' }) as { stall?: boolean; step?: string };
+  if (data?.stall !== true)
+    return null;
+
+  return typeof data.step === 'string' ? data.step : '';
+}
+
+async function readPaused(): Promise<number | null> {
+  const state = await browser.runtime.sendMessage({ type: 'get-paused' }) as { pausedUntil?: number | null };
+  const until = typeof state?.pausedUntil === 'number' ? state.pausedUntil : 0;
+  if (until > Date.now())
+    return until;
+
+  return null;
+}
+
+async function syncAuto(): Promise<void> {
+  const flags = await browser.runtime.sendMessage({ type: 'get-flags' }) as { autoQueue?: boolean };
+  autoOn = flags?.autoQueue === true;
+  paintPower();
+}
+
+async function paintHang(message: unknown): Promise<void> {
+  await syncAuto();
+  if (autoOn === false) {
+    paintStatus('Выключено');
+
+    return;
+  }
+
+  const step = typeof message === 'object' && message !== null && 'step' in message && typeof message.step === 'string'
+    ? message.step
+    : '';
+  paintStatus(hangText(step), 'fail');
+}
+
+async function paintQueue(run: QueueRun | unknown): Promise<void> {
+  if (typeof run !== 'object' || run === null) {
+    paintStatus('нет ответа', 'fail');
+
+    return;
+  }
 
   const row = run as QueueRun;
   const reason = row.error || row.reason || '';
-  const lines = [...(row.lines ?? [])];
-  if (reason.length > 0 && lines.includes(reason) === false)
-    lines.push(reason);
+  if (isHang(reason)) {
+    await syncAuto();
+    if (autoOn === false) {
+      paintStatus('Выключено');
+
+      return;
+    }
+
+    const step = await readStall();
+    paintStatus(hangText(step ?? ''), 'fail');
+
+    return;
+  }
 
   const applied = (row.sent ?? 0) + (row.human ?? 0) + (row.skipped ?? 0);
-  pillEl.hidden = false;
-  if (applied === 0 && reason.length > 0) {
-    pillEl.className = 'status fail';
-    pillEl.textContent = reason;
-  }
-  else if (row.ok === true || applied > 0) {
-    pillEl.className = `status ${row.ok === true ? 'ok' : 'fail'}`;
-    pillEl.textContent = `Отправлено ${row.sent ?? 0} · ждут ${row.human ?? 0} · осталось ${row.left ?? 0}`;
-  }
-  else {
-    pillEl.className = 'status fail';
-    pillEl.textContent = reason.length > 0 ? reason : 'НЕ ВЫШЛО';
-  }
-
-  reportEl.hidden = lines.length === 0;
-  reportEl.textContent = lines.join('\n');
+  if (applied === 0 && reason.length > 0)
+    paintStatus(reason, 'fail');
+  else if (row.ok === true || applied > 0)
+    paintStatus(`Отправлено ${row.sent ?? 0} · ждут ${row.human ?? 0} · осталось ${row.left ?? 0}`, row.ok === true ? 'ok' : 'fail');
+  else
+    paintStatus(reason.length > 0 ? reason : 'НЕ ВЫШЛО', 'fail');
 }
 
-async function paintStoredReport(): Promise<void> {
+async function paintBootStatus(): Promise<void> {
+  if (autoOn === false) {
+    paintStatus('Выключено');
+    await browser.runtime.sendMessage({ type: 'forget-hang' }).catch(() => {});
+
+    return;
+  }
+
+  const step = await readStall();
+  if (step !== null) {
+    paintStatus(hangText(step), 'fail');
+
+    return;
+  }
+
+  const paused = await readPaused();
+  if (paused !== null) {
+    paintStatus(`Пауза до ${clockOf(paused)}`);
+
+    return;
+  }
+
   const state = await browser.runtime.sendMessage({ type: 'get-queue-report' }) as {
     soon?: boolean;
     busy?: boolean;
     report?: QueueRun | null;
   };
   if (state?.busy === true) {
-    paintSearchWait('Читаю вакансии в запиненной вкладке hh');
+    paintStatus('Читаю вакансии в запиненной вкладке hh');
 
     return;
   }
 
   if (state?.soon === true) {
-    paintSearchWait('Поиск начнётся примерно через полминуты');
+    paintStatus('Поиск начнётся примерно через полминуты');
 
     return;
   }
 
-  if (state?.report)
-    paintQueue(state.report);
+  const report = state?.report;
+  const reportReason = report?.reason || '';
+  if (report && isHang(reportReason) === false && (reportReason.length > 0 || (report.sent ?? 0) + (report.human ?? 0) + (report.skipped ?? 0) > 0)) {
+    await paintQueue(report);
+
+    return;
+  }
+
+  paintStatus('Включено', 'ok');
+}
+
+async function togglePower(): Promise<void> {
+  if (powerBtn === null || powerBtn.disabled)
+    return;
+
+  const next = autoOn === false;
+  if (next && adminOn === false) {
+    paintPowerNote('Сначала подключи админку в Настройках');
+
+    return;
+  }
+
+  powering = true;
+  powerBtn.disabled = true;
+  powerBtn.textContent = next ? 'Включаю…' : 'Выключаю…';
+  clearPowerNote();
+  try {
+    const result = await browser.runtime.sendMessage({ type: 'set-flags', autoQueue: next }) as { error?: string; autoQueue?: boolean };
+    if (typeof result?.error === 'string' && result.error.length > 0) {
+      paintPowerNote(result.error);
+
+      return;
+    }
+
+    if (typeof result?.autoQueue !== 'boolean') {
+      paintPowerNote('нет ответа');
+
+      return;
+    }
+
+    autoOn = result.autoQueue;
+    paintPower();
+    if (autoOn === false)
+      paintStatus('Выключено');
+    else
+      await afterPowerOn();
+  }
+  catch (error) {
+    paintPowerNote(error instanceof Error ? error.message : 'не вышло');
+  }
+  finally {
+    powering = false;
+    paintPower();
+  }
+}
+
+async function afterPowerOn(): Promise<void> {
+  const paused = await readPaused();
+  if (paused !== null) {
+    paintStatus(`Пауза до ${clockOf(paused)}`);
+
+    return;
+  }
+
+  paintStatus('Поиск начнётся примерно через полминуты');
 }
 
 async function runQueue(): Promise<void> {
-  if (queueBtn === null || pillEl === null || reportEl === null)
+  if (queueBtn === null)
     return;
+
+  if (adminOn === false) {
+    paintStatus('Сначала подключи админку в Настройках', 'fail');
+
+    return;
+  }
 
   queueBtn.disabled = true;
   queueBtn.textContent = 'Откликаюсь…';
-  pillEl.hidden = true;
-  reportEl.hidden = true;
+  paintStatus('Откликаюсь…');
   try {
     const run = await browser.runtime.sendMessage({ type: 'run-queue' }) as QueueRun;
-    paintQueue(run);
+    await paintQueue(run);
   }
   catch (error) {
-    pillEl.hidden = false;
-    pillEl.className = 'status fail';
-    pillEl.textContent = 'НЕ ВЫШЛО';
-    reportEl.hidden = false;
-    reportEl.textContent = error instanceof Error ? error.message : String(error);
+    paintStatus(error instanceof Error ? error.message : 'не вышло', 'fail');
+  }
+  finally {
+    queueBtn.disabled = false;
+    queueBtn.textContent = QUEUE_LABEL;
   }
 
-  queueBtn.disabled = false;
-  queueBtn.textContent = 'Разобрать очередь';
-  await paintAutoLine();
   await renderHistory();
 }
 
@@ -620,11 +774,11 @@ async function bootSettings(): Promise<void> {
     showPop?: boolean;
     autoQueue?: boolean;
   };
+  autoOn = flags?.autoQueue === true;
   const boxes: Array<[HTMLInputElement | null, boolean]> = [
     [hideJunkEl, flags?.hideJunk === true],
     [keepSessionEl, flags?.keepSession === true],
     [showPopEl, flags?.showPop !== false],
-    [autoQueueEl, flags?.autoQueue === true],
   ];
   for (const [element, on] of boxes) {
     if (element)
@@ -632,23 +786,15 @@ async function bootSettings(): Promise<void> {
   }
 
   await paintConnect();
-  await paintAutoLine();
 
   const hist = await browser.runtime.sendMessage({ type: 'apply-history' }) as { today?: number };
   if (todayEl)
     todayEl.textContent = String(hist?.today ?? 0);
 
   const state = await browser.runtime.sendMessage({ type: 'get-status' }) as { connected?: boolean };
-  const on = state?.connected === true;
-  paintCta(on);
-  if (on && pillEl) {
-    pillEl.hidden = false;
-    pillEl.className = 'status ok';
-    pillEl.textContent = 'CONNECT';
-  }
-
+  paintCta(state?.connected === true);
   await refreshWorkerPanel();
-  await paintStoredReport();
+  await paintBootStatus();
 }
 
 function localDay(ms: number): string {
@@ -657,5 +803,7 @@ function localDay(ms: number): string {
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 }
 
-void bootSettings();
+void bootSettings().finally(() => {
+  paintPower();
+});
 requestAnimationFrame(() => syncTabChip());

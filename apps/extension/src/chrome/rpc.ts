@@ -3,8 +3,8 @@ import { appendApply, clearWaiting, dropWaiting, getSyncKey, getSyncUrl, listApp
 import { getFlags, setFlags } from './flags';
 import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from './human-review';
 import { syncNegotiations } from './negotiations';
-import { clearHangHalt, liveLines, tellPage } from './page-log';
-import { queueBusy, readPausedUntil, readQueueReport, runQueue } from './queue-run';
+import { clearStuckHang, forgetStuckHang, liveLines, stallStep, stalling, tellPage } from './page-log';
+import { forgetHangReport, queueBusy, readPausedUntil, readQueueReport, runQueue } from './queue-run';
 import { pullSavedResume } from './resume-pull';
 import { checkWorker, listJobTabs, openHhBackground, pinWorker } from './worker-tab';
 import { openPinnedWorker } from './worker-open';
@@ -145,7 +145,7 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
   },
   'run-queue': (_message, reply) => {
     if (queueBusy() === false)
-      clearHangHalt();
+      clearStuckHang();
 
     replyJob(reply, runQueue());
 
@@ -163,7 +163,12 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
     return true;
   },
   'page-log-get': (_message, reply) => {
-    reply({ lines: liveLines() });
+    reply({ lines: liveLines(), stall: stalling(), step: stallStep() });
+
+    return true;
+  },
+  'forget-hang': (_message, reply) => {
+    replyJob(reply, forgetHangReport());
 
     return true;
   },
@@ -207,8 +212,16 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
     if ('autoQueue' in message)
       patch.autoQueue = message.autoQueue === true;
 
-    replyJob(reply, setFlags(patch));
+    replyJob(reply, writeFlags(patch));
 
     return true;
   },
 };
+
+async function writeFlags(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean }): Promise<unknown> {
+  const next = await setFlags(patch);
+  if ('autoQueue' in patch)
+    await forgetStuckHang();
+
+  return next;
+}

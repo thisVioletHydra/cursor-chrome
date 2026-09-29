@@ -15,10 +15,8 @@ const TITLE_MAX = 40;
 
 const pinBtn = document.getElementById('pin-here') as HTMLButtonElement | null;
 const workerLine = document.getElementById('worker-line');
-const workerHost = document.getElementById('worker-host');
-const activeLine = document.getElementById('active-line');
 const pinNote = document.getElementById('pin-note');
-const pillEl = document.getElementById('pill');
+const urlNote = document.getElementById('url-note');
 const workerUrlEl = document.getElementById('worker-url') as HTMLInputElement | null;
 
 function shortTitle(raw: string): string {
@@ -48,13 +46,13 @@ function pinBlockReason(url: string): string | null {
   return null;
 }
 
-function showStatus(text: string, ok?: boolean): void {
-  if (pillEl === null)
+function showNote(node: HTMLElement | null, text: string, ok?: boolean): void {
+  if (node === null)
     return;
 
-  pillEl.hidden = false;
-  pillEl.className = ok === true ? 'status ok' : ok === false ? 'status fail' : 'status';
-  pillEl.textContent = text;
+  node.hidden = text.length === 0;
+  node.className = ok === true ? 'power-note ok' : 'power-note';
+  node.textContent = text;
 }
 
 function parseHttpUrl(raw: string): string | null {
@@ -78,7 +76,6 @@ export async function refreshWorkerPanel(): Promise<void> {
   const [active] = await browser.tabs.query({ active: true, currentWindow: true });
   const check = await browser.runtime.sendMessage({ type: 'check-worker' }) as WorkerSnap;
   const activeUrl = active?.url || active?.pendingUrl || '';
-  const activeTitle = shortTitle(active?.title || activeUrl || 'вкладка');
   const block = pinBlockReason(activeUrl);
   const alreadyWorker = check?.ok === true
     && typeof check.tabId === 'number'
@@ -98,23 +95,15 @@ export async function refreshWorkerPanel(): Promise<void> {
         }
       }
 
-      workerLine.textContent = `Рабочая: ${title}`;
+      workerLine.textContent = `Запинена: ${title}`;
     }
     else {
-      workerLine.textContent = 'Рабочей вкладки нет';
+      workerLine.textContent = 'Вкладка не запинена';
     }
   }
 
-  if (workerHost) {
-    const host = check?.ok === true && check.url ? hostOf(check.url) : '';
-    workerHost.hidden = host.length === 0;
-    workerHost.textContent = host;
-  }
-
-  if (activeLine)
-    activeLine.textContent = `Сейчас открыта: ${activeTitle}`;
-
   if (pinNote) {
+    pinNote.className = 'pin-note';
     pinNote.hidden = block === null;
     pinNote.textContent = block ?? '';
   }
@@ -123,21 +112,22 @@ export async function refreshWorkerPanel(): Promise<void> {
     return;
 
   if (block) {
+    pinBtn.hidden = false;
     pinBtn.disabled = true;
-    pinBtn.textContent = 'Запинить эту';
+    pinBtn.textContent = 'Запинить';
 
     return;
   }
 
   if (alreadyWorker) {
-    pinBtn.disabled = true;
-    pinBtn.textContent = 'Уже рабочая';
+    pinBtn.hidden = true;
 
     return;
   }
 
+  pinBtn.hidden = false;
   pinBtn.disabled = false;
-  pinBtn.textContent = `Запинить: ${activeTitle}`;
+  pinBtn.textContent = check?.ok === true ? 'Сменить' : 'Запинить';
 }
 
 export async function pinHere(): Promise<void> {
@@ -146,8 +136,8 @@ export async function pinHere(): Promise<void> {
 
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (typeof tab?.id !== 'number') {
-    showStatus('нет вкладки', false);
     await refreshWorkerPanel();
+    showNote(pinNote, 'нет вкладки', false);
 
     return;
   }
@@ -155,62 +145,74 @@ export async function pinHere(): Promise<void> {
   const url = tab.url || tab.pendingUrl || '';
   const block = pinBlockReason(url);
   if (block) {
-    showStatus(block, false);
     await refreshWorkerPanel();
+    showNote(pinNote, block, false);
 
     return;
   }
 
+  if (pinBtn) {
+    pinBtn.disabled = true;
+    pinBtn.textContent = 'Запинил…';
+  }
+
   try {
     const result = await browser.runtime.sendMessage({ type: 'pin-tab', tabId: tab.id }) as WorkerSnap;
+    await refreshWorkerPanel();
     if (result?.ok === true) {
-      showStatus('Запинил эту', true);
-      await refreshWorkerPanel();
+      showNote(pinNote, 'Запинил', true);
 
       return;
     }
 
-    showStatus(result?.reason || result?.error || 'не вышло', false);
+    showNote(pinNote, result?.reason || result?.error || 'не вышло', false);
   }
   catch (error) {
-    showStatus(error instanceof Error ? error.message : 'не вышло', false);
+    await refreshWorkerPanel();
+    showNote(pinNote, error instanceof Error ? error.message : 'не вышло', false);
   }
-
-  await refreshWorkerPanel();
 }
 
 export async function openWorkerUrl(): Promise<void> {
   const href = parseHttpUrl(workerUrlEl?.value || '');
   if (href === null) {
-    showStatus('нужен http(s)', false);
+    showNote(urlNote, 'нужен http(s)', false);
 
     return;
   }
 
+  const openBtn = document.getElementById('open-worker-url');
+  if (openBtn instanceof HTMLButtonElement) {
+    openBtn.disabled = true;
+    openBtn.textContent = 'Открываю…';
+  }
+
   try {
     const result = await browser.runtime.sendMessage({ type: 'open-worker-url', url: href }) as WorkerSnap;
+    await refreshWorkerPanel();
     if (result?.ok === true) {
-      showStatus(result.status || 'Открыл и запинил', true);
+      showNote(urlNote, result.status || 'Открыл и запинил', true);
       if (workerUrlEl)
         workerUrlEl.value = '';
-
-      await refreshWorkerPanel();
 
       return;
     }
 
     if (result?.status === 'Уже открыта') {
-      showStatus('Уже открыта', true);
-      await refreshWorkerPanel();
+      showNote(urlNote, 'Уже открыта', true);
 
       return;
     }
 
-    showStatus(result?.reason || result?.error || 'не вышло', false);
+    showNote(urlNote, result?.reason || result?.error || 'не вышло', false);
   }
   catch (error) {
-    showStatus(error instanceof Error ? error.message : 'не вышло', false);
+    showNote(urlNote, error instanceof Error ? error.message : 'не вышло', false);
   }
-
-  await refreshWorkerPanel();
+  finally {
+    if (openBtn instanceof HTMLButtonElement) {
+      openBtn.disabled = false;
+      openBtn.textContent = 'Открыть';
+    }
+  }
 }

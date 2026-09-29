@@ -3,7 +3,7 @@ import type { Hunt, QueueItem } from './admin-api';
 import { fetchHunt, fetchQueue, keepWorkHours, postFound } from './admin-api';
 import { getSyncKey, getSyncUrl } from './apply-log';
 import { loadPace, rare, waitMs } from './pace';
-import { armLiveLog, disarmLiveLog, doneServerBatch, hangHalted, noteServerBatch, tellPage, tickPage } from './page-log';
+import { armLiveLog, bindHangClear, disarmLiveLog, doneServerBatch, hangHalted, noteServerBatch, tellPage, tickPage } from './page-log';
 import { runHhApply } from './hh-apply-cmd';
 import { collectVacancies } from './hh-search';
 import { requireTabId } from './inject';
@@ -108,7 +108,29 @@ export async function readQueueReport(): Promise<{ soon: boolean; busy: boolean;
   };
 }
 
+export async function forgetHangReport(): Promise<boolean> {
+  const stored = await browser.storage.local.get(REPORT_KEY);
+  const raw = stored[REPORT_KEY];
+  if (typeof raw !== 'object' || raw === null)
+    return false;
+
+  const reason = 'reason' in raw && typeof raw.reason === 'string' ? raw.reason : '';
+  if (reason !== 'расширение зависло')
+    return false;
+
+  await browser.storage.local.remove(REPORT_KEY);
+
+  return true;
+}
+
 async function rememberReport(run: QueueRun): Promise<void> {
+  if (run.reason === 'расширение зависло') {
+    await browser.storage.local.remove(REPORT_KEY);
+    await browser.runtime.sendMessage({ type: 'queue-report', run: { ...run, lines: [] } }).catch(() => {});
+
+    return;
+  }
+
   await browser.storage.local.set({
     [REPORT_KEY]: {
       ok: run.ok,
@@ -516,6 +538,8 @@ export async function syncBase(): Promise<string> {
     return '';
   }
 }
+
+bindHangClear(forgetHangReport);
 
 function asReply(raw: unknown): ApplyReply {
   if (typeof raw !== 'object' || raw === null)
