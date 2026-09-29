@@ -109,7 +109,7 @@ function takeResume() {
   <h1 class="mt-1 bg-[linear-gradient(to_bottom,#fff_0%,#fff_30%,#c6c6cc_56%,#2a2a2e_82%,#1c1c1c_100%)] bg-clip-text text-7xl leading-none font-semibold tracking-tight text-transparent">ATS</h1>
 </header>
 
-<div class="grid min-w-0 items-start gap-4 lg:grid-cols-2">
+<div class="grid min-w-0 w-full grid-cols-1 items-start gap-4">
   <section class="min-w-0 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
     <h2 class="text-base font-semibold text-white">Резюме</h2>
     {#if hasText}
