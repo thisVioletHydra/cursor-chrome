@@ -71,7 +71,6 @@ export function paintApplyGroup(
     const row = document.createElement('li');
     const link = document.createElement('a');
     link.href = item.url;
-    link.target = '_blank';
     link.rel = 'noreferrer';
     const who = item.company ? ` — ${item.company}` : '';
     const hint = item.hints?.[0] ? ` · ${item.hints[0]}` : '';

@@ -1,4 +1,15 @@
+import { ask } from '../hh/bridge';
+import { blockedHref } from '../hh/stay-on-tab';
+
 export function click(element: HTMLElement): { ok: true } {
+  const href = blockedHref(element);
+  if (href !== null) {
+    if (href.length > 0)
+      void ask({ type: 'hh-same-tab', url: href });
+
+    return { ok: true };
+  }
+
   const link = element instanceof HTMLAnchorElement ? element : element.closest('a');
   if (link)
     link.target = '_self';

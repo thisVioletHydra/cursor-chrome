@@ -2,7 +2,7 @@ import type { ApplyRecord } from './apply-log';
 
 import { browser } from '../browser-host';
 import { appendApply, forgetWaitDismiss, isJunkApply, listApplies, todayCount, waitingHuman } from './apply-log';
-import { getWorkerTabId, handoffWorkerToHuman, isHhUrl, openHhDetached } from './worker-tab';
+import { adoptHhWorker, getWorkerTabId, isHhUrl } from './worker-tab';
 
 export async function isHhWorkerTab(tabId?: number): Promise<{ worker: boolean }> {
   const workerId = await getWorkerTabId();
@@ -23,8 +23,8 @@ export async function handleNeedsHuman(
     vacancyId: String(message.vacancyId || ''),
     hints: message.hints,
   });
-  if (worker && url.length > 0)
-    await handoffWorkerToHuman(url);
+  if (worker && isHhUrl(url))
+    await adoptHhWorker(url);
 
   return {
     ok: true,
@@ -38,9 +38,12 @@ export async function detachAndLog(
   url: string,
   params: Record<string, unknown> = {},
 ): Promise<{ id?: number; url: string; detached: true }> {
-  const opened = await openHhDetached(url);
-  const tab = typeof opened.id === 'number'
-    ? await browser.tabs.get(opened.id).catch(() => null)
+  if (isHhUrl(url) === false)
+    throw new Error('detach only for HH');
+
+  const opened = await adoptHhWorker(url);
+  const tab = typeof opened.tabId === 'number'
+    ? await browser.tabs.get(opened.tabId).catch(() => null)
     : null;
   await logDetachedReview({
     url: opened.url || url,
@@ -51,7 +54,7 @@ export async function detachAndLog(
     tabTitle: tab?.title || '',
   });
 
-  return opened;
+  return { id: opened.tabId, url: opened.url || url, detached: true };
 }
 
 export async function backfillUnpinnedReviews(): Promise<void> {

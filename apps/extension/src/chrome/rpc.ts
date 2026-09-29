@@ -7,7 +7,7 @@ import { clearStuckHang, forgetStuckHang, liveLines, stallStep, stalling, tellPa
 import { pushPilot } from './pilot-switch';
 import { forgetHangReport, guardCaptcha, queueBusy, readPausedUntil, readQueueReport, runQueue } from './queue-run';
 import { pullSavedResume } from './resume-pull';
-import { checkWorker, listJobTabs, openHhBackground, pinWorker } from './worker-tab';
+import { checkWorker, listJobTabs, openHhBackground, openOnHhTab, pinWorker } from './worker-tab';
 import { ensurePinnedHh, openPinnedWorker } from './worker-open';
 
 type Reply = (value?: unknown) => void;
@@ -96,6 +96,11 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
   },
   'open-hh': (_message, reply) => {
     replyJob(reply, openHhBackground());
+
+    return true;
+  },
+  'hh-same-tab': (message, reply) => {
+    replyJob(reply, openOnHhTab(String(message.url || '')));
 
     return true;
   },

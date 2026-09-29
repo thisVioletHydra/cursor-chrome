@@ -102,6 +102,15 @@ historyEl?.addEventListener('click', (event) => {
   if (clear instanceof HTMLButtonElement) {
     event.preventDefault();
     void clearHistoryWait();
+
+    return;
+  }
+
+  const link = target.closest('a');
+  if (link instanceof HTMLAnchorElement && link.href.length > 0) {
+    event.preventDefault();
+    link.dataset.ccOpened = '1';
+    void browser.runtime.sendMessage({ type: 'hh-same-tab', url: link.href });
   }
 });
 

@@ -473,6 +473,10 @@ body {
   overflow-wrap: anywhere;
 }
 
+.history a[data-cc-opened] {
+  color: #86efac;
+}
+
 .history .cc-clear {
   display: inline-block;
   margin: 0 0 8px;

@@ -1,7 +1,7 @@
 import type { WorkerCheck } from './worker-tab';
 
 import { withStayPut } from './focus-lock';
-import { checkWorker, getWorkerTabId, isHhUrl, listJobTabs, pinWorker, waitTab } from './worker-tab';
+import { adoptHhWorker, checkWorker, getWorkerTabId, isHhUrl, listJobTabs, pinWorker, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
 
 export function pageKey(url: string): string | null {
@@ -34,6 +34,13 @@ export async function openPinnedWorker(url: string): Promise<WorkerCheck> {
     throw new Error('нужен http(s) URL');
 
   const href = parsed.href;
+  if (isHhUrl(href)) {
+    const had = (await listJobTabs()).some(row => row.hh);
+    const pinned = await adoptHhWorker(href);
+
+    return { ...pinned, status: had ? 'Запинил уже открытую' : 'Открыл и запинил' };
+  }
+
   const key = pageKey(href);
   if (key === null)
     throw new Error('нужен http(s) URL');
@@ -61,11 +68,22 @@ export async function openPinnedWorker(url: string): Promise<WorkerCheck> {
 
     await waitTab(created.id);
     const pinned = await pinWorker(created.id);
-    if (typeof oldId === 'number' && oldId !== created.id)
-      await browser.tabs.remove(oldId).catch(() => {});
+    await forgetWorker(oldId, created.id);
 
     return { ...pinned, status: 'Открыл и запинил' };
   }, { keepSpawned: true });
+}
+
+async function forgetWorker(tabId: number | null, createdId: number): Promise<void> {
+  if (typeof tabId !== 'number' || tabId === createdId)
+    return;
+
+  const tab = await browser.tabs.get(tabId).catch(() => null);
+  const url = tab?.url || tab?.pendingUrl || '';
+  if (isHhUrl(url))
+    return;
+
+  await browser.tabs.remove(tabId).catch(() => {});
 }
 
 const HH_HOME = 'https://hh.ru';
@@ -96,6 +114,13 @@ async function pinnedHh(): Promise<WorkerCheck | null> {
 }
 
 async function openFreshHh(): Promise<WorkerCheck> {
+  const again = (await listJobTabs()).find(row => row.hh);
+  if (again) {
+    const pinned = await pinWorker(again.id);
+
+    return { ...pinned, status: 'Запинил уже открытую' };
+  }
+
   return withStayPut(async () => {
     const created = await createHhTab();
     await waitTab(created);

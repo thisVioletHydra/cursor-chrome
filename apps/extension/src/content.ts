@@ -1,9 +1,11 @@
+import { keepHhClicks } from './hh/stay-on-tab';
 import { startHhJob } from './hh/job';
 import { runApply } from './hh/apply-run';
 import { click, hover, pressKey, selectOption, typeInto } from './page/actions';
 import { byRef, bySelector, snapshot } from './page/snapshot';
 import { browser } from './browser-host';
 
+keepHhClicks();
 startHhJob();
 watchResumePull();
 

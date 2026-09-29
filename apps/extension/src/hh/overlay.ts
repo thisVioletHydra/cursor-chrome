@@ -398,7 +398,8 @@ function handleOverlayClick(event: Event): void {
     }
 
     if (node instanceof HTMLAnchorElement && node.href.length > 0) {
-      window.open(node.href, '_blank', 'noopener');
+      node.style.color = '#86efac';
+      void ask({ type: 'hh-same-tab', url: node.href });
 
       return;
     }

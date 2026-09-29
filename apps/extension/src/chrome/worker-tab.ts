@@ -4,7 +4,6 @@ import { browser } from '../browser-host';
 
 const WORKER_KEY = 'workerTabId';
 const HH_HOME = 'https://hh.ru';
-const HH_SEARCH = 'https://hh.ru/search/vacancy';
 
 export type TabRow = {
   id: number;
@@ -145,88 +144,66 @@ export async function ensureHhWorker(): Promise<WorkerCheck> {
   return adoptHhWorker();
 }
 
-export async function openHhDetached(url: string): Promise<{ id?: number; url: string; detached: true }> {
-  if (isHhUrl(url) === false)
-    throw new Error('detach only for HH');
-
-  return withStayPut(() => createUnpinned(url), { keepSpawned: true });
-}
-
-export async function handoffWorkerToHuman(url: string): Promise<{ id?: number; url: string; detached: true }> {
-  return withStayPut(async () => {
-    const opened = await createUnpinned(url);
-    const workerId = await getWorkerTabId();
-    if (typeof workerId === 'number')
-      await browser.tabs.update(workerId, { url: HH_SEARCH, active: false });
-
-    return opened;
-  }, { keepSpawned: true });
-}
-
-async function createUnpinned(url: string): Promise<{ id?: number; url: string; detached: true }> {
-  const vacancyId = vacancyIdOf(url);
-  const workerId = await getWorkerTabId();
-  const hh = isHhUrl(url);
-  const existing = (await listJobTabs()).find((row) => {
-    if (row.pinned === true || row.id === workerId)
-      return false;
-
-    if (hh && row.hh === false)
-      return false;
-
-    return sameVacancy(row.url, url, vacancyId);
-  });
+export async function openOnHhTab(url: string): Promise<WorkerCheck> {
+  const href = httpHref(url);
+  const existing = pickHhTab(await listJobTabs(), await getWorkerTabId());
   if (existing)
-    return { id: existing.id, url: existing.url, detached: true };
+    return resumeHh(existing.id, href);
 
-  const created = await browser.tabs.create({ url, active: false, pinned: false });
-  if (typeof created.id !== 'number')
-    throw new Error('не удалось открыть вкладку');
-
-  await waitTab(created.id, 15_000);
-  const fresh = await browser.tabs.get(created.id);
-  const unpin = fresh.pinned === true
-    ? browser.tabs.update(created.id, { pinned: false, active: false })
-    : Promise.resolve();
-  await unpin;
-
-  return { id: created.id, url: fresh.url || url, detached: true };
-}
-
-function vacancyIdOf(url: string): string {
-  try {
-    const parsed = new URL(url);
-
-    return parsed.pathname.match(/\/vacancy\/(\d+)/)?.[1]
-      || parsed.searchParams.get('vacancyId')
-      || '';
-  }
-  catch {
-    return '';
-  }
-}
-
-function sameVacancy(left: string, right: string, vacancyId: string): boolean {
-  if (vacancyId.length > 0 && vacancyIdOf(left) === vacancyId)
-    return true;
-
-  return left.split('?')[0] === right.split('?')[0];
+  return openOnlyHh(href);
 }
 
 export async function adoptHhWorker(url?: string): Promise<WorkerCheck> {
-  const target = url && isHhUrl(url) ? url : undefined;
+  const asked = url && isHhUrl(url) ? url : undefined;
   const flags = await getFlags();
   const existing = pickHhTab(await listJobTabs(), await getWorkerTabId());
+  if (existing === undefined)
+    return openOnlyHh(asked || HH_HOME);
 
-  if (flags.keepSession && existing)
-    return resumeHh(existing.id, target);
+  const next = asked ?? (flags.keepSession ? undefined : HH_HOME);
 
-  return replaceHh(target || HH_HOME, existing?.id);
+  return resumeHh(existing.id, next);
+}
+
+function httpHref(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  }
+  catch {
+    throw new Error('нужен http(s) URL');
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
+    throw new Error('нужен http(s) URL');
+
+  return parsed.href;
+}
+
+async function openOnlyHh(url: string): Promise<WorkerCheck> {
+  const raced = pickHhTab(await listJobTabs(), await getWorkerTabId());
+  if (raced)
+    return resumeHh(raced.id, url);
+
+  return withStayPut(async () => {
+    const created = await browser.tabs.create({ url, active: false });
+    if (typeof created.id !== 'number')
+      throw new Error('не удалось открыть HH');
+
+    await waitTab(created.id);
+
+    return pinWorker(created.id);
+  }, { keepSpawned: true });
 }
 
 async function resumeHh(tabId: number, url?: string): Promise<WorkerCheck> {
   const pinned = await pinWorker(tabId);
   if (url === undefined)
+    return pinned;
+
+  const here = await browser.tabs.get(tabId).catch(() => null);
+  const current = here?.url || here?.pendingUrl || '';
+  if (current === url)
     return pinned;
 
   await browser.tabs.update(tabId, { url, active: false });
@@ -235,28 +212,13 @@ async function resumeHh(tabId: number, url?: string): Promise<WorkerCheck> {
   return checkWorker();
 }
 
-async function replaceHh(url: string, oldId?: number): Promise<WorkerCheck> {
-  return withStayPut(async () => {
-    const created = await browser.tabs.create({ url, active: false });
-    if (typeof created.id !== 'number')
-      throw new Error('не удалось открыть HH');
-
-    await waitTab(created.id);
-    const pinned = await pinWorker(created.id);
-    if (typeof oldId === 'number' && oldId !== created.id)
-      await browser.tabs.remove(oldId).catch(() => {});
-
-    return pinned;
-  }, { keepSpawned: true });
-}
-
 async function dropExtraHhPins(keepId: number): Promise<void> {
   const rows = await listJobTabs();
   for (const row of rows) {
     if (row.id === keepId || row.hh === false || row.pinned === false)
       continue;
 
-    await browser.tabs.remove(row.id).catch(() => {});
+    await browser.tabs.update(row.id, { pinned: false }).catch(() => {});
   }
 }
 

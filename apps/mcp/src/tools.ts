@@ -46,7 +46,7 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'hh_apply',
     {
-      description: 'Apply on the pinned HH worker vacancy in the extension: click native Откликнуться, leave the resume the user already picked, insert the hardcoded cover letter, fill only standard screening (Бишкек / по рынку / ИП да). Do NOT click/type the form field-by-field. Navigate to the vacancy, then call this. Returns { ok, status: sent|needsHuman|skip, reason }. needsHuman = custom questions, unlabeled fields, google/typeform/test, captcha — worker leaves the form, unpinned review tab, overlay «Ждут ответа». Snapshot/click stay for debugging only.',
+      description: 'Apply on the pinned HH worker vacancy in the extension: click native Откликнуться, leave the resume the user already picked, insert the hardcoded cover letter, fill only standard screening (Бишкек / по рынку / ИП да). Do NOT click/type the form field-by-field. Navigate to the vacancy, then call this. Returns { ok, status: sent|needsHuman|skip, reason }. needsHuman = custom questions, unlabeled fields, google/typeform/test, captcha — stays on the same pinned tab, logged to overlay «Ждут ответа». Do not open a second hh tab. Snapshot/click stay for debugging only.',
       inputSchema: {},
     },
     async () => {
@@ -62,11 +62,11 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'browser_new_tab',
     {
-      description: 'Open a tab without stealing focus (background defaults true). HH URLs reuse the single pinned worker — never a second pin. Pass detach/review true to open an unpinned HH copy for human screening; it is logged to popup История → Ждут ответа. Default resets the worker tab; keepSession continues its history. Clicks still go only to the pinned worker. If the apply form has custom questions (not city/schedule/pay-by-market/contact/citizenship), do not invent answers — detach, log, continue other vacancies.',
+      description: 'Open a tab without stealing focus (background defaults true). An hh.ru URL reuses the one pinned hh tab and does not create another if any hh.ru tab is already open. detach/review logs Ждут ответа on that same pin. Clicks still go only to the pinned worker. If the apply form has custom questions (not city/schedule/pay-by-market/contact/citizenship), do not invent answers — log and continue other vacancies.',
       inputSchema: {
         url: z.string().optional().describe('URL to open. Omit for a blank tab.'),
         background: z.boolean().optional().describe('Default true: do not activate. Pass false only if you must steal focus.'),
-        detach: z.boolean().optional().describe('HH only: unpinned extra tab, worker unchanged. Writes needsHuman into История → Ждут ответа.'),
+        detach: z.boolean().optional().describe('HH only: log needsHuman on the pinned tab. Does not open another hh tab.'),
         review: z.boolean().optional().describe('Alias of detach.'),
         title: z.string().optional().describe('Vacancy title for the inbox row.'),
         company: z.string().optional().describe('Company name for the inbox row.'),
