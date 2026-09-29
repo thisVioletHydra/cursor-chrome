@@ -3,7 +3,7 @@ export type { Answer, Question } from './answer.ts';
 export { corpusOn, corpusState, distillCorpus, keepVacancy } from './corpus.ts';
 export { COVER_LETTER, FACTS } from './copy.ts';
 export { LOOK_PER_START, MAX_ATTEMPTS, QUEUE_TARGET, SCAN_EVERY_MS, SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from './limits.ts';
-export { countSent, dayOpen, moscowDay, moscowHour, readMemory, remember, roomToday, workHours, writeMemory } from './memory.ts';
+export { countSent, dayOpen, moscowDay, moscowHour, readMemory, remember, roomToday, storePath, workHours, writeMemory } from './memory.ts';
 export type { Memory } from './memory.ts';
 export { asProvider, askChain, chainFromEnv, parseChain, pingChain, PRESETS, presetOf, probeProvider, providerName } from './model.ts';
 export { readProbeLog } from './probe-log.ts';

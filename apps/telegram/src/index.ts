@@ -1,4 +1,4 @@
-import { SEND_PER_DAY, watchDeath, WORK_FROM_HOUR, WORK_TO_HOUR, writeJsonAtomic, writeState } from '@cursor-chrome/hh';
+import { SEND_PER_DAY, storePath, watchDeath, WORK_FROM_HOUR, WORK_TO_HOUR, writeJsonAtomic, writeState } from '@cursor-chrome/hh';
 
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -19,6 +19,7 @@ type Update = {
 let offset = 0;
 let started = false;
 let polling = false;
+let ownerChat: number | null = null;
 let onApply: ((item: { id: string; company: string; url: string }) => Promise<boolean>) | null = null;
 
 export function telegramOn(): boolean {
@@ -48,7 +49,13 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-const ownerFile = path.join(path.dirname(process.env.HH_STORE ?? path.join(process.cwd(), 'data', 'seen.json')), 'owner.json');
+function ownerFile(): string {
+  return path.join(path.dirname(storePath()), 'owner.json');
+}
+
+function legacyOwnerFile(): string {
+  return path.join(process.cwd(), 'data', 'owner.json');
+}
 
 const QUIET_MS = 90_000;
 
@@ -167,8 +174,11 @@ export function startAutopilot(): void {
 
 export async function notifyOwner(text: string): Promise<void> {
   const chatId = await readOwner();
-  if (chatId === null || token().length === 0)
+  if (chatId === null || token().length === 0) {
+    watchDeath('telegram', chatId === null ? 'нет чата владельца' : 'нет токена бота');
+
     return;
+  }
 
   await send(chatId, text).catch(() => undefined);
 }
@@ -190,8 +200,30 @@ async function allow(chatId: number, username: string): Promise<boolean> {
 }
 
 async function readOwner(): Promise<number | null> {
+  if (ownerChat !== null)
+    return ownerChat;
+
+  const live = await readOwnerFile(ownerFile());
+  if (live !== null) {
+    ownerChat = live;
+
+    return live;
+  }
+
+  const legacy = await readOwnerFile(legacyOwnerFile());
+  if (legacy === null)
+    return null;
+
+  ownerChat = legacy;
+  if (legacyOwnerFile() !== ownerFile())
+    await writeJsonAtomic(ownerFile(), { chatId: legacy });
+
+  return legacy;
+}
+
+async function readOwnerFile(file: string): Promise<number | null> {
   try {
-    const raw = JSON.parse(await fsPromises.readFile(ownerFile, 'utf8')) as { chatId?: number };
+    const raw = JSON.parse(await fsPromises.readFile(file, 'utf8')) as { chatId?: number };
 
     return typeof raw.chatId === 'number' ? raw.chatId : null;
   }
@@ -201,7 +233,8 @@ async function readOwner(): Promise<number | null> {
 }
 
 async function writeOwner(chatId: number): Promise<void> {
-  await writeJsonAtomic(ownerFile, { chatId });
+  ownerChat = chatId;
+  await writeJsonAtomic(ownerFile(), { chatId });
 }
 
 async function send(chatId: number, text: string, keys = false): Promise<void> {

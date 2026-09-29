@@ -16,6 +16,17 @@ type Body = {
   reason?: string;
 };
 
+const notedSent = new Set<string>();
+
+function claimSent(id: string, prior: string | undefined): boolean {
+  if (prior === 'sent' || notedSent.has(id))
+    return false;
+
+  notedSent.add(id);
+
+  return true;
+}
+
 export const POST: RequestHandler = async ({ request }) => {
   const login = await extLogin(request);
   if (login === null)
@@ -51,20 +62,22 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ ok: true, queued: failed !== null });
   }
 
+  const prior = (await readQueue()).find(row => row.id === id);
   const hints = Array.isArray(body?.hints) ? body.hints.filter((item): item is string => typeof item === 'string') : [];
   const done = await markDone(id, status, hints);
   const company = done?.company || String(body?.company ?? '').trim() || 'без компании';
   const url = done?.url || String(body?.url ?? '').trim() || `https://hh.ru/vacancy/${id}`;
+  const freshSent = status === 'sent' && claimSent(id, prior?.status);
   const memory = await readMemory();
-  await writeMemory(status === 'sent' ? countSent(remember(memory, id)) : remember(memory, id));
+  await writeMemory(freshSent ? countSent(remember(memory, id)) : remember(memory, id));
 
-  if (status === 'sent') {
+  if (freshSent) {
     await takeVacancy(login, { company, url });
     const title = done?.title || String(body?.title ?? '').trim();
     const head = title.length > 0 ? `${company} — ${title}` : company;
     await notifyOwner(`Отклик. ${head}\n${url}`);
   }
-  else {
+  else if (status !== 'sent') {
     const tail = hints.length > 0 ? ` ${hints.join('; ')}` : '';
     await notifyOwner(`${company}. Застрял, зову человека.${tail} ${url}`);
   }

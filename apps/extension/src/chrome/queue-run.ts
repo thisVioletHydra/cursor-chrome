@@ -188,16 +188,18 @@ async function drain(): Promise<QueueRun> {
       const reply = await applyOne(item);
       run.left -= 1;
       const status = normStatus(reply.status);
-      count(run, status);
-      run.lines.push(`${item.company}: ${describe(status, reply)}`);
+      const landed = status !== 'sent' || await report(base, key, item, { status: 'sent' });
+      const shown: Status = landed ? status : 'skip';
+      count(run, shown);
+      run.lines.push(`${item.company}: ${landed ? describe(status, reply) : 'мимо, админка не приняла отклик'}`);
 
       const stop = stopReason(status, reply);
       if (stop.length > 0)
         await tellPage(stop);
-      else if (status === 'sent')
+      else if (shown === 'sent')
         await tickPage('отвлёкся', await distractWait());
       else
-        await tellPage(describe(status, reply));
+        await tellPage(landed ? describe(status, reply) : 'админка не приняла отклик');
 
       if (status === 'needsHuman')
         await report(base, key, item, { status, hints: hintsOf(reply) });
@@ -438,15 +440,18 @@ async function loginPage(tabId: number): Promise<boolean> {
   return (fresh?.url || '').startsWith(LOGIN_URL);
 }
 
-async function report(base: string, key: string, item: QueueItem, extra: Record<string, unknown>): Promise<void> {
+async function report(base: string, key: string, item: QueueItem, extra: Record<string, unknown>): Promise<boolean> {
   try {
-    await fetch(`${base}/api/applied`, {
+    const res = await fetch(`${base}/api/applied`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
       body: JSON.stringify({ vacancyId: item.id, company: item.company, title: item.title, url: item.url, ...extra }),
     });
+
+    return res.ok;
   }
   catch {
+    return false;
   }
 }
 
