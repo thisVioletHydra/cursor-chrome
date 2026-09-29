@@ -6,7 +6,7 @@ import type { Provider } from '@cursor-chrome/hh';
 import { asProvider, COVER_LETTER, distillCorpus, parseRules, providerName, splitQueries, splitWords, suggestQueries } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
-import { chainOf, collapseChain, isCreator, newExtToken, publishSecrets, readAccount, withChain, writeAccount } from './secrets';
+import { chainOf, collapseChain, imitationFromFields, isCreator, newExtToken, publishSecrets, readAccount, withChain, writeAccount } from './secrets';
 import { allowedLogins, readSession } from './session';
 
 const sections = ['telegram', 'model', 'hh'] as const;
@@ -271,6 +271,39 @@ export async function saveLetterAdmin({ request, cookies }: RequestEvent) {
     return { ok: false, detail: 'пустое письмо', wait: 0 };
 
   const next = { ...await readAccount(login), coverLetter: letter };
+  await writeAccount(login, next);
+
+  return { ok: true, detail: 'Сохранено', wait: 0 };
+}
+
+const IMITATION_FIELDS = [
+  'readMin',
+  'readMax',
+  'distractMin',
+  'distractMax',
+  'teaEvery',
+  'teaMin',
+  'teaMax',
+  'fastEvery',
+  'fastMin',
+  'fastMax',
+] as const;
+
+export async function saveImitationAdmin({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const form = await request.formData();
+  const fields: Record<string, string> = {};
+  for (const key of IMITATION_FIELDS)
+    fields[key] = String(form.get(key) ?? '');
+
+  const parsed = imitationFromFields(fields);
+  if (parsed.ok === false)
+    return { ok: false, detail: parsed.detail, wait: 0 };
+
+  const next = { ...await readAccount(login), imitation: parsed.pace };
   await writeAccount(login, next);
 
   return { ok: true, detail: 'Сохранено', wait: 0 };

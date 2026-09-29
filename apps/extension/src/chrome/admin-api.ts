@@ -1,4 +1,5 @@
 import { setCoverLetter } from '../hh/letter';
+import { rememberPace } from './pace';
 
 export type QueueItem = { id: string; company: string; title: string; url: string };
 
@@ -42,15 +43,17 @@ export async function postFound(base: string, key: string, cards: unknown[]): Pr
   }
 }
 
-async function getQueue(base: string, key: string): Promise<{ items?: unknown; letter?: unknown; queries?: unknown; want?: unknown } | null> {
+async function getQueue(base: string, key: string): Promise<{ items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown } | null> {
   try {
     const res = await fetch(`${base}/api/queue`, { headers: { authorization: `Bearer ${key}` } });
     if (res.ok === false)
       return null;
 
-    const body = await res.json() as { items?: unknown; letter?: unknown; queries?: unknown; want?: unknown };
+    const body = await res.json() as { items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown };
     if (typeof body.letter === 'string')
       await setCoverLetter(body.letter);
+
+    await rememberPace(body.imitation);
 
     return body;
   }

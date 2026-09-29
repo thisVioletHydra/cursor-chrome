@@ -15,7 +15,7 @@ export const GET: RequestHandler = async ({ request }) => {
   const queries = splitQueries(account.hhQuery || DEFAULT_QUERY);
   const open = workHours() && dayOpen(memory);
   if (open === false)
-    return json({ items: [], letter, queries, want: false });
+    return json({ items: [], letter, queries, want: false, imitation: account.imitation });
 
   const queued = await pendingCount();
   const want = account.hhLive === '1' && state.auto && queued < QUEUE_TARGET;
@@ -26,5 +26,6 @@ export const GET: RequestHandler = async ({ request }) => {
     letter,
     queries,
     want,
+    imitation: account.imitation,
   });
 };

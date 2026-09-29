@@ -38,9 +38,36 @@ export type Charge = {
   rub: number;
 };
 
+export type Imitation = {
+  readMin: number;
+  readMax: number;
+  distractMin: number;
+  distractMax: number;
+  teaEvery: number;
+  teaMin: number;
+  teaMax: number;
+  fastEvery: number;
+  fastMin: number;
+  fastMax: number;
+};
+
+export const IMITATION: Imitation = {
+  readMin: 10,
+  readMax: 40,
+  distractMin: 5,
+  distractMax: 55,
+  teaEvery: 12,
+  teaMin: 120,
+  teaMax: 180,
+  fastEvery: 12,
+  fastMin: 1,
+  fastMax: 4,
+};
+
 export type Account = Stored & {
   balance: number;
   history: Charge[];
+  imitation: Imitation;
 };
 
 export const CREATOR = 'thisVioletHydra';
@@ -64,6 +91,7 @@ const empty = (): Account => ({
   coverLetter: '',
   balance: 0,
   history: [],
+  imitation: { ...IMITATION },
 });
 
 export function isCreator(login: string): boolean {
@@ -118,6 +146,7 @@ export async function readAccount(login: string): Promise<Account> {
     hhLive: raw.hhLive === '1' ? '1' : '',
     balance: typeof raw.balance === 'number' ? raw.balance : 0,
     history: chargesOf(raw.history),
+    imitation: imitationOf(raw.imitation),
   };
   if (parsed.salvaged) {
     console.error(`account ${login}: восстановил из битого файла, перезаписал`);
@@ -223,6 +252,104 @@ export function publishSecrets(login: string, next: Secrets): void {
     else
       delete process.env[envKeys[key]];
   }
+}
+
+const SEC_MAX = 600;
+const EVERY_MAX = 100;
+
+const RANGES = [
+  ['readMin', 'readMax', 'чтение'],
+  ['distractMin', 'distractMax', 'после отклика'],
+  ['teaMin', 'teaMax', 'чай'],
+  ['fastMin', 'fastMax', 'быстрая'],
+] as const;
+
+const EVERIES = [
+  ['teaEvery', 'чай'],
+  ['fastEvery', 'быстрая'],
+] as const;
+
+export function imitationOf(value: unknown): Imitation {
+  const row = typeof value === 'object' && value !== null ? value as Partial<Imitation> : {};
+  const pace: Imitation = { ...IMITATION };
+  for (const [minKey, maxKey] of RANGES) {
+    const min = whole(row[minKey], 0, SEC_MAX);
+    const max = whole(row[maxKey], 0, SEC_MAX);
+    if (min === null || max === null || min > max)
+      continue;
+
+    pace[minKey] = min;
+    pace[maxKey] = max;
+  }
+  for (const [key] of EVERIES) {
+    const every = whole(row[key], 1, EVERY_MAX);
+    if (every !== null)
+      pace[key] = every;
+  }
+
+  return pace;
+}
+
+export function imitationFromFields(fields: Record<string, string>): { ok: true; pace: Imitation } | { ok: false; detail: string } {
+  const pace: Imitation = { ...IMITATION };
+  for (const [minKey, maxKey, label] of RANGES) {
+    const min = takeSec(fields[minKey] ?? '', label);
+    if (min.ok === false)
+      return min;
+
+    const max = takeSec(fields[maxKey] ?? '', label);
+    if (max.ok === false)
+      return max;
+
+    if (min.n > max.n)
+      return { ok: false, detail: `${label}: от больше до` };
+
+    pace[minKey] = min.n;
+    pace[maxKey] = max.n;
+  }
+  for (const [key, label] of EVERIES) {
+    const every = takeEvery(fields[key] ?? '', label);
+    if (every.ok === false)
+      return every;
+
+    pace[key] = every.n;
+  }
+
+  return { ok: true, pace };
+}
+
+function takeSec(raw: string, label: string): { ok: true; n: number } | { ok: false; detail: string } {
+  const text = raw.trim();
+  if (/^\d+$/.test(text) === false)
+    return { ok: false, detail: `${label}: нужны целые секунды` };
+
+  const n = Number(text);
+  if (n > SEC_MAX)
+    return { ok: false, detail: `${label}: больше 600 секунд` };
+
+  return { ok: true, n };
+}
+
+function takeEvery(raw: string, label: string): { ok: true; n: number } | { ok: false; detail: string } {
+  const text = raw.trim();
+  if (/^\d+$/.test(text) === false)
+    return { ok: false, detail: `${label}: «1 из» — целое число` };
+
+  const n = Number(text);
+  if (n < 1 || n > EVERY_MAX)
+    return { ok: false, detail: `${label}: «1 из» от 1 до 100` };
+
+  return { ok: true, n };
+}
+
+function whole(value: unknown, min: number, max: number): number | null {
+  if (typeof value !== 'number' || Number.isInteger(value) === false)
+    return null;
+
+  if (value < min || value > max)
+    return null;
+
+  return value;
 }
 
 function chargesOf(value: unknown): Charge[] {

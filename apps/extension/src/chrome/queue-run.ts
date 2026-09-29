@@ -2,6 +2,7 @@ import type { Hunt, QueueItem } from './admin-api';
 
 import { fetchHunt, fetchQueue, postFound } from './admin-api';
 import { getSyncKey, getSyncUrl } from './apply-log';
+import { loadPace, rare, waitMs } from './pace';
 import { runHhApply } from './hh-apply-cmd';
 import { collectVacancies } from './hh-search';
 import { requireTabId } from './inject';
@@ -30,10 +31,6 @@ const STOP_NOTE_KEY = 'huntStopNote';
 const KICK_GAP_MS = 10 * 60_000;
 const REPORT_TTL_MS = 12 * 60 * 60_000;
 
-const READ_MIN_MS = 10_000;
-const READ_MAX_MS = 40_000;
-const DISTRACT_MIN_MS = 5_000;
-const DISTRACT_MAX_MS = 55_000;
 const PAUSED_KEY = 'pausedUntil';
 const MORNING_HOUR = 9;
 const WORK_FROM_HOUR = 9;
@@ -185,7 +182,7 @@ async function drain(): Promise<QueueRun> {
       }
 
       if (distract)
-        await delay(between(DISTRACT_MIN_MS, DISTRACT_MAX_MS));
+        await delay(await distractWait());
 
       distract = false;
       seen.add(item.id);
@@ -312,7 +309,7 @@ async function applyOne(item: QueueItem): Promise<ApplyReply> {
   if (await loginPage(tabId))
     return { status: 'skip', reason: 'hh.ru просит войти (login)' };
 
-  await delay(between(READ_MIN_MS, READ_MAX_MS));
+  await delay(await readWait());
   if (await loginPage(tabId))
     return { status: 'skip', reason: 'hh.ru просит войти (login)' };
 
@@ -407,8 +404,20 @@ function hoursOpen(now = new Date()): boolean {
   return hour >= WORK_FROM_HOUR && hour < WORK_TO_HOUR;
 }
 
-function between(min: number, max: number): number {
-  return min + Math.floor(Math.random() * (max - min + 1));
+async function readWait(): Promise<number> {
+  const pace = await loadPace();
+  const tea = rare(pace.teaEvery) ? waitMs(pace.teaMin, pace.teaMax) : 0;
+  const read = rare(pace.fastEvery)
+    ? waitMs(pace.fastMin, pace.fastMax)
+    : waitMs(pace.readMin, pace.readMax);
+
+  return tea + read;
+}
+
+async function distractWait(): Promise<number> {
+  const pace = await loadPace();
+
+  return waitMs(pace.distractMin, pace.distractMax);
 }
 
 async function loginPage(tabId: number): Promise<boolean> {
