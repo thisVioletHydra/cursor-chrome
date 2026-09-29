@@ -334,8 +334,10 @@ export async function saveImitationAdmin({ request, cookies }: RequestEvent) {
   if (parsed.ok === false)
     return { ok: false, detail: parsed.detail, wait: 0 };
 
-  const next = { ...await readAccount(login), imitation: parsed.pace };
+  const hhHours = form.get('hhHours') === '1' ? '1' : '0';
+  const next = { ...await readAccount(login), imitation: parsed.pace, hhHours };
   await writeAccount(login, next);
+  publishSecrets(login, next);
 
   return { ok: true, detail: 'Сохранено', wait: 0 };
 }

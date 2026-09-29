@@ -7,15 +7,15 @@ import { readSession } from '$lib/server/session';
 export const load: PageServerLoad = async ({ parent, cookies }) => {
   const { preview } = await parent();
   if (preview)
-    return { pace: { ...IMITATION } };
+    return { pace: { ...IMITATION }, hours: true };
 
   const session = readSession(cookies.get('session'));
   if (session === null)
-    return { pace: { ...IMITATION } };
+    return { pace: { ...IMITATION }, hours: true };
 
   const account = await readAccount(session.login);
 
-  return { pace: account.imitation };
+  return { pace: account.imitation, hours: account.hhHours !== '0' };
 };
 
 export const actions: Actions = {

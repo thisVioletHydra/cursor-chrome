@@ -27,7 +27,8 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const [account, state, memory] = await Promise.all([readAccount(login), readState(), readMemory()]);
   const queued = await pendingCount();
-  const closed = closedReason(account.hhLive === '1', state.auto, workHours(), dayOpen(memory), queued < QUEUE_TARGET);
+  const hoursOk = account.hhHours === '0' || workHours();
+  const closed = closedReason(account.hhLive === '1', state.auto, hoursOk, dayOpen(memory), queued < QUEUE_TARGET);
   if (closed.length > 0)
     return json({ ok: true, added: 0, reason: closed });
 

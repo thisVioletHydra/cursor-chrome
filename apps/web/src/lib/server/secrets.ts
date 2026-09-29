@@ -17,6 +17,7 @@ export type Secrets = {
   hhRules: string;
   hhCorpus: string;
   hhLive: string;
+  hhHours: string;
   extToken: string;
 };
 
@@ -85,6 +86,7 @@ const empty = (): Account => ({
   hhRules: '',
   hhCorpus: '',
   hhLive: '',
+  hhHours: '1',
   extToken: '',
   telegramLabel: '',
   hhLabel: '',
@@ -144,6 +146,7 @@ export async function readAccount(login: string): Promise<Account> {
     hhRules: typeof raw.hhRules === 'string' ? raw.hhRules : '',
     hhCorpus: raw.hhCorpus === '1' ? '1' : '',
     hhLive: raw.hhLive === '1' ? '1' : '',
+    hhHours: raw.hhHours === '0' ? '0' : '1',
     balance: typeof raw.balance === 'number' ? raw.balance : 0,
     history: chargesOf(raw.history),
     imitation: imitationOf(raw.imitation),
@@ -336,6 +339,7 @@ const envKeys: Record<keyof Secrets, string> = {
   hhRules: 'HH_RULES',
   hhCorpus: 'HH_CORPUS',
   hhLive: 'HH_LIVE',
+  hhHours: 'HH_HOURS',
   extToken: 'EXT_TOKEN',
 };
 

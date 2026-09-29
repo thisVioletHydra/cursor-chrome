@@ -230,7 +230,13 @@ function asleep(state: { auto: boolean } | null, live: boolean): boolean {
   if (state === null || live === false)
     return true;
 
-  return state.auto === false || workHours() === false;
+  if (state.auto === false)
+    return true;
+
+  if (process.env.HH_HOURS === '0')
+    return false;
+
+  return workHours() === false;
 }
 
 function headline(who: WatchWho): string {

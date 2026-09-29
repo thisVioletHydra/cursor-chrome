@@ -1,6 +1,6 @@
 import type { Hunt, QueueItem } from './admin-api';
 
-import { fetchHunt, fetchQueue, postFound } from './admin-api';
+import { fetchHunt, fetchQueue, keepWorkHours, postFound } from './admin-api';
 import { getSyncKey, getSyncUrl } from './apply-log';
 import { loadPace, rare, waitMs } from './pace';
 import { armLiveLog, disarmLiveLog, doneServerBatch, hangHalted, noteServerBatch, tellPage, tickPage } from './page-log';
@@ -450,6 +450,9 @@ function nextMorning(now = new Date()): number {
 }
 
 function hoursOpen(now = new Date()): boolean {
+  if (keepWorkHours() === false)
+    return true;
+
   const text = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Moscow',
     hour: '2-digit',
