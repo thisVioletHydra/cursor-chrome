@@ -1,14 +1,15 @@
 <script lang="ts">
 import { enhance } from '$app/forms';
 import { onMount, tick } from 'svelte';
+import { logKey, logPlace, logSnap, readLog, takeRows } from './log-snap.svelte.ts';
 
 let { data } = $props();
 let stats = $state(data.stats);
 let polling = $state(data.polling);
-let shownPulse = $state('');
-let watchLog = $state<{ at: number; who: string; text: string; death: boolean }[]>([]);
-let watchList = $state<HTMLUListElement>();
-let followLog = true;
+let watchList: HTMLUListElement | undefined;
+let placing = false;
+let alive = false;
+let seenView = 0;
 let restarting = $state(false);
 let restartNote = $state('');
 let restartOk = $state(false);
@@ -34,17 +35,22 @@ $effect(() => {
 });
 
 onMount(() => {
+  alive = true;
+  const mine = ++seenView;
   const timer = setInterval(() => {
-    void refresh();
+    void refresh(mine);
   }, 4_000);
-  void refresh();
+  void refresh(mine);
 
-  return () => clearInterval(timer);
+  return () => {
+    alive = false;
+    clearInterval(timer);
+  };
 });
 
-async function refresh(): Promise<void> {
+async function refresh(mine: number): Promise<void> {
   const res = await fetch('/admin/live').catch(() => null);
-  if (res === null || res.ok === false)
+  if (mine !== seenView || res === null || res.ok === false)
     return;
 
   const body = await res.json() as {
@@ -54,14 +60,43 @@ async function refresh(): Promise<void> {
     autopilot?: { auto: boolean; lastNote: string };
     judged?: number;
     pulse?: { line?: string };
-    log?: { at: number; who: string; text: string; death: boolean }[];
+    log?: unknown;
   };
-  if (body.figures)
-    stats = { ...stats, ...body.figures, rows: body.rows ?? stats.rows, judged: body.judged ?? stats.judged, autopilot: body.autopilot ?? stats.autopilot };
+  if (mine !== seenView)
+    return;
 
-  polling = body.polling === true;
+  if (alive) {
+    if (body.figures)
+      stats = { ...stats, ...body.figures, rows: body.rows ?? stats.rows, judged: body.judged ?? stats.judged, autopilot: body.autopilot ?? stats.autopilot };
+
+    polling = body.polling === true;
+  }
+
   notePulse(typeof body.pulse?.line === 'string' ? body.pulse.line : '');
-  watchLog = Array.isArray(body.log) ? body.log : [];
+  const applied = takeRows(readLog(body.log));
+  if (alive === false || mine !== seenView || applied.changed === false)
+    return;
+
+  const list = watchList;
+  const mark = applied.dropped > 0 && list !== undefined && logPlace.follow === false
+    ? holdLine(list)
+    : null;
+
+  await tick();
+  if (mine !== seenView)
+    return;
+
+  const nextList = watchList;
+  if (nextList === undefined)
+    return;
+
+  if (logPlace.follow) {
+    nextList.scrollTop = nextList.scrollHeight;
+    return;
+  }
+
+  if (mark !== null)
+    stickLine(nextList, mark);
 }
 
 const STEP_MAX = 80;
@@ -71,7 +106,7 @@ const SKIP_ESSAY = /вакансия требует|стек не сов|ски�
 
 function notePulse(line: string): void {
   if (headerStep(line))
-    shownPulse = line.trim();
+    logSnap.pulse = line.trim();
 }
 
 function headerStep(line: string): boolean {
@@ -93,11 +128,12 @@ function skipEssay(text: string): boolean {
 }
 
 const liveStep = $derived.by(() => {
-  if (headerStep(shownPulse))
-    return shownPulse;
+  if (headerStep(logSnap.pulse))
+    return logSnap.pulse;
 
-  for (let index = watchLog.length - 1; index >= 0; index -= 1) {
-    const row = watchLog[index];
+  const rows = logSnap.rows;
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
     if (row !== undefined && row.death === false && headerStep(row.text))
       return row.text;
   }
@@ -110,19 +146,111 @@ function clock(at: number): string {
 }
 
 function onLogScroll(): void {
-  if (watchList === undefined)
+  if (watchList === undefined || placing)
     return;
 
-  followLog = watchList.scrollHeight - watchList.scrollTop - watchList.clientHeight < 40;
+  rememberLog(watchList);
+}
+
+function nearBottom(node: HTMLElement): boolean {
+  return node.scrollHeight - node.scrollTop - node.clientHeight < 40;
+}
+
+function rememberLog(node: HTMLUListElement): void {
+  logPlace.scrollTop = node.scrollTop;
+  logPlace.follow = nearBottom(node);
+  const mark = holdLine(node);
+  if (mark === null)
+    return;
+
+  logPlace.anchorKey = mark.key;
+  logPlace.anchorDelta = mark.delta;
+}
+
+function placeLog(node: HTMLUListElement): void {
+  if (logPlace.follow) {
+    node.scrollTop = node.scrollHeight;
+    return;
+  }
+
+  if (logPlace.anchorKey.length > 0) {
+    const item = node.querySelector<HTMLElement>(`:scope > li[data-k="${CSS.escape(logPlace.anchorKey)}"]`);
+    if (item !== null) {
+      const box = node.getBoundingClientRect();
+      const top = item.getBoundingClientRect().top;
+      node.scrollTop += top - box.top - logPlace.anchorDelta;
+      return;
+    }
+  }
+
+  node.scrollTop = logPlace.scrollTop;
+}
+
+function keepLog(node: HTMLUListElement): { destroy: () => void } {
+  watchList = node;
+  placing = true;
+  placeLog(node);
+  void tick().then(() => {
+    if (watchList !== node)
+      return;
+
+    placeLog(node);
+    placing = false;
+  });
+
+  return {
+    destroy() {
+      if (placing === false)
+        rememberLog(node);
+
+      if (watchList === node)
+        watchList = undefined;
+    },
+  };
+}
+
+function holdLine(list: HTMLUListElement): { key: string; delta: number } | null {
+  const box = list.getBoundingClientRect();
+  const items = list.querySelectorAll<HTMLElement>(':scope > li[data-k]');
+  for (const item of items) {
+    const top = item.getBoundingClientRect().top;
+    if (top + 1 < box.top)
+      continue;
+
+    const key = item.dataset.k;
+    if (key === undefined || key.length === 0)
+      return null;
+
+    return { key, delta: top - box.top };
+  }
+
+  return null;
+}
+
+function stickLine(list: HTMLUListElement, mark: { key: string; delta: number }): void {
+  if (logPlace.follow)
+    return;
+
+  const item = list.querySelector<HTMLElement>(`:scope > li[data-k="${CSS.escape(mark.key)}"]`);
+  if (item === null)
+    return;
+
+  const box = list.getBoundingClientRect();
+  const top = item.getBoundingClientRect().top;
+  list.scrollTop += top - box.top - mark.delta;
 }
 
 $effect(() => {
-  const rows = watchLog;
-  if (followLog === false || rows.length === 0)
+  const rows = logSnap.rows;
+  const headAt = rows[0]?.at ?? 0;
+  const tailAt = rows[rows.length - 1]?.at ?? 0;
+  if (logPlace.follow === false || rows.length === 0)
     return;
 
+  void (headAt + tailAt);
+
   void tick().then(() => {
-    if (watchList === undefined)
+    if (watchList === undefined || logPlace.follow === false)
       return;
 
     watchList.scrollTop = watchList.scrollHeight;
@@ -246,12 +374,12 @@ function hoursAnswer(payload: unknown): { ok: boolean; detail: string; hours: bo
       <span class="shrink-0 text-zinc-500">&gt;</span>
       <span class="min-w-0 truncate {liveStep.length > 0 ? 'text-[#9dccab]' : 'text-zinc-500'}">{liveStep.length > 0 ? liveStep : 'пульса ещё нет'}</span>
     </p>
-    {#if watchLog.length === 0}
+    {#if logSnap.rows.length === 0}
       <p class="px-3 py-2 text-zinc-500">Пока тихо. Сюда попадают смена шага и поломки, не каждая секунда.</p>
     {:else}
-      <ul bind:this={watchList} class="max-h-80 overflow-x-hidden overflow-y-auto px-3 py-2" onscroll={onLogScroll}>
-        {#each watchLog as row (row.at + row.who + row.text)}
-          <li class="flex items-baseline gap-x-2 py-0.5">
+      <ul use:keepLog class="max-h-80 overflow-x-hidden overflow-y-auto px-3 py-2 [overflow-anchor:none]" onscroll={onLogScroll}>
+        {#each logSnap.rows as row (logKey(row))}
+          <li data-k={logKey(row)} class="flex items-baseline gap-x-2 py-0.5">
             <time class="shrink-0 text-xs text-zinc-500 tabular-nums whitespace-nowrap">{clock(row.at)}</time>
             <span class="shrink-0 text-xs text-zinc-500 whitespace-nowrap">{whoName[row.who] ?? row.who}</span>
             <span class="min-w-0 flex-1 break-words whitespace-normal {row.death ? 'text-[#c49090]' : 'text-zinc-200'}">{row.text}</span>
