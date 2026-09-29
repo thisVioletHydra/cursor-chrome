@@ -3,7 +3,7 @@ import { appendApply, getSyncKey, getSyncUrl, listApplies, setSyncKey, setSyncUr
 import { getFlags, setFlags } from './flags';
 import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from './human-review';
 import { syncNegotiations } from './negotiations';
-import { readPausedUntil, runQueue } from './queue-run';
+import { readPausedUntil, readQueueReport, runQueue } from './queue-run';
 import { checkWorker, listJobTabs, openHhBackground, pinWorker } from './worker-tab';
 import { openPinnedWorker } from './worker-open';
 
@@ -124,6 +124,11 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
   },
   'get-paused': (_message, reply) => {
     replyJob(reply, readPausedUntil().then(pausedUntil => ({ pausedUntil })));
+
+    return true;
+  },
+  'get-queue-report': (_message, reply) => {
+    replyJob(reply, readQueueReport());
 
     return true;
   },

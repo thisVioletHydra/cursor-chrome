@@ -1,5 +1,15 @@
+import { isHhUrl, requireWorkerTab, waitTab } from './worker-tab';
+import { browser } from '../browser-host';
+
 const LOOK = 40;
 const SEARCH = 'https://hh.ru/search/vacancy';
+const HH_ROOT = 'https://hh.ru/';
+
+export type SearchHit = {
+  login: boolean;
+  cards: FoundCard[];
+  reason: string;
+};
 
 export type FoundCard = {
   id: string;
@@ -14,7 +24,15 @@ export type FoundCard = {
   experience: string;
 };
 
-export async function collectVacancies(queries: string[]): Promise<{ login: boolean; cards: FoundCard[] }> {
+export async function collectVacancies(queries: string[]): Promise<SearchHit> {
+  const tabId = await searchTab();
+  if (tabId === null)
+    return { login: false, cards: [], reason: 'нет запиненной вкладки hh' };
+
+  const here = await browser.tabs.get(tabId).catch(() => null);
+  if (here !== null && isLogin(here.url || '', ''))
+    return { login: true, cards: [], reason: '' };
+
   const cards: FoundCard[] = [];
   const seen = new Set<string>();
   for (const query of queries) {
@@ -25,12 +43,16 @@ export async function collectVacancies(queries: string[]): Promise<{ login: bool
       if (cards.length >= LOOK)
         break;
 
-      const pulled = await pull(searchUrl(query, page));
-      if (pulled === null)
+      const pulled = await pull(tabId, searchUrl(query, page));
+      if (pulled === null) {
+        if (cards.length === 0)
+          return { login: false, cards, reason: 'не прочиталась страница hh' };
+
         break;
+      }
 
       if (isLogin(pulled.url, pulled.html))
-        return { login: true, cards };
+        return { login: true, cards, reason: '' };
 
       const batch = cardsOf(pulled.html);
       if (batch.length === 0)
@@ -48,10 +70,13 @@ export async function collectVacancies(queries: string[]): Promise<{ login: bool
     }
   }
 
+  if (cards.length === 0)
+    return { login: false, cards, reason: 'пустая выдача' };
+
   for (const card of cards) {
-    const pulled = await pull(card.url);
+    const pulled = await pull(tabId, card.url);
     if (pulled !== null && isLogin(pulled.url, pulled.html))
-      return { login: true, cards };
+      return { login: true, cards, reason: '' };
 
     if (pulled !== null)
       fillText(card, pulled.html);
@@ -59,7 +84,7 @@ export async function collectVacancies(queries: string[]): Promise<{ login: bool
     await pause(400, 1200);
   }
 
-  return { login: false, cards };
+  return { login: false, cards, reason: '' };
 }
 
 function searchUrl(query: string, page: number): string {
@@ -72,21 +97,144 @@ function searchUrl(query: string, page: number): string {
   return url.toString();
 }
 
-async function pull(url: string): Promise<{ url: string; html: string } | null> {
+async function searchTab(): Promise<number | null> {
+  let tab: chrome.tabs.Tab;
   try {
-    const res = await fetch(url, {
-      credentials: 'include',
-      redirect: 'follow',
-      headers: { accept: 'text/html' },
-    });
-    if (res.ok === false)
-      return null;
-
-    return { url: res.url, html: await res.text() };
+    tab = await requireWorkerTab();
   }
   catch {
     return null;
   }
+
+  if (typeof tab.id !== 'number')
+    return null;
+
+  const url = tab.url || tab.pendingUrl || '';
+  if (isHhUrl(url) === false)
+    return null;
+
+  if (onHhRoot(url))
+    return tab.id;
+
+  await showUrl(tab.id, HH_ROOT);
+
+  return tab.id;
+}
+
+function onHhRoot(url: string): boolean {
+  try {
+    return new URL(url).hostname.toLowerCase() === 'hh.ru';
+  }
+  catch {
+    return false;
+  }
+}
+
+// Service worker fetch не видит сессию вкладки. Запрос делает сама страница hh.ru.
+async function pull(tabId: number, url: string): Promise<{ url: string; html: string } | null> {
+  const fetched = await fetchInPage(tabId, url);
+  if (usable(fetched))
+    return fetched;
+
+  await showUrl(tabId, url);
+
+  return readTab(tabId);
+}
+
+function usable(page: { url: string; html: string; ok: boolean } | null): page is { url: string; html: string; ok: boolean } {
+  if (page === null)
+    return false;
+
+  if (isLogin(page.url, page.html))
+    return true;
+
+  return page.ok && page.html.length > 0 && isGuard(page.html) === false;
+}
+
+async function fetchInPage(tabId: number, url: string): Promise<{ url: string; html: string; ok: boolean } | null> {
+  try {
+    const results = await browser.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: fetchPage,
+      args: [url],
+    });
+
+    return asFetched(results[0]?.result);
+  }
+  catch {
+    return null;
+  }
+}
+
+async function readTab(tabId: number): Promise<{ url: string; html: string } | null> {
+  try {
+    const results = await browser.scripting.executeScript({
+      target: { tabId },
+      func: readPage,
+    });
+
+    return asHtml(results[0]?.result);
+  }
+  catch {
+    return null;
+  }
+}
+
+async function showUrl(tabId: number, url: string): Promise<void> {
+  const tab = await browser.tabs.get(tabId).catch(() => null);
+  const loaded = waitTab(tabId, 15_000);
+  await browser.tabs.update(tabId, tab?.active === true ? { url } : { url, active: false });
+  await loaded;
+  await pause(500, 1200);
+}
+
+function fetchPage(url: string): Promise<{ url: string; html: string; ok: boolean }> {
+  return fetch(url, {
+    credentials: 'include',
+    redirect: 'follow',
+    headers: { accept: 'text/html' },
+  }).then(res => res.text().then(html => ({
+    url: res.url,
+    html: html.slice(0, 1_500_000),
+    ok: res.ok,
+  }))).catch(() => ({ url, html: '', ok: false }));
+}
+
+function readPage(): { url: string; html: string } {
+  const root = document.documentElement;
+
+  return {
+    url: location.href,
+    html: root ? root.outerHTML.slice(0, 1_500_000) : '',
+  };
+}
+
+function asFetched(raw: unknown): { url: string; html: string; ok: boolean } | null {
+  const page = asHtml(raw);
+  if (page === null || typeof raw !== 'object' || raw === null || 'ok' in raw === false)
+    return null;
+
+  if (typeof raw.ok !== 'boolean')
+    return null;
+
+  return { url: page.url, html: page.html, ok: raw.ok };
+}
+
+function asHtml(raw: unknown): { url: string; html: string } | null {
+  if (typeof raw !== 'object' || raw === null)
+    return null;
+
+  const html = 'html' in raw ? raw.html : undefined;
+  const url = 'url' in raw ? raw.url : undefined;
+  if (typeof html !== 'string' || typeof url !== 'string' || html.length === 0)
+    return null;
+
+  return { url, html };
+}
+
+function isGuard(html: string): boolean {
+  return html.includes('ddos-guard') || html.includes('__ddgfp') || html.includes('cf-browser-verification');
 }
 
 function isLogin(url: string, html: string): boolean {

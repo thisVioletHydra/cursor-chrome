@@ -1,4 +1,4 @@
-import type { QueueItem } from './admin-api';
+import type { Hunt, QueueItem } from './admin-api';
 
 import { fetchHunt, fetchQueue, postFound } from './admin-api';
 import { getSyncKey, getSyncUrl } from './apply-log';
@@ -22,6 +22,14 @@ export type QueueRun = {
   lines: string[];
 };
 
+const REPORT_KEY = 'queueReport';
+const SOON_KEY = 'queueSoon';
+const BUSY_KEY = 'queueBusy';
+const KICK_AT_KEY = 'queueKickAt';
+const STOP_NOTE_KEY = 'huntStopNote';
+const KICK_GAP_MS = 10 * 60_000;
+const REPORT_TTL_MS = 12 * 60 * 60_000;
+
 const PER_RUN_MIN = 2;
 const PER_RUN_MAX = 3;
 const PAUSE_MIN_MS = 40_000;
@@ -42,12 +50,69 @@ export async function runQueue(): Promise<QueueRun> {
     return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason: 'уже идёт', lines: [] };
 
   running = true;
+  await browser.storage.local.set({ [BUSY_KEY]: true, [SOON_KEY]: false });
+  await browser.runtime.sendMessage({ type: 'queue-busy' }).catch(() => {});
   try {
-    return await drain();
+    const run = await drain();
+    await rememberReport(run);
+
+    return run;
   }
   finally {
     running = false;
+    await browser.storage.local.set({ [BUSY_KEY]: false });
   }
+}
+
+export async function markSearchSoon(): Promise<void> {
+  await browser.storage.local.set({ [SOON_KEY]: true });
+  await browser.runtime.sendMessage({ type: 'queue-soon' }).catch(() => {});
+}
+
+export async function clearSearchSoon(): Promise<void> {
+  await browser.storage.local.set({ [SOON_KEY]: false, [BUSY_KEY]: false });
+}
+
+export async function clearSearchBusy(): Promise<void> {
+  await browser.storage.local.set({ [BUSY_KEY]: false });
+}
+
+export async function kickedRecently(): Promise<boolean> {
+  const stored = await browser.storage.local.get(KICK_AT_KEY);
+  const at = stored[KICK_AT_KEY];
+
+  return typeof at === 'number' && Date.now() - at < KICK_GAP_MS;
+}
+
+export async function markKicked(): Promise<void> {
+  await browser.storage.local.set({ [KICK_AT_KEY]: Date.now() });
+}
+
+export async function readQueueReport(): Promise<{ soon: boolean; busy: boolean; report: QueueRun | null }> {
+  const stored = await browser.storage.local.get([REPORT_KEY, SOON_KEY, BUSY_KEY]);
+  const raw = stored[REPORT_KEY];
+
+  return {
+    soon: stored[SOON_KEY] === true,
+    busy: stored[BUSY_KEY] === true,
+    report: runOf(raw),
+  };
+}
+
+async function rememberReport(run: QueueRun): Promise<void> {
+  await browser.storage.local.set({
+    [REPORT_KEY]: {
+      ok: run.ok,
+      sent: run.sent,
+      human: run.human,
+      skipped: run.skipped,
+      left: run.left,
+      reason: run.reason,
+      lines: run.lines,
+      at: Date.now(),
+    },
+  });
+  await browser.runtime.sendMessage({ type: 'queue-report', run }).catch(() => {});
 }
 
 export async function isPaused(): Promise<boolean> {
@@ -72,33 +137,30 @@ export async function readPausedUntil(): Promise<number | null> {
 async function drain(): Promise<QueueRun> {
   const base = await syncBase();
   const key = await getSyncKey();
-  if (base.length === 0 || key.length === 0)
-    return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason: 'нет адреса или ключа админки', lines: [] };
+  if (key.length === 0)
+    return blank('нет ключа');
+
+  if (base.length === 0)
+    return blank('нет адреса админки');
 
   const hunt = await fetchHunt(base, key);
   if (hunt === null)
-    return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason: 'админка не отдала очередь', lines: [] };
+    return blank('админка не отдала очередь');
 
-  if (hunt.want && hunt.queries.length > 0) {
-    const found = await collectVacancies(hunt.queries);
-    if (found.login) {
-      await pauseUntilMorning();
-
-      return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason: 'hh.ru просит войти (login)', lines: [] };
-    }
-
-    if (found.cards.length > 0)
-      await postFound(base, key, found.cards);
-  }
+  const filled = await fillHunt(base, key, hunt);
+  if ('stop' in filled)
+    return blank(filled.stop);
 
   const items = hunt.want ? await fetchQueue(base, key) : hunt.items;
   if (items === null)
-    return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason: 'админка не отдала очередь', lines: [] };
+    return blank('админка не отдала очередь');
 
   if (items.length === 0)
-    return { ok: true, sent: 0, human: 0, skipped: 0, left: 0, reason: 'очередь пустая', lines: [] };
+    return blank(filled.note.length > 0 ? filled.note : 'выдача есть, в очередь ничего не встало');
 
   const run: QueueRun = { ok: true, sent: 0, human: 0, skipped: 0, left: items.length, reason: '', lines: [] };
+  if (filled.note === 'сервер не принял вакансии')
+    run.lines.push(filled.note);
   const batch = items.slice(0, batchSize());
   for (const [index, item] of batch.entries()) {
     const reply = await applyOne(item);
@@ -125,6 +187,78 @@ async function drain(): Promise<QueueRun> {
   }
 
   return run;
+}
+
+function blank(reason: string): QueueRun {
+  return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason, lines: [] };
+}
+
+async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: string } | { note: string }> {
+  if (hunt.want === false)
+    return { note: 'сервер не просит поиск' };
+
+  if (hunt.queries.length === 0)
+    return { note: 'сервер не прислал запрос' };
+
+  const found = await collectVacancies(hunt.queries);
+  if (found.login) {
+    await pauseUntilMorning();
+    await tellStop(base, key, 'hh.ru просит войти (login)');
+
+    return { stop: 'hh.ru просит войти (login)' };
+  }
+
+  if (found.cards.length === 0)
+    return { note: found.reason.length > 0 ? found.reason : 'пустая выдача' };
+
+  await browser.storage.local.remove(STOP_NOTE_KEY);
+  const posted = await postFound(base, key, found.cards);
+  if (posted === false)
+    return { note: 'сервер не принял вакансии' };
+
+  return { note: '' };
+}
+
+async function tellStop(base: string, key: string, reason: string): Promise<void> {
+  const stored = await browser.storage.local.get(STOP_NOTE_KEY);
+  if (stored[STOP_NOTE_KEY] === reason)
+    return;
+
+  try {
+    const res = await fetch(`${base}/api/applied`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ vacancyId: '0', status: 'stop', reason }),
+    });
+    if (res.ok)
+      await browser.storage.local.set({ [STOP_NOTE_KEY]: reason });
+  }
+  catch {
+  }
+}
+
+function runOf(raw: unknown): QueueRun | null {
+  if (typeof raw !== 'object' || raw === null)
+    return null;
+
+  const at = 'at' in raw && typeof raw.at === 'number' ? raw.at : 0;
+  if (at === 0 || Date.now() - at > REPORT_TTL_MS)
+    return null;
+
+  const ok = 'ok' in raw ? raw.ok : undefined;
+  const reason = 'reason' in raw ? raw.reason : undefined;
+  if (typeof ok !== 'boolean' || typeof reason !== 'string')
+    return null;
+
+  const sent = 'sent' in raw && typeof raw.sent === 'number' ? raw.sent : 0;
+  const human = 'human' in raw && typeof raw.human === 'number' ? raw.human : 0;
+  const skipped = 'skipped' in raw && typeof raw.skipped === 'number' ? raw.skipped : 0;
+  const left = 'left' in raw && typeof raw.left === 'number' ? raw.left : 0;
+  const lines = 'lines' in raw && Array.isArray(raw.lines)
+    ? raw.lines.filter((item): item is string => typeof item === 'string')
+    : [];
+
+  return { ok, sent, human, skipped, left, reason, lines };
 }
 
 async function applyOne(item: QueueItem): Promise<ApplyReply> {

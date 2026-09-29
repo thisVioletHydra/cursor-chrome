@@ -27,15 +27,18 @@ export async function fetchQueue(base: string, key: string): Promise<QueueItem[]
   return body.items.filter(isItem);
 }
 
-export async function postFound(base: string, key: string, cards: unknown[]): Promise<void> {
+export async function postFound(base: string, key: string, cards: unknown[]): Promise<boolean> {
   try {
-    await fetch(`${base}/api/found`, {
+    const res = await fetch(`${base}/api/found`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
       body: JSON.stringify({ vacancies: cards }),
     });
+
+    return res.ok;
   }
   catch {
+    return false;
   }
 }
 

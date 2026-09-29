@@ -116,8 +116,33 @@ keepSessionEl?.addEventListener('change', () => {
 });
 
 autoQueueEl?.addEventListener('change', () => {
-  void browser.runtime.sendMessage({ type: 'set-flags', autoQueue: autoQueueEl.checked === true })
-    .then(() => paintAutoLine());
+  const on = autoQueueEl.checked === true;
+  void browser.runtime.sendMessage({ type: 'set-flags', autoQueue: on })
+    .then(async () => {
+      await paintAutoLine();
+      if (on === false)
+        return;
+
+      const state = await browser.runtime.sendMessage({ type: 'get-paused' }) as { pausedUntil?: number | null };
+      const until = typeof state?.pausedUntil === 'number' ? state.pausedUntil : 0;
+      if (until > Date.now())
+        return;
+
+      paintSearchWait('Поиск начнётся примерно через полминуты');
+    });
+});
+
+browser.runtime.onMessage.addListener((message) => {
+  if (typeof message !== 'object' || message === null)
+    return;
+
+  const type = 'type' in message ? message.type : '';
+  if (type === 'queue-soon')
+    paintSearchWait('Поиск начнётся примерно через полминуты');
+  else if (type === 'queue-busy')
+    paintSearchWait('Читаю вакансии в запиненной вкладке hh');
+  else if (type === 'queue-report' && 'run' in message)
+    paintQueue(message.run);
 });
 
 workerUrlForm?.addEventListener('submit', (event) => {
@@ -358,6 +383,68 @@ type QueueRun = {
   error?: string;
 };
 
+function paintSearchWait(text: string): void {
+  if (pillEl === null || reportEl === null)
+    return;
+
+  pillEl.hidden = false;
+  pillEl.className = 'status';
+  pillEl.textContent = 'Ищу';
+  reportEl.hidden = false;
+  reportEl.textContent = text;
+}
+
+function paintQueue(run: QueueRun | unknown): void {
+  if (pillEl === null || reportEl === null || typeof run !== 'object' || run === null)
+    return;
+
+  const row = run as QueueRun;
+  const reason = row.error || row.reason || '';
+  const lines = [...(row.lines ?? [])];
+  if (reason.length > 0 && lines.includes(reason) === false)
+    lines.push(reason);
+
+  const applied = (row.sent ?? 0) + (row.human ?? 0) + (row.skipped ?? 0);
+  pillEl.hidden = false;
+  if (applied === 0 && reason.length > 0) {
+    pillEl.className = 'status fail';
+    pillEl.textContent = reason;
+  }
+  else if (row.ok === true || applied > 0) {
+    pillEl.className = `status ${row.ok === true ? 'ok' : 'fail'}`;
+    pillEl.textContent = `Отправлено ${row.sent ?? 0} · ждут ${row.human ?? 0} · осталось ${row.left ?? 0}`;
+  }
+  else {
+    pillEl.className = 'status fail';
+    pillEl.textContent = reason.length > 0 ? reason : 'НЕ ВЫШЛО';
+  }
+
+  reportEl.hidden = lines.length === 0;
+  reportEl.textContent = lines.join('\n');
+}
+
+async function paintStoredReport(): Promise<void> {
+  const state = await browser.runtime.sendMessage({ type: 'get-queue-report' }) as {
+    soon?: boolean;
+    busy?: boolean;
+    report?: QueueRun | null;
+  };
+  if (state?.busy === true) {
+    paintSearchWait('Читаю вакансии в запиненной вкладке hh');
+
+    return;
+  }
+
+  if (state?.soon === true) {
+    paintSearchWait('Поиск начнётся примерно через полминуты');
+
+    return;
+  }
+
+  if (state?.report)
+    paintQueue(state.report);
+}
+
 async function runQueue(): Promise<void> {
   if (queueBtn === null || pillEl === null || reportEl === null)
     return;
@@ -368,17 +455,7 @@ async function runQueue(): Promise<void> {
   reportEl.hidden = true;
   try {
     const run = await browser.runtime.sendMessage({ type: 'run-queue' }) as QueueRun;
-    const ok = run?.ok === true;
-    pillEl.hidden = false;
-    pillEl.className = `status ${ok ? 'ok' : 'fail'}`;
-    pillEl.textContent = ok ? `Отправлено ${run.sent ?? 0} · ждут ${run.human ?? 0} · осталось ${run.left ?? 0}` : 'НЕ ВЫШЛО';
-    const lines = [...(run?.lines ?? [])];
-    const tail = run?.error || run?.reason || '';
-    if (tail.length > 0)
-      lines.push(tail);
-
-    reportEl.hidden = lines.length === 0;
-    reportEl.textContent = lines.join('\n');
+    paintQueue(run);
   }
   catch (error) {
     pillEl.hidden = false;
@@ -429,6 +506,7 @@ async function bootSettings(): Promise<void> {
   }
 
   await refreshWorkerPanel();
+  await paintStoredReport();
 }
 
 function localDay(ms: number): string {
