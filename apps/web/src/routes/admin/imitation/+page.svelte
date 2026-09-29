@@ -176,7 +176,7 @@ function onSave() {
   <h1 class="mt-1 text-3xl font-semibold tracking-tight">Имитация</h1>
 </header>
 
-<section class="max-w-xl rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+<section class="rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Маршрут</h2>
   <ol class="mt-4">
     {#each steps as step, index}
@@ -204,7 +204,7 @@ function onSave() {
   </ol>
 </section>
 
-<section class="mt-4 max-w-xl rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+<section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Паузы</h2>
   <form
     class="mt-4 grid gap-4"
