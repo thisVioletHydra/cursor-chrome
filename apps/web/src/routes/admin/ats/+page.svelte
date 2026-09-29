@@ -158,7 +158,7 @@ function takeResume() {
       {#if scan.outdated}
         <p class="mt-2 text-sm text-amber-200">Старый скан, без разбора. Просканируй ещё раз.</p>
       {:else}
-        <p class="mt-1 text-xs text-zinc-500">100 — читают дальше. 0 — откладывают.</p>
+        <p class="mt-1 text-xs text-zinc-500">Просмотр рекрутером или ATS в первые секунды, не оценка человека.</p>
         <ul class="mt-4 divide-y divide-white/6">
           {#each scan.flags as flag}
             <li class="flex min-w-0 gap-3 py-2.5">
