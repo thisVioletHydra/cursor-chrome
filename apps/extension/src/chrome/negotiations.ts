@@ -1,7 +1,8 @@
 import { getSyncKey } from './apply-log';
+import { tabShowsCaptcha } from './hh-captcha';
 import { requireTabId } from './inject';
-import { syncBase } from './queue-run';
-import { adoptHhWorker, requireWorkerTab, waitTab } from './worker-tab';
+import { captchaHolding, syncBase } from './queue-run';
+import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
 
 export type NegotiationState = 'invitation' | 'discard' | 'response';
@@ -23,6 +24,13 @@ const LOGIN_URL = 'https://hh.ru/account/login';
 const RENDER_WAIT_MS = 1_500;
 
 export async function syncNegotiations(): Promise<NegotiationsSync> {
+  if (await captchaHolding())
+    return { ok: true, count: 0, reason: '' };
+
+  const pinned = await getWorkerTabId();
+  if (pinned !== null && await tabShowsCaptcha(pinned))
+    return { ok: true, count: 0, reason: '' };
+
   const base = await syncBase();
   const key = await getSyncKey();
   if (base.length === 0 || key.length === 0)

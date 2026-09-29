@@ -25,7 +25,7 @@ export type { TickInput } from './scheduler.ts';
 export { EMPTY_RULES, parseRules, rulesFromEnv, splitWords } from './score.ts';
 export type { Rules } from './score.ts';
 export { readState, writeState } from './state.ts';
-export { startWatch, takePilotStart, watchDeath, watchNote, watchPulse, watchRestart, watchStop, watchView } from './watch.ts';
+export { startWatch, takePilotStart, watchCaptcha, watchDeath, watchNote, watchPulse, watchRestart, watchStop, watchView } from './watch.ts';
 export type { WatchRow, WatchWho } from './watch.ts';
 export type { State } from './state.ts';
 export { parseJsonLoose, writeJsonAtomic } from './store.ts';

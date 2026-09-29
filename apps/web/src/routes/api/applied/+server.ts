@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 
-import { countSent, markDone, markFailed, readMemory, readQueue, remember, writeMemory } from '@cursor-chrome/hh';
+import { countSent, markDone, markFailed, readMemory, readQueue, remember, watchCaptcha, writeMemory } from '@cursor-chrome/hh';
 import { notifyDigest, notifyOwner } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
@@ -14,6 +14,8 @@ type Body = {
   url?: string;
   hints?: unknown;
   reason?: string;
+  captcha?: boolean;
+  again?: boolean;
 };
 
 const notedSent = new Set<string>();
@@ -41,6 +43,12 @@ export const POST: RequestHandler = async ({ request }) => {
   const reason = String(body?.reason ?? '').trim().slice(0, 200);
 
   if (status === 'stop') {
+    if (body?.captcha === true) {
+      await watchCaptcha(body.again === true);
+
+      return json({ ok: true, queued: false });
+    }
+
     await notifyOwner(reason.length > 0 ? `Стоп до утра: ${reason}` : 'Стоп до утра');
 
     return json({ ok: true, queued: false });

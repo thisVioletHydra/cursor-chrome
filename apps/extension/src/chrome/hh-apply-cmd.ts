@@ -1,4 +1,5 @@
 import { handleNeedsHuman } from './human-review';
+import { tabShowsCaptcha } from './hh-captcha';
 import { ensureContent, requireTabId, workerTopMessage } from './inject';
 import { getWorkerTabId, requireWorkerTab, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
@@ -56,6 +57,9 @@ async function followNavigation(raw: unknown): Promise<unknown> {
 
   const tab = await requireWorkerTab();
   const tabId = requireTabId(tab);
+  if (await tabShowsCaptcha(tabId))
+    return { ok: false, status: 'skip', reason: 'капча' };
+
   const wait = waitTab(tabId, 15_000);
   await browser.tabs.update(tabId, { url: to, active: false });
   await wait;
@@ -65,6 +69,9 @@ async function followNavigation(raw: unknown): Promise<unknown> {
 
 async function finishApply(raw: unknown): Promise<unknown> {
   const result = asReply(raw);
+  if (captchaReply(result))
+    return result;
+
   if (result.status !== 'needsHuman')
     return result;
 
@@ -72,6 +79,13 @@ async function finishApply(raw: unknown): Promise<unknown> {
   await handleNeedsHuman(result, workerId ?? undefined);
 
   return result;
+}
+
+function captchaReply(raw: ApplyReply): boolean {
+  if (raw.reason === 'капча')
+    return true;
+
+  return Array.isArray(raw.hints) && raw.hints.some(item => item === 'капча');
 }
 
 function asReply(raw: unknown): ApplyReply {

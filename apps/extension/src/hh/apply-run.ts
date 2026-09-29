@@ -1,7 +1,7 @@
 import { click } from '../page/actions';
 import { applyMeta, applySucceeded } from './apply-watch';
 import { ctaApplied, findSubmit, formErrors, freshSuccess, pageSkip, planOpen } from './apply-click';
-import { applyBlocker, formReady, humanPayload } from './apply-detect';
+import { applyBlocker, captchaOnPage, formReady, humanPayload } from './apply-detect';
 import { asHumanBlock, fillApply } from './apply-fill';
 import { ask } from './bridge';
 import { sleep, until } from './dom';
@@ -45,6 +45,7 @@ async function applyOnce(resume: boolean): Promise<ApplyResult> {
     await until(() => formReady() || ctaApplied() || employerQuestionnaire() !== null, 8000);
 
   const steps: Array<() => Promise<ApplyResult | null>> = [
+    async () => humanOrNull(captchaOnPage()),
     async () => hhHostStep(),
     async () => pageSkip(),
     async () => murkyStep(),
@@ -202,6 +203,10 @@ function humanOrNull(block: ReturnType<typeof applyBlocker>): ApplyResult | null
 }
 
 function askedResult(): ApplyResult | null {
+  const captcha = captchaOnPage();
+  if (captcha)
+    return humanResult(captcha);
+
   const block = employerQuestionnaire();
   if (block === null)
     return null;

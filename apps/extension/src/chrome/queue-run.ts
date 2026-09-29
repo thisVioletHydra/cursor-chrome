@@ -2,13 +2,14 @@ import type { Hunt, QueueItem } from './admin-api';
 
 import { fetchHunt, fetchQueue, keepWorkHours, postFound } from './admin-api';
 import { getSyncKey, getSyncUrl } from './apply-log';
-import { getFlags } from './flags';
+import { getFlags, setFlags } from './flags';
+import { pinnedCaptcha, tabShowsCaptcha } from './hh-captcha';
 import { loadPace, rare, waitMs } from './pace';
 import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage } from './page-log';
 import { runHhApply } from './hh-apply-cmd';
 import { collectVacancies } from './hh-search';
 import { requireTabId } from './inject';
-import { adoptHhWorker, requireWorkerTab, waitTab } from './worker-tab';
+import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
 
 type ApplyReply = { status?: string; reason?: string; hints?: unknown };
@@ -34,12 +35,13 @@ const KICK_GAP_MS = 10 * 60_000;
 const REPORT_TTL_MS = 12 * 60 * 60_000;
 
 const PAUSED_KEY = 'pausedUntil';
+const CAPTCHA_HOLD = 'captchaHold';
+const CAPTCHA_NOTE = 'captchaNote';
 const MORNING_HOUR = 9;
 const WORK_FROM_HOUR = 9;
 const WORK_TO_HOUR = 22;
 const LOGIN_URL = 'https://hh.ru/account/login';
 
-const CAPTCHA = /captcha|капча/i;
 const LIMIT = /максимум вакансий|лимит откликов|слишком много откликов/i;
 const LOGIN = /login|войти/i;
 const TEST = /тест|тестов/i;
@@ -56,6 +58,10 @@ export async function runQueue(): Promise<QueueRun> {
 
   if (hangHalted())
     return blank('расширение зависло');
+
+  const restart = await captchaHolding();
+  if (await guardCaptcha(restart))
+    return blank('капча, позови человека');
 
   noteQueueRunning(true);
   await clearWait();
@@ -248,6 +254,14 @@ async function drain(): Promise<QueueRun> {
         break;
       }
 
+      if (captchaReply(reply)) {
+        run.left -= 1;
+        await holdCaptcha(false);
+        run.reason = 'капча, позови человека';
+        stopped = true;
+        break;
+      }
+
       run.left -= 1;
       const status = normStatus(reply.status);
       const landed = status !== 'sent' || await report(base, key, item, { status: 'sent' });
@@ -305,6 +319,12 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
   if (hangHalted())
     return { stop: 'расширение зависло' };
 
+  if (found.captcha) {
+    await holdCaptcha(false);
+
+    return { stop: 'капча, позови человека' };
+  }
+
   if (found.login) {
     await pauseUntilMorning();
     await tellStop(base, key, 'hh.ru просит войти (login)');
@@ -337,6 +357,9 @@ const RETRY_MS = 60_000;
 
 export async function paceBeforeHunt(): Promise<void> {
   if (hangHalted())
+    return;
+
+  if (await guardCaptcha())
     return;
 
   await tickPage('жду', 15_000 + Math.floor(Math.random() * 150_000), 'hunt');
@@ -405,6 +428,10 @@ async function applyOne(item: QueueItem): Promise<ApplyReply> {
   if (hangHalted())
     return { status: 'skip', reason: 'расширение зависло' };
 
+  const pinned = await getWorkerTabId();
+  if (pinned !== null && await tabShowsCaptcha(pinned))
+    return { status: 'skip', reason: 'капча' };
+
   const tab = await requireWorkerTab().catch(async () => {
     await adoptHhWorker(item.url);
 
@@ -414,19 +441,31 @@ async function applyOne(item: QueueItem): Promise<ApplyReply> {
     return { status: 'skip', reason: 'расширение зависло' };
 
   const tabId = requireTabId(tab);
+  if (await tabShowsCaptcha(tabId))
+    return { status: 'skip', reason: 'капча' };
+
   const loaded = waitTab(tabId, 15_000);
   await browser.tabs.update(tabId, { url: item.url, active: false });
   await loaded;
   const here = await browser.tabs.get(tabId).catch(() => null);
   const opened = here?.url || '';
+  if (/\/vacancy\/\d+|vacancy_response/i.test(opened) === false && await tabShowsCaptcha(tabId))
+    return { status: 'skip', reason: 'капча' };
+
   if (/\/vacancy\/\d+|vacancy_response/i.test(opened) === false)
     return { status: 'skip', reason: 'вакансия не открылась' };
 
   await tellPage(`открыл ${item.title.trim() || item.id}`);
+  if (await tabShowsCaptcha(tabId))
+    return { status: 'skip', reason: 'капча' };
+
   if (await loginPage(tabId))
     return { status: 'skip', reason: 'hh.ru просит войти (login)' };
 
   await pacedWait();
+  if (await tabShowsCaptcha(tabId))
+    return { status: 'skip', reason: 'капча' };
+
   if (await loginPage(tabId))
     return { status: 'skip', reason: 'hh.ru просит войти (login)' };
 
@@ -482,9 +521,6 @@ function stopReason(status: Status, reply: ApplyReply): string {
 }
 
 function stopLabel(status: Status, reason: string, text: string): string {
-  if (CAPTCHA.test(text))
-    return 'капча';
-
   if (LIMIT.test(text))
     return 'лимит откликов hh';
 
@@ -499,6 +535,92 @@ function stopLabel(status: Status, reason: string, text: string): string {
 
 async function pauseUntilMorning(): Promise<void> {
   await browser.storage.local.set({ [PAUSED_KEY]: nextMorning() });
+}
+
+export async function guardCaptcha(again = false): Promise<boolean> {
+  const seen = await pinnedCaptcha();
+  if (seen === true) {
+    await holdCaptcha(again && await captchaHolding());
+
+    return true;
+  }
+
+  if (seen === null && await captchaHolding()) {
+    await pauseUntilMorning();
+    await setFlags({ autoQueue: false });
+
+    return true;
+  }
+
+  if (seen === false && await captchaHolding())
+    await clearCaptchaHold();
+
+  return false;
+}
+
+export async function captchaHolding(): Promise<boolean> {
+  const stored = await browser.storage.local.get(CAPTCHA_HOLD);
+
+  return stored[CAPTCHA_HOLD] === true;
+}
+
+async function clearCaptchaHold(): Promise<void> {
+  const stored = await browser.storage.local.get(CAPTCHA_HOLD);
+  if (stored[CAPTCHA_HOLD] !== true)
+    return;
+
+  await browser.storage.local.remove([CAPTCHA_HOLD, CAPTCHA_NOTE, PAUSED_KEY]);
+}
+
+async function holdCaptcha(again: boolean): Promise<void> {
+  await pauseUntilMorning();
+  await setFlags({ autoQueue: false });
+  await browser.storage.local.set({ [CAPTCHA_HOLD]: true });
+  await postCaptcha(again);
+}
+
+async function postCaptcha(again: boolean): Promise<void> {
+  if (again === false) {
+    const stored = await browser.storage.local.get(CAPTCHA_NOTE);
+    if (stored[CAPTCHA_NOTE] === 'sent')
+      return;
+  }
+
+  const base = await syncBase();
+  const key = await getSyncKey();
+  if (base.length === 0 || key.length === 0)
+    return;
+
+  const ok = await sendCaptcha(base, key, again);
+  if (ok === false && again === false)
+    await sendCaptcha(base, key, again);
+}
+
+async function sendCaptcha(base: string, key: string, again: boolean): Promise<boolean> {
+  try {
+    const res = await fetch(`${base}/api/applied`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ vacancyId: '0', status: 'stop', captcha: true, again }),
+    });
+    if (res.ok === false)
+      return false;
+
+    if (again === false)
+      await browser.storage.local.set({ [CAPTCHA_NOTE]: 'sent' });
+
+    return true;
+  }
+  catch {
+    return false;
+  }
+}
+
+function captchaReply(reply: ApplyReply): boolean {
+  if ((reply.reason || '') === 'капча')
+    return true;
+
+  return hintsOf(reply).includes('капча');
 }
 
 function nextMorning(now = new Date()): number {

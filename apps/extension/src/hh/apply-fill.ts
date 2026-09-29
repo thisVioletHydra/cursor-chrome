@@ -1,7 +1,7 @@
 import type { ApplyBlock } from './apply-detect';
 
 import { typeInto } from '../page/actions';
-import { applyBlocker } from './apply-detect';
+import { applyBlocker, captchaOnPage } from './apply-detect';
 import { ask } from './bridge';
 import { compact, pause, until, visible } from './dom';
 import { coverLetter } from './letter';
@@ -49,6 +49,10 @@ const CUSTOM_REASON = 'свои вопросы HH';
 const FIELD_SEL = 'textarea, input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]):not([type="file"]):not([type="submit"])';
 
 export async function fillApply(): Promise<FillFail | null> {
+  const blocked = captchaFail();
+  if (blocked)
+    return blocked;
+
   const asked = employerQuestionnaire();
   if (asked)
     return { ok: false, status: 'needsHuman', reason: asked.reason, hints: asked.hints };
@@ -60,6 +64,10 @@ export async function fillApply(): Promise<FillFail | null> {
   }
 
   const letterOk = await insertLetter();
+  const mid = captchaFail();
+  if (mid)
+    return mid;
+
   if (letterOk === false)
     return { ok: false, status: 'skip', reason: 'нет поля сопроводительного' };
 
@@ -69,12 +77,21 @@ export async function fillApply(): Promise<FillFail | null> {
 async function fillQuestions(): Promise<FillFail | null> {
   const answered: string[] = [];
   for (const row of promptFields()) {
+    const blocked = captchaFail();
+    if (blocked)
+      return blocked;
+
     const kind = KIND_RE.find(([, re]) => re.test(row.prompt))?.[0];
     const known = kind !== undefined && isStandardQuestion(row.prompt);
     if (known) {
       const ok = await FILL[kind](row.root);
-      if (ok === false)
+      if (ok === false) {
+        const blocked = captchaFail();
+        if (blocked)
+          return blocked;
+
         return humanFail(`не заполнил: ${row.prompt}`, [row.prompt]);
+      }
 
       continue;
     }
@@ -120,8 +137,13 @@ async function fillByCloud(prompt: string, block: HTMLElement): Promise<FillFail
   const ok = question.kind === 'choice'
     ? clickChoice(block, exactRe(answer))
     : typeAnswer(block, answer);
-  if (ok === false)
+  if (ok === false) {
+    const blocked = captchaFail();
+    if (blocked)
+      return blocked;
+
     return humanFail(`не вставил ответ: ${prompt}`, [prompt]);
+  }
 
   return null;
 }
@@ -148,6 +170,9 @@ function describeField(prompt: string, block: HTMLElement): CloudQuestion | null
 }
 
 function typeAnswer(block: HTMLElement, answer: string): boolean {
+  if (captchaOnPage())
+    return false;
+
   const field = block.querySelector<HTMLElement>(FIELD_SEL);
   if (field === null)
     return false;
@@ -168,6 +193,14 @@ function humanFail(reason: string, hints: string[]): FillFail {
   return { ok: false, status: 'needsHuman', reason, hints };
 }
 
+function captchaFail(): FillFail | null {
+  const captcha = captchaOnPage();
+  if (captcha === null)
+    return null;
+
+  return { ok: false, status: 'needsHuman', reason: captcha.reason, hints: captcha.hints };
+}
+
 async function insertLetter(): Promise<boolean> {
   await openLetter();
   const field = letterField();
@@ -181,7 +214,7 @@ async function insertLetter(): Promise<boolean> {
 }
 
 async function openLetter(): Promise<void> {
-  if (letterField())
+  if (letterField() || captchaOnPage())
     return;
 
   letterToggle()?.click();
@@ -231,6 +264,9 @@ async function typeOrClick(block: HTMLElement, text: string, re: RegExp): Promis
 }
 
 function clickChoice(block: HTMLElement, re: RegExp): boolean {
+  if (captchaOnPage())
+    return false;
+
   const nodes = [...block.querySelectorAll<HTMLElement>('label, [role="radio"], [role="option"], button, li')];
   const hit = nodes.find((element) => {
     const text = compact(element.textContent || '');
@@ -260,6 +296,9 @@ function selectMatch(block: HTMLElement, re: RegExp): boolean {
 }
 
 async function typeFirst(block: HTMLElement, text: string, re: RegExp): Promise<boolean> {
+  if (captchaOnPage())
+    return false;
+
   const field = block.querySelector<HTMLElement>('textarea, input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]):not([type="file"]):not([type="submit"])');
   if (field === null)
     return false;

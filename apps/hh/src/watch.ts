@@ -32,6 +32,7 @@ let tickAt = 0;
 let rows: WatchRow[] = [];
 let pulse = { at: 0, line: '' };
 const deaths = new Set<string>();
+let captchaTold = false;
 let lastStage = '';
 let hangTold = false;
 let silenceNoted = false;
@@ -144,7 +145,12 @@ export function watchDeath(who: WatchWho, text: string): void {
   void mark(who, clip(text), true);
 }
 
+const CAPTCHA_LINE = 'капча, позови человека';
+const CAPTCHA_FIRST = 'hh показал капчу. Бот на паузе, пока не решишь её сам и не включишь бота снова.';
+const CAPTCHA_AGAIN = 'hh всё ещё показывает капчу. Бот на паузе, пока не решишь её сам и не включишь бота снова.';
+
 export async function watchRestart(): Promise<void> {
+  captchaTold = false;
   resumeGen += 1;
   dropHangDeaths();
   hangTold = false;
@@ -170,6 +176,17 @@ export async function watchStop(): Promise<void> {
   startedAt = 0;
   stepped = false;
   await writeState({ auto: false });
+}
+
+export async function watchCaptcha(again: boolean): Promise<void> {
+  await watchStop();
+  if (again === false && captchaTold)
+    return;
+
+  await mark('extension', CAPTCHA_LINE, false);
+  const text = again ? CAPTCHA_AGAIN : CAPTCHA_FIRST;
+  await notify(text);
+  captchaTold = true;
 }
 
 export function takePilotStart(): boolean {

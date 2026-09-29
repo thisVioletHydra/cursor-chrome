@@ -5,7 +5,7 @@ import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from './huma
 import { syncNegotiations } from './negotiations';
 import { clearStuckHang, forgetStuckHang, liveLines, stallStep, stalling, tellPage } from './page-log';
 import { pushPilot } from './pilot-switch';
-import { forgetHangReport, queueBusy, readPausedUntil, readQueueReport, runQueue } from './queue-run';
+import { forgetHangReport, guardCaptcha, queueBusy, readPausedUntil, readQueueReport, runQueue } from './queue-run';
 import { pullSavedResume } from './resume-pull';
 import { checkWorker, listJobTabs, openHhBackground, pinWorker } from './worker-tab';
 import { ensurePinnedHh, openPinnedWorker } from './worker-open';
@@ -225,6 +225,9 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
 };
 
 async function writeFlags(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean }): Promise<unknown> {
+  if (patch.autoQueue === true && await guardCaptcha(true))
+    return { error: 'капча, позови человека', autoQueue: false };
+
   if (patch.autoQueue === true || patch.autoQueue === false) {
     const pushed = await pushPilot(patch.autoQueue);
     if (pushed.ok === false)

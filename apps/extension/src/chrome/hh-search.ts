@@ -1,14 +1,17 @@
+import { tabShowsCaptcha } from './hh-captcha';
 import { tellPage, whileSearching } from './page-log';
-import { isHhUrl, requireWorkerTab, waitTab } from './worker-tab';
+import { getWorkerTabId, isHhUrl, requireWorkerTab, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
 
 const LOOK = 40;
+let sawCaptcha = false;
 const PAGE_MS = 45_000;
 const SEARCH = 'https://hh.ru/search/vacancy';
 const HH_ROOT = 'https://hh.ru/';
 
 export type SearchHit = {
   login: boolean;
+  captcha: boolean;
   cards: FoundCard[];
   reason: string;
 };
@@ -28,13 +31,21 @@ export type FoundCard = {
 };
 
 export async function collectVacancies(queries: string[], seenIds: readonly string[] = []): Promise<SearchHit> {
+  sawCaptcha = false;
+  const pinned = await getWorkerTabId();
+  if (pinned !== null && await tabShowsCaptcha(pinned))
+    return { login: false, captcha: true, cards: [], reason: '' };
+
   const tabId = await searchTab();
+  if (sawCaptcha)
+    return { login: false, captcha: true, cards: [], reason: '' };
+
   if (tabId === null)
-    return { login: false, cards: [], reason: 'нет запиненной вкладки hh' };
+    return { login: false, captcha: false, cards: [], reason: 'нет запиненной вкладки hh' };
 
   const here = await browser.tabs.get(tabId).catch(() => null);
   if (here !== null && isLogin(here.url || '', ''))
-    return { login: true, cards: [], reason: '' };
+    return { login: true, captcha: false, cards: [], reason: '' };
 
   const cards: FoundCard[] = [];
   const seen = new Set<string>();
@@ -52,6 +63,9 @@ export async function collectVacancies(queries: string[], seenIds: readonly stri
           return false;
 
         const pulled = await pull(tabId, searchUrl(query, page));
+        if (sawCaptcha)
+          return false;
+
         if (pulled === null) {
           if (cards.length === 0 && knownHits === 0) {
             unread = true;
@@ -94,29 +108,38 @@ export async function collectVacancies(queries: string[], seenIds: readonly stri
     return false;
   });
 
+  if (sawCaptcha)
+    return { login: false, captcha: true, cards: [], reason: '' };
+
   if (login)
-    return { login: true, cards, reason: '' };
+    return { login: true, captcha: false, cards, reason: '' };
 
   if (unread) {
     await tellPage('не прочиталась страница hh');
 
-    return { login: false, cards, reason: 'не прочиталась страница hh' };
+    return { login: false, captcha: false, cards, reason: 'не прочиталась страница hh' };
   }
 
   if (cards.length === 0 && knownHits > 0) {
     await tellPage(`уже видели, ${knownHits}`);
 
-    return { login: false, cards, reason: `уже видели, ${knownHits}` };
+    return { login: false, captcha: false, cards, reason: `уже видели, ${knownHits}` };
   }
 
   if (cards.length === 0)
-    return { login: false, cards, reason: sawCards ? 'нет вакансий по запросу' : 'пустая выдача' };
+    return { login: false, captcha: false, cards, reason: sawCards ? 'нет вакансий по запросу' : 'пустая выдача' };
 
   for (const card of cards) {
+    if (sawCaptcha || await tabShowsCaptcha(tabId))
+      return { login: false, captcha: true, cards: [], reason: '' };
+
     await tellPage(`открыл ${cardTitle(card)}`);
     const pulled = await pull(tabId, card.url);
+    if (sawCaptcha)
+      return { login: false, captcha: true, cards: [], reason: '' };
+
     if (pulled !== null && isLogin(pulled.url, pulled.html))
-      return { login: true, cards, reason: '' };
+      return { login: true, captcha: false, cards, reason: '' };
 
     if (pulled !== null)
       fillText(card, pulled.html);
@@ -124,7 +147,10 @@ export async function collectVacancies(queries: string[], seenIds: readonly stri
     await pause(400, 1200);
   }
 
-  return { login: false, cards, reason: '' };
+  if (sawCaptcha)
+    return { login: false, captcha: true, cards: [], reason: '' };
+
+  return { login: false, captcha: false, cards, reason: '' };
 }
 
 function cardTitle(card: FoundCard): string {
@@ -180,11 +206,31 @@ function onHhRoot(url: string): boolean {
 
 // Service worker fetch не видит сессию вкладки. Запрос делает сама страница hh.ru.
 async function pull(tabId: number, url: string): Promise<{ url: string; html: string } | null> {
+  if (await tabShowsCaptcha(tabId)) {
+    sawCaptcha = true;
+
+    return null;
+  }
+
   const fetched = await fetchInPage(tabId, url);
   if (usable(fetched))
     return fetched;
 
+  if (await tabShowsCaptcha(tabId)) {
+    sawCaptcha = true;
+
+    return null;
+  }
+
   await showUrl(tabId, url);
+  if (sawCaptcha)
+    return null;
+
+  if (await tabShowsCaptcha(tabId)) {
+    sawCaptcha = true;
+
+    return null;
+  }
 
   return readTab(tabId);
 }
@@ -234,6 +280,12 @@ async function readTab(tabId: number): Promise<{ url: string; html: string } | n
 }
 
 async function showUrl(tabId: number, url: string): Promise<void> {
+  if (await tabShowsCaptcha(tabId)) {
+    sawCaptcha = true;
+
+    return;
+  }
+
   const tab = await browser.tabs.get(tabId).catch(() => null);
   const loaded = waitTab(tabId, 15_000);
   await within(browser.tabs.update(tabId, tab?.active === true ? { url } : { url, active: false }), PAGE_MS);
