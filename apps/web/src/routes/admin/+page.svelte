@@ -211,10 +211,10 @@ const allGreen = $derived(checks.every(row => row.ok));
     {:else}
       <ul bind:this={watchList} class="max-h-80 overflow-x-hidden overflow-y-auto px-3 py-2" onscroll={onLogScroll}>
         {#each watchLog as row (row.at + row.who + row.text)}
-          <li class="grid grid-cols-[4.75rem_6.5rem_minmax(0,1fr)] items-baseline gap-x-3 py-0.5">
-            <time class="text-xs text-zinc-500 tabular-nums whitespace-nowrap">{clock(row.at)}</time>
-            <span class="truncate text-xs text-zinc-500">{whoName[row.who] ?? row.who}</span>
-            <span class="min-w-0 break-words whitespace-normal {row.death ? 'text-[#c49090]' : 'text-zinc-200'}">{row.text}</span>
+          <li class="flex items-baseline gap-x-2 py-0.5">
+            <time class="shrink-0 text-xs text-zinc-500 tabular-nums whitespace-nowrap">{clock(row.at)}</time>
+            <span class="shrink-0 text-xs text-zinc-500 whitespace-nowrap">{whoName[row.who] ?? row.who}</span>
+            <span class="min-w-0 flex-1 break-words whitespace-normal {row.death ? 'text-[#c49090]' : 'text-zinc-200'}">{row.text}</span>
           </li>
         {/each}
       </ul>
