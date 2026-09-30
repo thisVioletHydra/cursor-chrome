@@ -132,6 +132,9 @@ importers:
       '@cursor-chrome/telegram':
         specifier: workspace:*
         version: link:../telegram
+      ws:
+        specifier: 'catalog:'
+        version: 8.21.3
     devDependencies:
       '@sveltejs/adapter-node':
         specifier: ^5.4.0
@@ -145,6 +148,9 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0))
+      '@types/ws':
+        specifier: 'catalog:'
+        version: 8.18.1
       daisyui:
         specifier: ^5.7.44
         version: 5.7.44

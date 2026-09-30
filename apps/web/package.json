@@ -5,11 +5,12 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "start": "node build/index.js"
+    "start": "node ext-link.mjs"
   },
   "dependencies": {
     "@cursor-chrome/hh": "workspace:*",
-    "@cursor-chrome/telegram": "workspace:*"
+    "@cursor-chrome/telegram": "workspace:*",
+    "ws": "catalog:"
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.4.0",
@@ -19,6 +20,7 @@
     "daisyui": "^5.7.44",
     "svelte": "^5.39.0",
     "tailwindcss": "^4.3.3",
+    "@types/ws": "catalog:",
     "typescript": "catalog:",
     "vite": "^7.1.0"
   }

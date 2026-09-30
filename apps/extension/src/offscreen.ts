@@ -2,6 +2,7 @@ import type { CommandName, WsRequest, WsResponse } from '@cursor-chrome/protocol
 
 import { WS_URL } from '@cursor-chrome/protocol';
 import { browser } from './browser-host';
+import { holdExtLink } from './chrome/ext-link';
 
 const CONNECT_BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
 
@@ -12,6 +13,7 @@ let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 let wsEnabled = false;
 
 keepAlive();
+holdExtLink();
 
 function keepAlive(): void {
   try {
