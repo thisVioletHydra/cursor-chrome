@@ -1,8 +1,8 @@
 export const PAGE_LOAD_MS = 45_000;
 export const FLIP_MIN_MS = 2_000;
 export const FLIP_MAX_MS = 4_000;
-export const HIDE_MIN_MS = 0;
-export const HIDE_MAX_MS = 16_000;
+export const HIDE_MIN_MS = 1_000;
+export const HIDE_MAX_MS = 8_000;
 
 const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
 const SEARCH_TICK = /^ищу вакансию, \d+ с$/;
@@ -25,8 +25,10 @@ export function flipWaitMs(roll: number): number {
 
 export function hideWaitMs(roll: number): number {
   const unit = Number.isFinite(roll) ? Math.min(1, Math.max(0, roll)) : 0;
+  const span = (HIDE_MAX_MS - HIDE_MIN_MS) / 1_000;
+  const step = Math.min(span, Math.floor(unit * (span + 1)));
 
-  return HIDE_MIN_MS + Math.floor(unit * (HIDE_MAX_MS - HIDE_MIN_MS));
+  return HIDE_MIN_MS + step * 1_000;
 }
 
 export function nextPageNumber(page: number): number {

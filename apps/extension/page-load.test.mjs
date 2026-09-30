@@ -68,15 +68,20 @@ test('the search url page goes from 0 to the next hh page', () => {
   assert.equal(searchStep({ saved: 0, hasNext: nextListedPage(pager, 1) !== null }), 'end');
 });
 
-test('a finished hide sits from zero to sixteen seconds', () => {
-  assert.equal(hideWaitMs(0), 0);
-  assert.equal(hideWaitMs(1), 16_000);
-  assert.equal(HIDE_MIN_MS, 0);
-  assert.equal(HIDE_MAX_MS, 16_000);
-  assert.equal(hideWaitMs(0.5) >= 0, true);
-  assert.equal(hideWaitMs(0.5) <= 16_000, true);
-  assert.equal(hideWaitMs(Number.NaN), 0);
-  assert.equal(hideWaitMs(2), 16_000);
+test('a finished hide sits from one to eight seconds', () => {
+  assert.equal(hideWaitMs(0), 1_000);
+  assert.equal(hideWaitMs(1 / 8), 2_000);
+  assert.equal(hideWaitMs(2 / 8), 3_000);
+  assert.equal(hideWaitMs(3 / 8), 4_000);
+  assert.equal(hideWaitMs(4 / 8), 5_000);
+  assert.equal(hideWaitMs(5 / 8), 6_000);
+  assert.equal(hideWaitMs(6 / 8), 7_000);
+  assert.equal(hideWaitMs(7 / 8), 8_000);
+  assert.equal(hideWaitMs(1), 8_000);
+  assert.equal(HIDE_MIN_MS, 1_000);
+  assert.equal(HIDE_MAX_MS, 8_000);
+  assert.equal(hideWaitMs(Number.NaN), 1_000);
+  assert.equal(hideWaitMs(2), 8_000);
 });
 
 test('hh clamps a deep cursor onto the page it actually opened', () => {
