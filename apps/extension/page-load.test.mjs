@@ -68,12 +68,15 @@ test('the search url page goes from 0 to the next hh page', () => {
   assert.equal(searchStep({ saved: 0, hasNext: nextListedPage(pager, 1) !== null }), 'end');
 });
 
-test('a seen card is hidden after about a second', () => {
-  assert.equal(hideWaitMs(0), HIDE_MIN_MS);
-  assert.equal(hideWaitMs(1), HIDE_MAX_MS);
-  assert.equal(HIDE_MIN_MS, 1_000);
-  assert.equal(HIDE_MAX_MS, 2_000);
-  assert.equal(hideWaitMs(0.5) < 10_000, true);
+test('a finished hide sits from zero to sixteen seconds', () => {
+  assert.equal(hideWaitMs(0), 0);
+  assert.equal(hideWaitMs(1), 16_000);
+  assert.equal(HIDE_MIN_MS, 0);
+  assert.equal(HIDE_MAX_MS, 16_000);
+  assert.equal(hideWaitMs(0.5) >= 0, true);
+  assert.equal(hideWaitMs(0.5) <= 16_000, true);
+  assert.equal(hideWaitMs(Number.NaN), 0);
+  assert.equal(hideWaitMs(2), 16_000);
 });
 
 test('hh clamps a deep cursor onto the page it actually opened', () => {

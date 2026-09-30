@@ -1,8 +1,8 @@
 export const PAGE_LOAD_MS = 45_000;
 export const FLIP_MIN_MS = 2_000;
 export const FLIP_MAX_MS = 4_000;
-export const HIDE_MIN_MS = 1_000;
-export const HIDE_MAX_MS = 2_000;
+export const HIDE_MIN_MS = 0;
+export const HIDE_MAX_MS = 16_000;
 
 const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
 const SEARCH_TICK = /^ищу вакансию, \d+ с$/;

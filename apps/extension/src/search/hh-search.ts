@@ -3,7 +3,7 @@ import type { HideFace, HideStep } from './hide-popup';
 import { getFlags } from '../pilot/flags';
 import { freshPilot, pilotStep } from '../chrome/pilot';
 import { tabShowsCaptcha } from '../tab/hh-captcha';
-import { hangHalted, loadWithin, tellPage, whileSearching } from '../pilot/page-log';
+import { hangHalted, loadWithin, tellPage, tickPage, whileSearching } from '../pilot/page-log';
 import { hideDom } from './hide-dom';
 import { HIDE_POLL_MS, HIDE_POPUP_STUCK, hideBlocks, hideClickOk, hideFaceOf, hideLimit, hideStart, stepHide } from './hide-popup';
 import { PAGE_LOAD_MS, endedAfter, flipWaitMs, hideWaitMs, landedPage, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchStep } from './page-load';
@@ -398,15 +398,14 @@ async function hideKnown(tabId: number, url: string, ids: readonly string[]): Pr
   if (resumePath(url) || ids.length === 0)
     return true;
 
-  let gap = false;
-  for (const id of ids) {
+  for (let index = 0; index < ids.length; index += 1) {
     if (hangHalted())
       return true;
 
-    if (gap)
-      await hidePause();
+    const id = ids[index];
+    if (id === undefined)
+      continue;
 
-    gap = true;
     const hit = await settleHide(tabId, id);
     if (hit === 'halt')
       return true;
@@ -416,6 +415,9 @@ async function hideKnown(tabId: number, url: string, ids: readonly string[]): Pr
 
       return false;
     }
+
+    if (hit === 'done' && index + 1 < ids.length)
+      await hidePause();
   }
 
   return true;
@@ -521,7 +523,7 @@ async function hideCall(tabId: number, op: string, id: string): Promise<unknown>
 }
 
 function hidePause(): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, hideWaitMs(Math.random())));
+  return tickPage('жду', hideWaitMs(Math.random()));
 }
 
 function hideTick(): Promise<void> {
