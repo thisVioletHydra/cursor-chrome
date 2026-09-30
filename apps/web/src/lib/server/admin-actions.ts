@@ -149,54 +149,23 @@ export async function saveQueryAdmin({ request, cookies }: RequestEvent) {
   return { ok: true, detail: query, wait: 0 };
 }
 
-export function splitFilterRaw(raw: string): { queries: string[]; stops: string[] } {
-  const queries: string[] = [];
-  const stops: string[] = [];
-  for (const line of raw.split('\n')) {
-    const text = line.trim();
-    if (text.length === 0)
-      continue;
-
-    if (text.startsWith('-')) {
-      const word = text.slice(1).trim();
-      if (word.length > 0)
-        stops.push(word);
-      continue;
-    }
-
-    queries.push(text);
-  }
-
-  return {
-    queries: splitQueries(queries.join('\n')).slice(0, 60),
-    stops: splitWords(stops.join('\n')),
-  };
-}
-
-export function joinFilterRaw(query: string, stopWords: string): string {
-  const queries = splitQueries(query);
-  const stops = splitWords(stopWords).map(word => `-${word}`);
-
-  return [...queries, ...stops].join('\n');
-}
-
 export async function saveFilterAdmin({ request, cookies }: RequestEvent) {
   const login = guard(cookies);
   if (viewingGuest(cookies, login))
     return { ok: false, detail: 'это просмотр', wait: 0 };
 
   const form = await request.formData();
-  const raw = splitFilterRaw(String(form.get('filterRaw') ?? '').slice(0, 4000));
-  if (raw.queries.length === 0)
+  const queries = splitQueries(String(form.get('hhQuery') ?? '').slice(0, 4000)).filter(line => line.startsWith('-') === false);
+  if (queries.length === 0)
     return { ok: false, detail: 'пустой запрос', wait: 0 };
 
   const hhRules = JSON.stringify(parseRules({
-    stopWords: raw.stops,
+    stopWords: splitWords(String(form.get('stopWords') ?? '')),
     mustWords: [],
     salaryMin: 0,
     blacklist: splitWords(String(form.get('blacklist') ?? '')),
   }));
-  const next = { ...await readAccount(login), hhQuery: raw.queries.join('\n'), hhRules };
+  const next = { ...await readAccount(login), hhQuery: queries.join('\n'), hhRules };
   await writeAccount(login, next);
   publishSecrets(login, next);
 

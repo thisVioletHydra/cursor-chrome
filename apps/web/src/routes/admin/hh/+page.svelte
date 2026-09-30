@@ -4,32 +4,23 @@ import Out from '$lib/Out.svelte';
 
 let { data } = $props();
 let openUnlink = $state(false);
-let filterDraft = $state('');
+let queryDraft = $state('');
+let stopDraft = $state('');
 let queryMessage = $state('');
 let queryOk = $state(false);
 let suggesting = $state(false);
 const SUGGEST_WAIT_MS = 35_000;
 const askName = $derived(data.providers[0]?.name ?? 'модель');
 let blackDraft = $state('');
-const savedRaw = $derived(filterRawOf(data.hhQuery, data.stopWords));
 const rulesSame = $derived(
-  filterDraft === savedRaw
+  queryDraft === data.hhQuery
+  && stopDraft === data.stopWords
   && blackDraft === data.blacklist,
 );
 
-function filterRawOf(query: string, stops: string): string {
-  const queries = query.split('\n').map(line => line.trim()).filter(line => line.length > 0 && line.startsWith('-') === false);
-  const words = stops.split('\n').map(line => line.trim()).filter(line => line.length > 0).map(word => word.startsWith('-') ? word : `-${word}`);
-
-  return [...queries, ...words].join('\n');
-}
-
-function stopLines(raw: string): string[] {
-  return raw.split('\n').map(line => line.trim()).filter(line => line.startsWith('-') && line.slice(1).trim().length > 0);
-}
-
 $effect(() => {
-  filterDraft = savedRaw;
+  queryDraft = data.hhQuery;
+  stopDraft = data.stopWords;
   blackDraft = data.blacklist;
 });
 let phrase = $state('');
@@ -123,7 +114,7 @@ function openResume() {
 
 <section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Фильтрация</h2>
-  <p class="mt-2 text-sm text-zinc-400">Одна строка — один поиск. Строка с минусом — стоп-слово, в hh оно не уходит. «Подобрать» собирает запросы, минус-строки остаются.</p>
+  <p class="mt-2 text-sm text-zinc-400">Слева что искать, справа что выкинуть. Одна строка — одно слово. В поиск уходит только левая колонка.</p>
   {#if queryMessage}
     <p class="mt-3 font-mono text-xs {queryOk ? 'text-emerald-300' : 'text-rose-300'}">{queryMessage}</p>
   {/if}
@@ -171,7 +162,7 @@ function openResume() {
           const via = typeof body?.via === 'string' && body.via.length > 0 ? body.via : askName;
           queryMessage = queryOk ? `Подобрал через ${via}, проверь и сохрани` : detail;
           if (queryOk)
-            filterDraft = [...detail.split('\n'), ...stopLines(filterDraft)].join('\n');
+            queryDraft = detail;
           return;
         }
 
@@ -181,13 +172,28 @@ function openResume() {
       };
     }}
   >
-    <textarea
-      class="textarea textarea-bordered min-h-28 w-full border-white/10 bg-black/30 text-sm leading-6 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
-      name="filterRaw"
-      autocomplete="off"
-      placeholder={'Frontend\nReact\n-React Native'}
-      bind:value={filterDraft}
-    ></textarea>
+    <div class="grid gap-3 md:grid-cols-2">
+      <label class="grid gap-1.5">
+        <span class="text-sm text-zinc-300">Что искать</span>
+        <textarea
+          class="textarea textarea-bordered min-h-28 w-full border-white/10 bg-black/30 text-sm leading-6 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
+          name="hhQuery"
+          autocomplete="off"
+          placeholder={'Frontend\nReact\nVue.js'}
+          bind:value={queryDraft}
+        ></textarea>
+      </label>
+      <label class="grid gap-1.5">
+        <span class="text-sm text-zinc-300">Стоп-слова</span>
+        <textarea
+          class="textarea textarea-bordered min-h-28 w-full border-white/10 bg-black/30 text-sm leading-6 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
+          name="stopWords"
+          autocomplete="off"
+          placeholder={'php\nbitrix\nReact Native'}
+          bind:value={stopDraft}
+        ></textarea>
+      </label>
+    </div>
     <label class="grid gap-1.5">
       <span class="text-sm text-zinc-300">Чёрный список компаний</span>
       <textarea
@@ -199,7 +205,7 @@ function openResume() {
       ></textarea>
     </label>
     <div class="flex items-center gap-3">
-      <button class="btn btn-primary h-11 min-h-11 px-4" type="submit" disabled={rulesSame || filterDraft.trim().length === 0}>Сохранить</button>
+      <button class="btn btn-primary h-11 min-h-11 px-4" type="submit" disabled={rulesSame || queryDraft.trim().length === 0}>Сохранить</button>
       <button class="btn btn-ghost h-11 min-h-11 px-4" type="submit" formaction="?/suggest" disabled={suggesting}>
         {suggesting ? `Спрашиваю ${askName}…` : 'Подобрать'}
       </button>
