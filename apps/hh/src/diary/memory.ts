@@ -1,6 +1,6 @@
 import { deleteLinks, insertLinks, listLinks, lookupHeld } from './links-db.ts';
 import { SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from '../limits.ts';
-import { bumpDay, clearSearchPages, countSeen, insertSeen, lookupSeen, openStore, readDay, readSearchPages, storePath, writeDay, writeSearchPage } from './seen-db.ts';
+import { bumpDay, clearSearchPages, countHidden, countSeen, insertHidden, insertSeen, lookupSeen, openStore, readDay, readSearchPages, storePath, writeDay, writeSearchPage } from './seen-db.ts';
 
 export type { HeldLink } from './links-db.ts';
 
@@ -33,6 +33,10 @@ export function remember(ids: readonly string[]): Promise<void> {
   return turn(() => insertSeen(ids, Date.now()));
 }
 
+export function noteHidden(ids: readonly string[]): Promise<void> {
+  return turn(() => insertHidden(ids, Date.now()));
+}
+
 export function markSent(id: string): Promise<void> {
   return turn(() => noteSent(id));
 }
@@ -43,6 +47,10 @@ export function knownAmong(ids: readonly string[]): Promise<string[]> {
 
 export function seenCount(): Promise<number> {
   return turn(async () => countSeen());
+}
+
+export function hiddenCount(): Promise<number> {
+  return turn(async () => countHidden());
 }
 
 export function heldAmong(ids: readonly string[]): Promise<string[]> {

@@ -1,6 +1,6 @@
 import type { Hunt, QueueItem } from './admin-api';
 
-import { dropKnown, dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, markRead, postFound, rememberPage, seenAmong } from './admin-api';
+import { dropKnown, dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, markRead, postFound, postHidden, rememberPage, seenAmong } from './admin-api';
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 import { getFlags } from '../pilot/flags';
 import { pinnedCaptcha, tabShowsCaptcha } from '../tab/hh-captcha';
@@ -615,7 +615,9 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
       return null;
 
     return { seen: new Set(marks.seen), saved: marks.saved };
-  }, cursor => rememberPage(base, key, cursor));
+  }, cursor => rememberPage(base, key, cursor), async (id) => {
+    await postHidden(base, key, id);
+  });
   if (hangHalted())
     return { stop: 'расширение зависло' };
 

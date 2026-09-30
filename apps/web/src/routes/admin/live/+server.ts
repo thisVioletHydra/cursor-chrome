@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 
-import { moscowDay, readQueue, readState, seenCount, watchView } from '@cursor-chrome/hh';
+import { hiddenCount, moscowDay, readQueue, readState, seenCount, watchView } from '@cursor-chrome/hh';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { allowedLogins, readSession } from '$lib/server/session';
@@ -12,7 +12,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
   if (session === null || allowedLogins().includes(session.login) === false)
     return json({ error: 'нет' }, { status: 401 });
 
-  const [queue, state, judged] = await Promise.all([readQueue(), readState(), seenCount()]);
+  const [queue, state, judged, hidden] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount()]);
   const day = moscowDay();
   const watch = watchView();
 
@@ -25,6 +25,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
       invitations: queue.filter(row => row.outcome === 'invitation').length,
       discards: queue.filter(row => row.outcome === 'discard').length,
       waitingReply: queue.filter(row => row.outcome === 'response').length,
+      hidden,
     },
     rows: queue.slice(0, 20).map(row => ({
       id: row.id,

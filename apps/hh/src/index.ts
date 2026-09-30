@@ -1,5 +1,5 @@
 export { ping, pingReasons } from './cli/index.ts';
-export { dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, markSent, moscowDay, moscowHour, parseJsonLoose, readLinks, readMemory, readState, remember, rememberSearchPage, roomToday, searchPages, seenCount, storePath, workHours, writeJsonAtomic, writeState } from './diary/index.ts';
+export { dayOpen, forgetLinks, forgetSearchPages, heldAmong, hiddenCount, keepLinks, knownAmong, markSent, moscowDay, moscowHour, noteHidden, parseJsonLoose, readLinks, readMemory, readState, remember, rememberSearchPage, roomToday, searchPages, seenCount, storePath, workHours, writeJsonAtomic, writeState } from './diary/index.ts';
 export type { HeldLink, Memory, State } from './diary/index.ts';
 export { LOOK_PER_START, MAX_ATTEMPTS, QUEUE_TARGET, SCAN_EVERY_MS, SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from './limits.ts';
 export { DEFAULT_QUERY, serveQueries, splitQueries, suggestQueries } from './mix/index.ts';

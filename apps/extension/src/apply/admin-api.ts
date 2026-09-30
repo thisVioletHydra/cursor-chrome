@@ -136,6 +136,25 @@ export async function dropKnown(base: string, key: string, ids: readonly string[
   }
 }
 
+export async function postHidden(base: string, key: string, id: string): Promise<boolean> {
+  if (/^\d+$/.test(id) === false)
+    return false;
+
+  try {
+    const res = await fetch(`${base}/api/queue`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ hidden: [id] }),
+      signal: AbortSignal.timeout(12_000),
+    });
+
+    return res.ok;
+  }
+  catch {
+    return false;
+  }
+}
+
 export async function markRead(base: string, key: string, id: string): Promise<boolean | null> {
   try {
     const res = await fetch(`${base}/api/queue`, {

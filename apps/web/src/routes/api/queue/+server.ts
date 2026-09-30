@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 
-import { COVER_LETTER, busyAmong, dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, keepSearchTitle, knownAmong, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readState, remember, rememberSearchPage, searchPages, serveQueries, splitQueries, takePilotStart, workHours, writeState } from '@cursor-chrome/hh';
+import { COVER_LETTER, busyAmong, dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, keepSearchTitle, knownAmong, noteHidden, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readState, remember, rememberSearchPage, searchPages, serveQueries, splitQueries, takePilotStart, workHours, writeState } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { DEFAULT_QUERY, readAccount } from '$lib/server/secrets';
@@ -52,9 +52,15 @@ export const POST: RequestHandler = async ({ request }) => {
   if (login === null)
     return json({ error: 'нет' }, { status: 401 });
 
-  const body = await request.json().catch(() => null) as { ids?: unknown; links?: unknown; drop?: unknown; cursor?: unknown; resetPages?: unknown; gate?: unknown; opened?: unknown } | null;
+  const body = await request.json().catch(() => null) as { ids?: unknown; links?: unknown; drop?: unknown; cursor?: unknown; resetPages?: unknown; gate?: unknown; opened?: unknown; hidden?: unknown } | null;
   if (body === null)
     return json({ error: 'пустое тело' }, { status: 400 });
+
+  if (body.hidden !== undefined) {
+    await noteHidden(pageIds(body.hidden));
+
+    return json({ ok: true });
+  }
 
   if (body.gate !== undefined) {
     const known = await knownIds(pageIds(body.gate));

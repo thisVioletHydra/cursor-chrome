@@ -54,6 +54,7 @@ export async function collectVacancies(
   pages: Readonly<Record<string, number>>,
   knownOnPage: (ids: readonly string[], links: readonly PageLink[], cursor: SearchCursor) => Promise<PageMarks | null>,
   rememberPage: (cursor: SearchCursor) => Promise<boolean>,
+  noteHidden: (id: string) => Promise<void>,
 ): Promise<SearchHit> {
   sawCaptcha = false;
   endedQuery.clear();
@@ -162,7 +163,7 @@ export async function collectVacancies(
         await tellPage(`уже видели, ${knownIds.length}`);
 
       const fresh = new Set(marks.saved);
-      const hidden = await hideKnown(tabId, pulled.url, knownIds.filter(id => fresh.has(id) === false));
+      const hidden = await hideKnown(tabId, pulled.url, knownIds.filter(id => fresh.has(id) === false), noteHidden);
       if (hidden === false) {
         hideBlocked = true;
         done = false;
@@ -394,7 +395,12 @@ function scrollPager(): void {
   window.scrollTo(0, document.body.scrollHeight);
 }
 
-async function hideKnown(tabId: number, url: string, ids: readonly string[]): Promise<boolean> {
+async function hideKnown(
+  tabId: number,
+  url: string,
+  ids: readonly string[],
+  noteHidden: (id: string) => Promise<void>,
+): Promise<boolean> {
   if (resumePath(url) || ids.length === 0)
     return true;
 
@@ -415,6 +421,9 @@ async function hideKnown(tabId: number, url: string, ids: readonly string[]): Pr
 
       return false;
     }
+
+    if (hit === 'done')
+      await noteHidden(id);
 
     if (hit === 'done' && index + 1 < ids.length)
       await hidePause();

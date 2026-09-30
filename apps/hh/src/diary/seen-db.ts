@@ -43,6 +43,10 @@ export async function openStore(): Promise<void> {
         query TEXT PRIMARY KEY,
         page INTEGER NOT NULL
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS hidden (
+        id INTEGER PRIMARY KEY,
+        at INTEGER NOT NULL
+      ) STRICT;
     `);
     ensureLinkTitle(opened);
     database = opened;
@@ -84,15 +88,19 @@ export function lookupSeen(ids: readonly string[]): string[] {
 }
 
 export function countSeen(): number {
-  const row = openDatabase().prepare('SELECT COUNT(*) AS total FROM seen').get();
-  if (row === undefined)
-    return 0;
+  return countTable('seen');
+}
 
-  return numberOf(row.total);
+export function countHidden(): number {
+  return countTable('hidden');
 }
 
 export function insertSeen(ids: readonly string[], at: number): Promise<void> {
-  return insertNums(uniqueNums(ids), at);
+  return insertNums(uniqueNums(ids), at, 'seen');
+}
+
+export function insertHidden(ids: readonly string[], at: number): Promise<void> {
+  return insertNums(uniqueNums(ids), at, 'hidden');
 }
 
 export function readSearchPages(queries: readonly string[]): Record<string, number> {
@@ -229,12 +237,20 @@ function numberOf(value: sqlite.SQLOutputValue): number {
   return 0;
 }
 
-async function insertNums(nums: number[], at: number): Promise<void> {
+function countTable(table: 'seen' | 'hidden'): number {
+  const row = openDatabase().prepare(`SELECT COUNT(*) AS total FROM ${table}`).get();
+  if (row === undefined)
+    return 0;
+
+  return numberOf(row.total);
+}
+
+async function insertNums(nums: number[], at: number, table: 'seen' | 'hidden'): Promise<void> {
   if (nums.length === 0)
     return;
 
   const opened = openDatabase();
-  const insert = opened.prepare('INSERT OR IGNORE INTO seen (id, at) VALUES (?, ?)');
+  const insert = opened.prepare(`INSERT OR IGNORE INTO ${table} (id, at) VALUES (?, ?)`);
   for (let offset = 0; offset < nums.length; offset += INSERT_STEP) {
     const chunk = nums.slice(offset, offset + INSERT_STEP);
     opened.exec('BEGIN');

@@ -74,7 +74,7 @@ async function refresh(mine: number): Promise<void> {
 
   const body = await res.json() as {
     polling?: boolean;
-    figures?: { today: number; queued: number; waiting: number; invitations: number; discards: number; waitingReply: number };
+    figures?: { today: number; queued: number; waiting: number; invitations: number; discards: number; waitingReply: number; hidden: number };
     rows?: typeof stats.rows;
     autopilot?: { auto: boolean; lastNote: string; runAt: number };
     judged?: number;
@@ -374,7 +374,7 @@ const figures = $derived([
   { label: 'Ждут тебя', value: stats.waiting },
   { label: 'Приглашения', value: stats.invitations },
   { label: 'Отказы', value: stats.discards },
-  { label: 'Ждём', value: stats.waitingReply },
+  { label: 'Скрытые', value: stats.hidden },
 ]);
 
 const statusText: Record<string, string> = {
@@ -692,7 +692,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
     </div>
   </form>
   <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
-    {#each figures as figure}
+    {#each figures as figure (figure.label)}
       <div class="stat rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
         <div class="stat-title text-xs text-zinc-500">{figure.label}</div>
         <div class="stat-value text-3xl font-semibold text-white">{figure.value}</div>
