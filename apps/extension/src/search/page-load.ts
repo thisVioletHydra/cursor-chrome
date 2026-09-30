@@ -21,6 +21,10 @@ export function flipWaitMs(roll: number): number {
   return FLIP_MIN_MS + Math.floor(unit * (FLIP_MAX_MS - FLIP_MIN_MS));
 }
 
+const SERP_CARD = 'data-qa="vacancy-serp__vacancy"';
+const SERP_NEXT = 'data-qa="pager-next"';
+const SERP_EMPTY = 'data-qa="vacancy-search-empty"';
+
 export function searchStep(input: { saved: number; hasNext: boolean }): PageStep {
   if (input.saved > 0)
     return 'saved';
@@ -29,6 +33,47 @@ export function searchStep(input: { saved: number; hasNext: boolean }): PageStep
     return 'more';
 
   return 'end';
+}
+
+export function parsedSearch(html: string): boolean {
+  if (html.includes(SERP_CARD))
+    return true;
+
+  if (html.includes(SERP_NEXT))
+    return true;
+
+  return html.includes(SERP_EMPTY);
+}
+
+export function searchHasNext(html: string): boolean {
+  return html.includes(SERP_NEXT);
+}
+
+export function landedPage(url: string, asked: number): number {
+  try {
+    const value = new URL(url).searchParams.get('page');
+    if (value === null)
+      return asked;
+
+    const landed = Number(value);
+    if (Number.isInteger(landed) && landed >= 0)
+      return landed;
+  }
+  catch {
+    return asked;
+  }
+
+  return asked;
+}
+
+export function endedAfter(quiet: boolean, live: { fresh: boolean; hasNext: boolean }): { quiet: boolean; say: boolean } {
+  if (live.hasNext)
+    return { quiet: false, say: false };
+
+  if (live.fresh || quiet === false)
+    return { quiet: true, say: true };
+
+  return { quiet: true, say: false };
 }
 
 export function liveTick(text: string): boolean {

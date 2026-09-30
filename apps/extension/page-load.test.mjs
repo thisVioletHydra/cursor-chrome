@@ -1,4 +1,4 @@
-import { FLIP_MAX_MS, FLIP_MIN_MS, PAGE_LOAD_MS, flipWaitMs, foldLiveLine, pageLoadMiss, searchStep } from './src/search/page-load.ts';
+import { FLIP_MAX_MS, FLIP_MIN_MS, PAGE_LOAD_MS, endedAfter, flipWaitMs, foldLiveLine, landedPage, pageLoadMiss, parsedSearch, searchHasNext, searchStep } from './src/search/page-load.ts';
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -24,6 +24,48 @@ test('seen cards open the next page until hh has no next page', () => {
   assert.equal(searchStep({ saved: 0, hasNext: false }), 'end');
   assert.equal(searchStep({ saved: 2, hasNext: true }), 'saved');
   assert.equal(searchStep({ saved: 2, hasNext: false }), 'saved');
+});
+
+test('a stored flag or an empty body is not a finished hh page', () => {
+  assert.equal(parsedSearch(''), false);
+  assert.equal(parsedSearch('<doc/>'), false);
+  assert.equal(parsedSearch('<html><body>страницы кончились</body></html>'), false);
+  assert.equal(pageLoadMiss(PAGE_LOAD_MS + 1), true);
+  assert.equal(searchHasNext('<doc/>'), false);
+});
+
+test('a live serp is read from cards and the next control', () => {
+  const card = '<div data-qa="vacancy-serp__vacancy"></div>';
+  const next = '<a data-qa="pager-next"></a>';
+  const empty = '<div data-qa="vacancy-search-empty"></div>';
+  assert.equal(parsedSearch(card), true);
+  assert.equal(searchHasNext(card), false);
+  assert.equal(searchStep({ saved: 0, hasNext: searchHasNext(card) }), 'end');
+  assert.equal(parsedSearch(`${card}${next}`), true);
+  assert.equal(searchHasNext(`${card}${next}`), true);
+  assert.equal(searchStep({ saved: 0, hasNext: searchHasNext(next) }), 'more');
+  assert.equal(parsedSearch(empty), true);
+  assert.equal(searchHasNext(empty), false);
+});
+
+test('hh clamps a deep cursor onto the page it actually opened', () => {
+  assert.equal(landedPage('https://hh.ru/search/vacancy?text=vue&page=4', 20), 4);
+  assert.equal(landedPage('https://hh.ru/search/vacancy?text=vue', 0), 0);
+  assert.equal(landedPage('https://hh.ru/search/vacancy?page=0', 0), 0);
+});
+
+test('pages ended is one line until a later cycle finds cards or a next page', () => {
+  const first = endedAfter(false, { fresh: false, hasNext: false });
+  assert.equal(first.say, true);
+  assert.equal(first.quiet, true);
+  const again = endedAfter(first.quiet, { fresh: false, hasNext: false });
+  assert.equal(again.say, false);
+  const opened = endedAfter(again.quiet, { fresh: false, hasNext: true });
+  assert.equal(opened.say, false);
+  assert.equal(opened.quiet, false);
+  const saved = endedAfter(true, { fresh: true, hasNext: false });
+  assert.equal(saved.say, true);
+  assert.equal(saved.quiet, true);
 });
 
 test('a live wait replaces one line', () => {
