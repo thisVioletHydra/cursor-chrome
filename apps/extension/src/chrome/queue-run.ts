@@ -459,6 +459,12 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
 
   await tellPage(`открыл ${card.title}`);
   const posted = await sendFound(base, key, [card]);
+  if (posted.reason === 'день закрыт') {
+    await stopForToday();
+
+    return { started: false, stop: true, reason: 'лимит на сегодня' };
+  }
+
   if (holdLink(posted))
     return { started: false, stop: false, reason: '', held: true };
 
@@ -560,7 +566,18 @@ function blank(reason: string): QueueRun {
   return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason, lines: [] };
 }
 
+async function stopForToday(): Promise<void> {
+  await tellPage('лимит на сегодня');
+  await pauseUntilMorning();
+}
+
 async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: string } | { note: string; saved: number; more: boolean; done: boolean; retry: boolean }> {
+  if (hunt.day === false) {
+    await stopForToday();
+
+    return { stop: 'лимит на сегодня' };
+  }
+
   if (hunt.want === false) {
     await tellPage('сервер не просит поиск');
 

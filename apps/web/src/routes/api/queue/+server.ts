@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 
-import { COVER_LETTER, busyAmong, dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, keepSearchTitle, knownAmong, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readState, remember, rememberSearchPage, SEARCH_PAGE_MAX, searchPages, serveQueries, splitQueries, takePilotStart, workHours, writeState } from '@cursor-chrome/hh';
+import { COVER_LETTER, busyAmong, dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, keepSearchTitle, knownAmong, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readState, remember, rememberSearchPage, searchPages, serveQueries, splitQueries, takePilotStart, workHours, writeState } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { DEFAULT_QUERY, readAccount } from '$lib/server/secrets';
@@ -18,9 +18,10 @@ export const GET: RequestHandler = async ({ request, url }) => {
   const listen = url.searchParams.get('listen') === '1';
   const start = listen ? takePilotStart() : false;
   const hours = account.hhHours !== '0';
-  const open = (hours === false || workHours()) && dayOpen(memory);
+  const day = dayOpen(memory);
+  const open = (hours === false || workHours()) && day;
   if (open === false)
-    return json({ items: [], links: [], letter, queries: saved, want: false, imitation: account.imitation, stop, hours, auto, start });
+    return json({ items: [], links: [], letter, queries: saved, want: false, imitation: account.imitation, stop, hours, auto, start, day });
 
   const queued = await pendingCount();
   const want = account.hhLive === '1' && state.auto && queued < QUEUE_TARGET;
@@ -40,6 +41,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
     hours,
     auto,
     start,
+    day: true,
   });
 }
 
@@ -151,7 +153,7 @@ function storedPage(page: number): number | null {
   if (Number.isInteger(page) === false)
     return null;
 
-  if (page < 0 || page > SEARCH_PAGE_MAX)
+  if (page < 0)
     return null;
 
   return page;

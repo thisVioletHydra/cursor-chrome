@@ -9,7 +9,7 @@ export type SavedLink = { id: string; url: string };
 
 export type PageMarks = { seen: string[]; saved: string[] };
 
-export type Hunt = { items: QueueItem[]; queries: string[]; want: boolean; pages: Record<string, number> };
+export type Hunt = { items: QueueItem[]; queries: string[]; want: boolean; pages: Record<string, number>; day: boolean };
 
 export { keepWorkHours } from './hours-flag';
 
@@ -23,6 +23,7 @@ export async function fetchHunt(base: string, key: string, advance = false): Pro
     queries: stringsOf(body.queries),
     want: body.want === true,
     pages: pagesOf(body.pages),
+    day: body.day !== false,
   };
 }
 
@@ -171,7 +172,7 @@ export async function dropLinks(base: string, key: string, ids: readonly string[
   }
 }
 
-async function getQueue(base: string, key: string, advance = false): Promise<{ items?: unknown; links?: unknown; pages?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; hours?: unknown } | null> {
+async function getQueue(base: string, key: string, advance = false): Promise<{ items?: unknown; links?: unknown; pages?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; hours?: unknown; day?: unknown } | null> {
   const stamp = pilotStamp();
   try {
     const path = advance ? '/api/queue?cycle=1' : '/api/queue';
@@ -179,7 +180,7 @@ async function getQueue(base: string, key: string, advance = false): Promise<{ i
     if (res.ok === false)
       return null;
 
-    const body = await res.json() as { items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; stop?: unknown; hours?: unknown };
+    const body = await res.json() as { items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; stop?: unknown; hours?: unknown; day?: unknown };
     noteHours(body);
 
     if (body.stop === true && stamp === pilotStamp())
@@ -249,13 +250,11 @@ function linksOf(value: unknown): SavedLink[] {
   return links;
 }
 
-const SEARCH_PAGE_MAX = 1000;
-
 function pageNumber(raw: unknown): number | null {
   if (typeof raw !== 'number' || Number.isInteger(raw) === false)
     return null;
 
-  if (raw < 0 || raw > SEARCH_PAGE_MAX)
+  if (raw < 0)
     return null;
 
   return raw;
