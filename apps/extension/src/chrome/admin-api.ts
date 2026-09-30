@@ -5,7 +5,7 @@ import { rememberPace } from './pace';
 
 export type QueueItem = { id: string; company: string; title: string; url: string };
 
-export type Hunt = { items: QueueItem[]; queries: string[]; want: boolean; seen: string[] };
+export type Hunt = { items: QueueItem[]; queries: string[]; want: boolean };
 
 export { keepWorkHours } from './hours-flag';
 
@@ -18,7 +18,6 @@ export async function fetchHunt(base: string, key: string, advance = false): Pro
     items: Array.isArray(body.items) ? body.items.filter(isItem) : [],
     queries: stringsOf(body.queries),
     want: body.want === true,
-    seen: idsOf(body.seen),
   };
 }
 
@@ -60,7 +59,29 @@ export async function postFound(base: string, key: string, cards: unknown[]): Pr
   }
 }
 
-async function getQueue(base: string, key: string, advance = false): Promise<{ items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; hours?: unknown; seen?: unknown } | null> {
+export async function seenAmong(base: string, key: string, ids: readonly string[]): Promise<string[] | null> {
+  if (ids.length === 0)
+    return [];
+
+  try {
+    const res = await fetch(`${base}/api/queue`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ ids }),
+    });
+    if (res.ok === false)
+      return null;
+
+    const body = await res.json() as { seen?: unknown };
+
+    return idsOf(body.seen);
+  }
+  catch {
+    return null;
+  }
+}
+
+async function getQueue(base: string, key: string, advance = false): Promise<{ items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; hours?: unknown } | null> {
   const stamp = pilotStamp();
   try {
     const path = advance ? '/api/queue?cycle=1' : '/api/queue';
@@ -68,7 +89,7 @@ async function getQueue(base: string, key: string, advance = false): Promise<{ i
     if (res.ok === false)
       return null;
 
-    const body = await res.json() as { items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; stop?: unknown; hours?: unknown; seen?: unknown };
+    const body = await res.json() as { items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; stop?: unknown; hours?: unknown };
     noteHours(body);
 
     if (body.stop === true && stamp === pilotStamp())

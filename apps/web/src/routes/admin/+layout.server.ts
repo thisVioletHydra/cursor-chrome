@@ -1,6 +1,6 @@
 import type { LayoutServerLoad } from './$types';
 
-import { COVER_LETTER, moscowDay, PRESETS, providerName, readMemory, readQueue, readState } from '@cursor-chrome/hh';
+import { COVER_LETTER, moscowDay, PRESETS, providerName, readQueue, readState, seenCount } from '@cursor-chrome/hh';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { redirect } from '@sveltejs/kit';
 import { coolLeft } from '$lib/server/admin-actions';
@@ -24,7 +24,7 @@ async function statsOf(preview: boolean) {
     };
   }
 
-  const [memory, queue, state] = await Promise.all([readMemory(), readQueue(), readState()]);
+  const [queue, state, judged] = await Promise.all([readQueue(), readState(), seenCount()]);
   const day = moscowDay();
   const rows = queue.slice(0, 20).map(row => ({
     id: row.id,
@@ -39,7 +39,7 @@ async function statsOf(preview: boolean) {
     today: queue.filter(row => row.status === 'sent' && moscowDay(new Date(row.doneAt ?? row.at)) === day).length,
     waiting: queue.filter(row => row.status === 'needsHuman').length,
     queued: queue.filter(row => row.status === 'pending').length,
-    judged: memory.seen.length,
+    judged,
     rows,
     invitations: queue.filter(row => row.outcome === 'invitation').length,
     discards: queue.filter(row => row.outcome === 'discard').length,

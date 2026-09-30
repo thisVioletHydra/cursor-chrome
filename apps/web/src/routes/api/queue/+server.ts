@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 
-import { COVER_LETTER, dayOpen, diaryIds, pending, pendingCount, QUEUE_TARGET, readMemory, readQueue, readState, serveQueries, splitQueries, takePilotStart, workHours, writeState } from '@cursor-chrome/hh';
+import { COVER_LETTER, dayOpen, knownAmong, pending, pendingCount, QUEUE_TARGET, readMemory, readQueue, readState, serveQueries, splitQueries, takePilotStart, workHours, writeState } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { DEFAULT_QUERY, readAccount } from '$lib/server/secrets';
@@ -27,7 +27,6 @@ export const GET: RequestHandler = async ({ request, url }) => {
   const cycle = url.searchParams.get('cycle') === '1';
   const queries = want && listen === false ? await shownPass(saved, state, cycle) : saved;
   const items = await pending(10);
-  const seen = listen ? null : await huntDiary(memory.seen);
 
   return json({
     items: items.map(row => ({ id: row.id, company: row.company, title: row.title, url: row.url })),
@@ -39,9 +38,49 @@ export const GET: RequestHandler = async ({ request, url }) => {
     hours,
     auto,
     start,
-    ...(seen === null ? {} : { seen }),
   });
+}
+
+const PAGE_IDS = 100;
+
+export const POST: RequestHandler = async ({ request }) => {
+  const login = await extLogin(request);
+  if (login === null)
+    return json({ error: 'нет' }, { status: 401 });
+
+  const body = await request.json().catch(() => null) as { ids?: unknown } | null;
+
+  return json({ seen: await seenOnPage(pageIds(body?.ids)) });
 };
+
+async function seenOnPage(ids: string[]): Promise<string[]> {
+  const [known, queue] = await Promise.all([knownAmong(ids), readQueue()]);
+  const hit = new Set(known);
+  const asked = new Set(ids);
+  for (const row of queue) {
+    if (asked.has(row.id))
+      hit.add(row.id);
+  }
+
+  return ids.filter(id => hit.has(id));
+}
+
+function pageIds(value: unknown): string[] {
+  if (Array.isArray(value) === false)
+    return [];
+
+  const ids: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string' || /^\d+$/.test(item) === false)
+      continue;
+
+    ids.push(item);
+    if (ids.length >= PAGE_IDS)
+      break;
+  }
+
+  return ids;
+}
 
 async function shownPass(saved: string[], state: { frontAt: number; lessAt: number; queryPass: number }, advance: boolean): Promise<string[]> {
   const served = serveQueries(saved, {
@@ -55,8 +94,3 @@ async function shownPass(saved: string[], state: { frontAt: number; lessAt: numb
   return served.queries;
 }
 
-async function huntDiary(seen: string[]): Promise<string[]> {
-  const queue = await readQueue();
-
-  return diaryIds(seen, queue.map(row => row.id));
-}

@@ -1,6 +1,6 @@
 import type { Hunt, QueueItem } from './admin-api';
 
-import { fetchHunt, fetchQueue, keepWorkHours, postFound } from './admin-api';
+import { fetchHunt, fetchQueue, keepWorkHours, postFound, seenAmong } from './admin-api';
 import { getSyncKey, getSyncUrl } from './apply-log';
 import { getFlags, setFlags } from './flags';
 import { pinnedCaptcha, tabShowsCaptcha } from './hh-captcha';
@@ -379,7 +379,13 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
   if (hunt.queries.length === 0)
     return { note: 'сервер не прислал запрос', more: false, done: false };
 
-  const found = await collectVacancies(hunt.queries, hunt.seen);
+  const found = await collectVacancies(hunt.queries, async (ids) => {
+    const known = await seenAmong(base, key, ids);
+    if (known === null)
+      return null;
+
+    return new Set(known);
+  });
   if (hangHalted())
     return { stop: 'расширение зависло' };
 

@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 
-import { countSent, markDone, markFailed, readMemory, readQueue, remember, watchCaptcha, writeMemory } from '@cursor-chrome/hh';
+import { markDone, markFailed, markSent, readQueue, remember, watchCaptcha } from '@cursor-chrome/hh';
 import { notifyVacancy } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
@@ -65,8 +65,10 @@ export const POST: RequestHandler = async ({ request }) => {
   const company = done?.company || String(body?.company ?? '').trim() || 'без компании';
   const url = done?.url || String(body?.url ?? '').trim() || `https://hh.ru/vacancy/${id}`;
   const fresh = claimRow(id, status, prior?.status);
-  const memory = await readMemory();
-  await writeMemory(status === 'sent' && fresh ? countSent(remember(memory, id)) : remember(memory, id));
+  if (status === 'sent' && fresh)
+    await markSent(id);
+  else
+    await remember([id]);
 
   if (status === 'sent' && fresh)
     await takeVacancy(login, { company, url });

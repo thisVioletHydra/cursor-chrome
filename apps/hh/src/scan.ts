@@ -9,7 +9,7 @@ import { fillKnownForm } from './form.ts';
 import { judge, packReport } from './judge.ts';
 import { searchVacancies } from './hh-api.ts';
 import { LOOK_PER_START, MODEL_PER_START, QUEUE_TARGET } from './limits.ts';
-import { readMemory, remember, writeMemory } from './memory.ts';
+import { knownAmong, readMemory, remember } from './memory.ts';
 import { FRONT_TAKE, hasSlot, roleJunk, stepSlot, takeSlot, taste } from './mix.ts';
 import { modelFromEnv, modelsDown } from './model.ts';
 import { pendingCount } from './queue.ts';
@@ -33,15 +33,15 @@ export async function scan(opts: ScanOpts): Promise<ScanRun> {
   const rules = opts.rules ?? rulesFromEnv();
   const model = opts.model === undefined ? modelFromEnv() : opts.model;
   const dry = opts.dry || opts.live === false;
-  let memory: Memory | null = opts.live ? await readMemory() : null;
-  let room = opts.live ? await queueRoom(memory as Memory) : Number.POSITIVE_INFINITY;
+  const memory = opts.live ? await readMemory() : null;
+  let room = await queueRoomOrOpen(memory);
   let modelUsed = 0;
   const reports: Report[] = [];
 
   const found = await load(opts.query, LOOK_PER_START);
-  const seen = memory?.seen;
-  const already = seen === undefined ? 0 : found.filter(vacancy => seen.includes(vacancy.id)).length;
-  const fresh = found.filter(vacancy => memory?.seen.includes(vacancy.id) !== true).sort(byScore(rules));
+  const known = new Set(memory === null ? [] : await knownAmong(found.map(vacancy => vacancy.id)));
+  const already = found.filter(vacancy => known.has(vacancy.id)).length;
+  const fresh = found.filter(vacancy => known.has(vacancy.id) === false).sort(byScore(rules));
   const junk = fresh.filter(vacancy => roleJunk(vacancy.title));
   const open = fresh.filter(vacancy => roleJunk(vacancy.title) === false);
   const buckets: Buckets<Vacancy> = {
@@ -54,8 +54,8 @@ export async function scan(opts: ScanOpts): Promise<ScanRun> {
     if (opts.signal?.aborted)
       break;
 
-    if (memory)
-      memory = remember(memory, vacancy.id);
+    if (memory !== null)
+      await remember([vacancy.id]);
 
     reports.push(packReport(vacancy, 'skip', 'не та роль', dry));
   }
@@ -101,8 +101,8 @@ export async function scan(opts: ScanOpts): Promise<ScanRun> {
       ? await finish(vacancy, report, scoreOf(vacancy, rules))
       : report;
 
-    if (memory)
-      memory = remember(memory, vacancy.id);
+    if (memory !== null)
+      await remember([vacancy.id]);
 
     if (final.verdict === 'apply') {
       if (opts.live)
@@ -116,10 +116,14 @@ export async function scan(opts: ScanOpts): Promise<ScanRun> {
     reports.push(final);
   }
 
-  if (memory)
-    await writeMemory(memory);
-
   return { reports, already };
+}
+
+async function queueRoomOrOpen(memory: Memory | null): Promise<number> {
+  if (memory === null)
+    return Number.POSITIVE_INFINITY;
+
+  return queueRoom(memory);
 }
 
 async function queueRoom(memory: Memory): Promise<number> {

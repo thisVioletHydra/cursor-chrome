@@ -1,6 +1,7 @@
+import type { Outcome } from '@cursor-chrome/hh';
 import type { RequestHandler } from './$types';
 
-import { applyOutcomes, readMemory, remember, writeMemory, type Outcome } from '@cursor-chrome/hh';
+import { applyOutcomes, remember } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 
@@ -18,8 +19,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (items.length === 0)
     return json({ ok: true, count: 0 });
 
-  const memory = await readMemory();
-  await writeMemory(remember(memory, ...new Set(items.map(row => row.id))));
+  await remember([...new Set(items.map(row => row.id))]);
   await applyOutcomes(items.map(row => ({ id: row.id, outcome: row.outcome, at: row.at })));
 
   return json({ ok: true, count: items.length });

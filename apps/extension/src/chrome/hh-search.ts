@@ -32,7 +32,10 @@ export type FoundCard = {
   query: string;
 };
 
-export async function collectVacancies(queries: string[], seenIds: readonly string[] = []): Promise<SearchHit> {
+export async function collectVacancies(
+  queries: string[],
+  knownOnPage: (ids: readonly string[]) => Promise<ReadonlySet<string> | null>,
+): Promise<SearchHit> {
   sawCaptcha = false;
   const pinned = await getWorkerTabId();
   if (pinned !== null && await tabShowsCaptcha(pinned))
@@ -51,14 +54,19 @@ export async function collectVacancies(queries: string[], seenIds: readonly stri
 
   const cards: FoundCard[] = [];
   const seen = new Set<string>();
-  const known = new Set(seenIds.filter(id => /^\d+$/.test(id)));
   const share = Math.max(1, Math.ceil(LOOK / Math.max(queries.length, 1)));
   let knownHits = 0;
   let sawCards = false;
   let unread = false;
   let more = false;
+  let toldSeen = false;
+  let checkFailed = false;
   const login = await whileSearching(async () => {
+    let stop = false;
     for (const query of queries) {
+      if (stop)
+        break;
+
       let kept = 0;
       for (let page = 0; page < PAGE_CAP; page += 1) {
         const pulled = await pull(tabId, searchUrl(query, page));
@@ -83,6 +91,18 @@ export async function collectVacancies(queries: string[], seenIds: readonly stri
           break;
 
         sawCards = true;
+        const known = await knownOnPage(batch.map(card => card.id));
+        if (known === null) {
+          checkFailed = true;
+          stop = true;
+          break;
+        }
+
+        if (toldSeen === false && batch.every(card => known.has(card.id))) {
+          toldSeen = true;
+          await tellPage(`уже видели, ${batch.length}`);
+        }
+
         for (const card of batch) {
           if (fitsTitle(card.title, queries) === false)
             continue;
@@ -147,8 +167,18 @@ export async function collectVacancies(queries: string[], seenIds: readonly stri
     return miss(false, false, 'не прочиталась страница hh');
   }
 
-  if (cards.length === 0 && knownHits > 0)
+  if (checkFailed && cards.length === 0) {
+    await tellPage('сервер не сверил вакансии');
+
+    return miss(false, false, 'сервер не сверил вакансии');
+  }
+
+  if (cards.length === 0 && knownHits > 0) {
+    if (toldSeen === false)
+      await tellPage(`уже видели, ${knownHits}`);
+
     return miss(false, false, '');
+  }
 
   if (cards.length === 0)
     return miss(false, false, sawCards ? 'нет вакансий по запросу' : 'пустая выдача');
