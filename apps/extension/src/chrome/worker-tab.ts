@@ -1,6 +1,6 @@
 import { getFlags } from './flags';
 import { restoreFocus, snapshotFocus, spareFocus, withStayPut } from './focus-lock';
-import { freshPilot, step } from './pilot';
+import { freshPilot, pilotStep } from './pilot';
 import { browser } from '../browser-host';
 
 export const WORKER_KEY = 'workerTabId';
@@ -111,7 +111,7 @@ export function openingTab(): boolean {
 
 async function touchKeeps(action: 'pin' | 'wake' | 'tab' | 'discarded'): Promise<boolean> {
   const on = (await getFlags()).autoQueue;
-  const decided = step({ ...freshPilot(), on }, { type: 'touch', action });
+  const decided = pilotStep({ ...freshPilot(), on }, { type: 'touch', action });
 
   return decided.closeBotTab === false && decided.on === on;
 }

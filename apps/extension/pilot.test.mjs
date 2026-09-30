@@ -1,4 +1,4 @@
-import { freshPilot, pilotStep, SERVER_SILENT, SERVER_WAIT, TEA_PERIOD_MS } from './src/chrome/pilot.ts';
+import { freshPilot, pilotStep, SERVER_WAIT, TEA_PERIOD_MS } from './src/chrome/pilot.ts';
 
 import assert from 'node:assert/strict';
 import test from 'node:test';

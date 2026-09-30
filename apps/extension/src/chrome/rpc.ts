@@ -252,6 +252,26 @@ function touchAction(value: unknown): 'popup' | 'pin' | 'wake' | 'restore' | 'di
   return null;
 }
 
+async function flagsAfter(
+  patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean },
+  on: boolean,
+): Promise<{ hideJunk: boolean; keepSession: boolean; showPop: boolean; autoQueue: boolean }> {
+  const rest: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean } = {};
+  if ('hideJunk' in patch)
+    rest.hideJunk = patch.hideJunk;
+
+  if ('keepSession' in patch)
+    rest.keepSession = patch.keepSession;
+
+  if ('showPop' in patch)
+    rest.showPop = patch.showPop;
+
+  if ('hideJunk' in rest || 'keepSession' in rest || 'showPop' in rest)
+    await setFlags(rest);
+
+  return { ...await getFlags(), autoQueue: on };
+}
+
 async function writeFlags(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean }): Promise<unknown> {
   if (patch.autoQueue === true)
     return enablePilot(patch);

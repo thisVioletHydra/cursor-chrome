@@ -17,26 +17,15 @@ export async function reconcilePilot(): Promise<Flags> {
   const flags = await getFlags();
   const botTab = flags.autoQueue === true ? false : await botSearchPinned();
   const explicitStop = flags.autoQueue === true ? false : await keepOff();
-  if (explicitStop === false && botTab && flags.autoQueue === false)
+  const arm = explicitStop === false && botTab && flags.autoQueue === false;
+  if (arm)
     await setPilotPending('on');
 
-  const decided = await applyPilot({ type: 'pair', botTab, explicitStop });
-  if (await healRefused(decided.on, flags.autoQueue))
+  await applyPilot({ type: 'pair', botTab, explicitStop });
+  if (arm && (await getFlags()).autoQueue !== true)
     await clearPilotPending();
 
   return getFlags();
-}
-
-async function healRefused(turnedOn: boolean, wasOn: boolean): Promise<boolean> {
-  if (turnedOn === false || wasOn)
-    return false;
-
-  if ((await readPilotPending()) !== 'on')
-    return false;
-
-  const stored = await getFlags();
-
-  return stored.autoQueue !== true;
 }
 
 async function botSearchPinned(): Promise<boolean> {
