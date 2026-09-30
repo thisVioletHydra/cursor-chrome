@@ -13,7 +13,6 @@ let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 let wsEnabled = false;
 
 keepAlive();
-holdExtLink();
 
 function keepAlive(): void {
   try {
@@ -139,8 +138,9 @@ async function dispatch(request: WsRequest): Promise<WsResponse> {
   }
 }
 
-const onOffscreenMessage: Record<string, (message: { enabled?: unknown }, reply: (value?: unknown) => void) => boolean> = {
-  'ping-offscreen': (_message, reply) => {
+const onOffscreenMessage: Record<string, (message: { enabled?: unknown; origin?: unknown; key?: unknown }, reply: (value?: unknown) => void) => boolean> = {
+  'ping-offscreen': (message, reply) => {
+    holdExtLink(textOf(message.origin), textOf(message.key));
     reply({
       ok: true,
       connected: socket?.readyState === WebSocket.OPEN,
@@ -171,6 +171,10 @@ const onOffscreenMessage: Record<string, (message: { enabled?: unknown }, reply:
     return true;
   },
 };
+
+function textOf(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
 
 browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const type = message?.type;

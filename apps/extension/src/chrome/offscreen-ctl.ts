@@ -1,29 +1,34 @@
-import { todayCount } from './apply-log';
+import { getSyncKey, getSyncUrl, todayCount } from './apply-log';
 import { browser } from '../browser-host';
+
+// У offscreen нет storage. Адрес и ключ читает воркер и кладёт их в ping.
+type LinkCreds = { origin: string; key: string };
 
 export async function ensureOffscreen(): Promise<string | undefined> {
   const hasDocument = await browser.offscreen.hasDocument?.() ?? false;
-  if (hasDocument)
-    return;
+  if (hasDocument === false) {
+    try {
+      await browser.offscreen.createDocument({
+        url: 'offscreen.html',
+        reasons: ['BLOBS'],
+        justification: 'Keepalive port and optional WebSocket to the local Cursor MCP server',
+      });
+    }
+    catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      if (text.includes('Only a single offscreen') === false)
+        return text;
+    }
+  }
 
-  try {
-    await browser.offscreen.createDocument({
-      url: 'offscreen.html',
-      reasons: ['BLOBS'],
-      justification: 'Keepalive port and optional WebSocket to the local Cursor MCP server',
-    });
-  }
-  catch (error) {
-    const text = error instanceof Error ? error.message : String(error);
-    if (text.includes('Only a single offscreen') === false)
-      return text;
-  }
+  await pingOffscreen();
 }
 
 export async function waitOffscreen(): Promise<void> {
+  const creds = await readLinkCreds();
   const until = Date.now() + 1_000;
   while (Date.now() < until) {
-    const ping = await browser.runtime.sendMessage({ type: 'ping-offscreen' }).catch(() => null);
+    const ping = await pingOffscreen(creds);
     if (ping)
       return;
 
@@ -31,6 +36,31 @@ export async function waitOffscreen(): Promise<void> {
   }
 
   throw new Error('Offscreen document did not start');
+}
+
+async function pingOffscreen(creds?: LinkCreds): Promise<unknown> {
+  const link = creds ?? await readLinkCreds();
+
+  return browser.runtime.sendMessage({
+    type: 'ping-offscreen',
+    origin: link.origin,
+    key: link.key,
+  }).catch(() => null);
+}
+
+async function readLinkCreds(): Promise<LinkCreds> {
+  if (browser.storage?.local === undefined)
+    return { origin: '', key: '' };
+
+  try {
+    const origin = (await getSyncUrl()).trim();
+    const key = (await getSyncKey()).trim();
+
+    return { origin, key };
+  }
+  catch {
+    return { origin: '', key: '' };
+  }
 }
 
 export async function setBadge(on: boolean): Promise<void> {

@@ -308,7 +308,11 @@ function connectLinkParts(raw: string): { origin: string; key: string } | null {
 }
 
 async function readStoredSync(): Promise<StoredSync> {
-  const stored = await browser.storage.local.get([SYNC_KEY, SYNC_TOKEN_KEY]);
+  const local = browser.storage?.local;
+  if (local === undefined)
+    return { url: '', key: '' };
+
+  const stored = await local.get([SYNC_KEY, SYNC_TOKEN_KEY]);
   const url = stored[SYNC_KEY];
   const key = stored[SYNC_TOKEN_KEY];
 
