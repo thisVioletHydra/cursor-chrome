@@ -192,8 +192,8 @@ export async function saveFilterAdmin({ request, cookies }: RequestEvent) {
 
   const hhRules = JSON.stringify(parseRules({
     stopWords: raw.stops,
-    mustWords: splitWords(String(form.get('mustWords') ?? '')),
-    salaryMin: salaryMinOf(String(form.get('salaryMin') ?? '')),
+    mustWords: [],
+    salaryMin: 0,
     blacklist: splitWords(String(form.get('blacklist') ?? '')),
   }));
   const next = { ...await readAccount(login), hhQuery: raw.queries.join('\n'), hhRules };

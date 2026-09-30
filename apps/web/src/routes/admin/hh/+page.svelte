@@ -10,8 +10,6 @@ let queryOk = $state(false);
 let suggesting = $state(false);
 const SUGGEST_WAIT_MS = 35_000;
 const askName = $derived(data.providers[0]?.name ?? 'модель');
-let mustDraft = $state('');
-let salaryDraft = $state('');
 let blackDraft = $state('');
 let corpusMessage = $state('');
 let corpusOk = $state(false);
@@ -19,8 +17,6 @@ let corpusBrief = $state('');
 const savedRaw = $derived(filterRawOf(data.hhQuery, data.stopWords));
 const rulesSame = $derived(
   filterDraft === savedRaw
-  && mustDraft === data.mustWords
-  && salaryDraft === data.salaryMin
   && blackDraft === data.blacklist,
 );
 
@@ -37,8 +33,6 @@ function stopLines(raw: string): string[] {
 
 $effect(() => {
   filterDraft = savedRaw;
-  mustDraft = data.mustWords;
-  salaryDraft = data.salaryMin;
   blackDraft = data.blacklist;
   corpusBrief = data.corpusBrief;
 });
@@ -198,27 +192,6 @@ function openResume() {
       placeholder={'Frontend\nReact\n-React Native'}
       bind:value={filterDraft}
     ></textarea>
-    <label class="grid gap-1.5">
-      <span class="text-sm text-zinc-300">Обязательные слова</span>
-      <textarea
-        class="textarea textarea-bordered min-h-20 w-full border-white/10 bg-black/30 text-sm leading-6 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
-        name="mustWords"
-        autocomplete="off"
-        placeholder={'typescript\nnestjs'}
-        bind:value={mustDraft}
-      ></textarea>
-    </label>
-    <label class="grid gap-1.5">
-      <span class="text-sm text-zinc-300">Минимальная зарплата</span>
-      <input
-        class="input input-bordered h-11 w-full border-white/10 bg-black/30 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
-        name="salaryMin"
-        inputmode="numeric"
-        autocomplete="off"
-        placeholder="150000"
-        bind:value={salaryDraft}
-      />
-    </label>
     <label class="grid gap-1.5">
       <span class="text-sm text-zinc-300">Чёрный список компаний</span>
       <textarea
