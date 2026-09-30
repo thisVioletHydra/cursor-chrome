@@ -7,7 +7,7 @@ import { hangHalted, loadWithin, tellPage, tickPage, whileSearching } from '../p
 import { budgetSec, waitMark } from '../pilot/wait-pulse';
 import { hideDom } from './hide-dom';
 import { HIDE_POLL_MS, HIDE_POPUP_STUCK, hideBlocks, hideClickOk, hideFaceOf, hideLimit, hideStart, stepHide } from './hide-popup';
-import { PAGE_LOAD_MS, endedAfter, flipWaitMs, hideWaitMs, landedPage, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchStep } from './page-load';
+import { PAGE_LOAD_MS, endedAfter, flipWaitMs, hideWaitMs, landedPage, nextListedPage, pageLoadMiss, parsedSearch, putSearchPage, searchStep } from './page-load';
 import { getWorkerTabId, isBotWorkUrl, isHhUrl, openBotSearch, requireWorkerTab, wakeWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
@@ -19,12 +19,19 @@ let sawCaptcha = false;
 const SEARCH = 'https://hh.ru/search/vacancy';
 const HH_ROOT = 'https://hh.ru/';
 
+export type SearchPlan = {
+  focus: string;
+  depth: number;
+  phase: 'cover' | 'deep';
+};
+
 export type SearchHit = {
   login: boolean;
   captcha: boolean;
   saved: number;
   more: boolean;
   done: boolean;
+  read: number;
   reason: string;
 };
 
@@ -64,6 +71,7 @@ export async function collectVacancies(
   knownOnPage: (ids: readonly string[], links: readonly PageLink[], cursor: SearchCursor) => Promise<PageMarks | null>,
   rememberPage: (cursor: SearchCursor) => Promise<boolean>,
   noteHidden: (row: HiddenMark) => Promise<void>,
+  plan: SearchPlan = { focus: '', depth: 1, phase: 'cover' },
 ): Promise<SearchHit> {
   sawCaptcha = false;
   endedQuery.clear();
@@ -83,11 +91,12 @@ export async function collectVacancies(
 
   const here = await browser.tabs.get(tabId).catch(() => null);
   if (here !== null && isLogin(here.url || '', ''))
-    return { login: true, captcha: false, saved: 0, more: false, done: false, reason: '' };
+    return { login: true, captcha: false, saved: 0, more: false, done: false, read: 0, reason: '' };
 
   let saved = 0;
   let missed = false;
-  let done = true;
+  let read = 0;
+  let wordDone = false;
   let checkFailed = false;
   let hideBlocked = false;
   const login = await whileSearching(async () => {
@@ -96,7 +105,6 @@ export async function collectVacancies(
         return true;
 
       checkFailed = true;
-      done = false;
 
       return false;
     }
@@ -108,7 +116,6 @@ export async function collectVacancies(
       if (await releaseHidePopup(tabId) === 'stuck') {
         await tellPage(HIDE_POPUP_STUCK);
         hideBlocked = true;
-        done = false;
 
         return 'fail';
       }
@@ -162,7 +169,6 @@ export async function collectVacancies(
       );
       if (marks === null) {
         checkFailed = true;
-        done = false;
 
         return 'fail';
       }
@@ -176,7 +182,6 @@ export async function collectVacancies(
       const hidden = await hideKnown(tabId, pulled.url, knownIds.filter(id => fresh.has(id) === false), cards, noteHidden);
       if (hidden === false) {
         hideBlocked = true;
-        done = false;
 
         return 'fail';
       }
@@ -184,7 +189,6 @@ export async function collectVacancies(
       const step = searchStep({ saved: marks.saved.length, hasNext: more });
       if (step === 'saved') {
         saved += marks.saved.length;
-        done = false;
         await tellPage(`в список ${marks.saved.length}`);
       }
 
@@ -211,87 +215,82 @@ export async function collectVacancies(
       await tellPage('не прочиталась страница hh');
     }
 
-    const openedFirst = new Set<string>();
-    for (const query of queries) {
-      const deep = storedPage(pages[query]);
-      const hit = await harvest(query, FIRST_PAGE, deep, false);
+    const focus = (plan.focus.trim() || queries.find(query => query.trim().length > 0) || '').trim();
+    const phase = plan.phase === 'deep' ? 'deep' : 'cover';
+    const depth = phase === 'cover' ? 1 : Math.min(3, Math.max(1, Math.floor(plan.depth) || 1));
+    if (focus.length === 0)
+      return false;
+
+    await tellPage(phase === 'cover' ? `${focus}, первая` : `${focus}, ${depth} стр.`);
+    const stored = storedPage(pages[focus]);
+    let page = phase === 'cover' ? FIRST_PAGE : stored;
+    let left = depth;
+    let gap = false;
+
+    while (left > 0) {
+      const hit = await harvest(focus, page, phase === 'cover' ? stored : null, gap);
       if (hit === 'login')
         return true;
 
-      if (hit === 'miss') {
-        endedQuery.add(query);
-        continue;
-      }
-
-      if (hit === 'fail' || hit === 'saved')
+      if (hit === 'miss' || hit === 'fail')
         return false;
 
-      if (hit === 'more')
-        openedFirst.add(query);
-    }
-
-    for (const query of queries) {
-      if (endedQuery.has(query))
-        continue;
-
-      let page = storedPage(pages[query]);
-      if (page === FIRST_PAGE && openedFirst.has(query)) {
-        const listed = listedNext.get(query);
-        page = listed === undefined ? nextPageNumber(page) : listed;
-      }
-
-      let gap = openedFirst.has(query);
-      while (true) {
-        const hit = await harvest(query, page, null, gap);
-        if (hit === 'login')
-          return true;
-
-        if (hit === 'miss')
-          break;
-
-        if (hit === 'fail' || hit === 'saved')
-          return false;
-
-        if (hit === 'more') {
-          const listed = listedNext.get(query);
-          const next = pilotStep(freshPilot(), { type: 'page', page: seenPage, hasNext: listed !== undefined }).page;
-          if (next === null || listed === undefined || listed === seenPage)
-            break;
-
-          page = listed;
-          gap = true;
-          continue;
+      read += 1;
+      left -= 1;
+      const listed = listedNext.get(focus);
+      if (phase === 'cover') {
+        if (listed !== undefined) {
+          const next = Math.max(stored, FIRST_PAGE + 1);
+          if (next !== stored && await keep(focus, next) === false)
+            return false;
         }
 
-        if (await keep(query, seenPage) === false)
-          return false;
+        wordDone = true;
 
-        break;
+        return false;
       }
+
+      if (listed === undefined || left === 0) {
+        wordDone = true;
+
+        return false;
+      }
+
+      const turned = pilotStep(freshPilot(), { type: 'page', page: seenPage, hasNext: true }).page;
+      if (turned === null || listed === seenPage) {
+        wordDone = true;
+
+        return false;
+      }
+
+      page = listed;
+      gap = true;
     }
+
+    wordDone = true;
 
     return false;
   });
 
   if (sawCaptcha)
-    return miss(true, false, '');
+    return miss(true, false, '', read);
 
   if (login)
-    return { login: true, captcha: false, saved, more: false, done: false, reason: '' };
+    return { login: true, captcha: false, saved, more: false, done: false, read, reason: '' };
 
   if (missed && saved === 0)
-    return miss(false, false, 'не прочиталась страница hh');
+    return miss(false, false, 'не прочиталась страница hh', read);
 
   if (checkFailed && saved === 0) {
     await tellPage('сервер не сверил вакансии');
 
-    return miss(false, false, 'сервер не сверил вакансии');
+    return miss(false, false, 'сервер не сверил вакансии', read);
   }
 
   if (hideBlocked)
-    return { login: false, captcha: false, saved, more: false, done: false, reason: HIDE_POPUP_STUCK };
+    return { login: false, captcha: false, saved, more: false, done: false, read, reason: HIDE_POPUP_STUCK };
 
-  return { login: false, captcha: false, saved, more: false, done, reason: '' };
+  return { login: false, captcha: false, saved, more: false, done: wordDone, read, reason: '' };
 }
 
 export async function readVacancyPage(tabId: number, id: string, url: string): Promise<FoundCard | null> {
@@ -342,8 +341,8 @@ function storedPage(page: number | undefined): number {
   return page;
 }
 
-function miss(captcha: boolean, login: boolean, reason: string): SearchHit {
-  return { login, captcha, saved: 0, more: false, done: false, reason };
+function miss(captcha: boolean, login: boolean, reason: string, read = 0): SearchHit {
+  return { login, captcha, saved: 0, more: false, done: false, read, reason };
 }
 
 function searchUrl(query: string, page: number): string {

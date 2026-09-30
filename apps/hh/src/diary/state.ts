@@ -1,4 +1,4 @@
-import { storePath } from './memory.ts';
+import { moscowDay, storePath } from './memory.ts';
 import { parseJsonLoose, writeJsonAtomic } from './store.ts';
 
 import fsPromises from 'node:fs/promises';
@@ -13,6 +13,10 @@ export type State = {
   lessAt: number;
   queryPass: number;
   runAt: number;
+  walkPhase: 'cover' | 'deep';
+  walkAt: number;
+  walkLeft: number;
+  walkDay: string;
 };
 
 const EMPTY: State = {
@@ -24,6 +28,10 @@ const EMPTY: State = {
   lessAt: 0,
   queryPass: -1,
   runAt: 0,
+  walkPhase: 'cover',
+  walkAt: 0,
+  walkLeft: 1,
+  walkDay: '',
 };
 
 export function statePath(): string {
@@ -54,6 +62,10 @@ export async function readState(): Promise<State> {
     lessAt: atOf(raw.lessAt),
     queryPass: typeof raw.queryPass === 'number' && Number.isFinite(raw.queryPass) ? raw.queryPass : -1,
     runAt: atOf(raw.runAt),
+    walkPhase: raw.walkPhase === 'deep' ? 'deep' : 'cover',
+    walkAt: atOf(raw.walkAt),
+    walkLeft: atOf(raw.walkLeft),
+    walkDay: typeof raw.walkDay === 'string' ? raw.walkDay : '',
   };
 }
 
@@ -72,8 +84,13 @@ export async function writeState(patch: Partial<State>): Promise<State> {
 
   if (patch.auto === false)
     next.runAt = 0;
-  else if (patch.auto === true && (prev.auto === false || prev.runAt === 0))
+  else if (patch.auto === true && (prev.auto === false || prev.runAt === 0)) {
     next.runAt = Date.now();
+    next.walkPhase = 'cover';
+    next.walkAt = 0;
+    next.walkLeft = 1;
+    next.walkDay = moscowDay();
+  }
 
   await writeJsonAtomic(statePath(), next);
 

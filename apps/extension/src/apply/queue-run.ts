@@ -1,6 +1,6 @@
 import type { Hunt, QueueItem } from './admin-api';
 
-import { dropKnown, dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, markRead, postFound, postHidden, rememberPage, seenAmong } from './admin-api';
+import { dropKnown, dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, markRead, postFound, postHidden, postWalk, rememberPage, seenAmong } from './admin-api';
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 import { getFlags } from '../pilot/flags';
 import { pinnedCaptcha, tabShowsCaptcha } from '../tab/hh-captcha';
@@ -197,7 +197,6 @@ async function drain(): Promise<QueueRun> {
 
   const run: QueueRun = { ok: true, sent: 0, human: 0, skipped: 0, left: 0, reason: '', lines: [] };
   let started = false;
-  let advance = false;
   let teaOpen = false;
 
   while (hoursOpen()) {
@@ -238,7 +237,7 @@ async function drain(): Promise<QueueRun> {
       continue;
     }
 
-    const hunt = await fetchHunt(base, key, advance);
+    const hunt = await fetchHunt(base, key);
     if (hangHalted()) {
       run.reason = 'расширение зависло';
       break;
@@ -267,13 +266,10 @@ async function drain(): Promise<QueueRun> {
     if (filled.note.length > 0 && run.lines.includes(filled.note) === false)
       run.lines.push(filled.note);
 
-    if (filled.saved > 0) {
-      advance = false;
+    if (filled.saved > 0)
       continue;
-    }
 
     if (filled.done === false) {
-      advance = false;
       if (filled.retry && await restCycle() === false)
         break;
 
@@ -288,12 +284,9 @@ async function drain(): Promise<QueueRun> {
       continue;
     }
 
-    if (pending.length > 0) {
-      advance = false;
+    if (pending.length > 0)
       continue;
-    }
 
-    advance = true;
     if (await restCycle() === false)
       break;
   }
@@ -625,9 +618,12 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
     return { seen: new Set(marks.seen), saved: marks.saved };
   }, cursor => rememberPage(base, key, cursor), async (row) => {
     await postHidden(base, key, row);
-  });
+  }, { focus: hunt.focus, depth: hunt.depth, phase: hunt.phase });
   if (hangHalted())
     return { stop: 'расширение зависло' };
+
+  const noted = found.read > 0 || found.done;
+  const notedOk = noted === false || await postWalk(base, key, { read: found.read, done: found.done });
 
   if (found.captcha) {
     await holdCaptcha(false);
@@ -644,6 +640,9 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
 
     return { stop: 'hh.ru просит войти (login)' };
   }
+
+  if (notedOk === false)
+    return { note: 'сервер не записал круг', saved: found.saved, more: false, done: false, retry: true };
 
   const retry = found.done === false && found.saved === 0 && found.reason.length > 0;
 

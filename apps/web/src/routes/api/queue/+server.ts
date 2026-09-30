@@ -1,6 +1,7 @@
+import type { State } from '@cursor-chrome/hh';
 import type { RequestHandler } from './$types';
 
-import { COVER_LETTER, HIDE_REASON, busyAmong, dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readState, remember, rememberSearchPage, searchPages, searchTitleSkip, serveQueries, splitQueries, takePilotStart, workHours, writeState } from '@cursor-chrome/hh';
+import { COVER_LETTER, HIDE_REASON, busyAmong, dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, moscowDay, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readState, remember, rememberSearchPage, searchPages, searchTitleSkip, splitQueries, stepWalk, takePilotStart, walkFrom, workHours, writeState } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { DEFAULT_QUERY, readAccount } from '$lib/server/secrets';
@@ -10,7 +11,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
   if (login === null)
     return json({ error: 'нет' }, { status: 401 });
 
-  const [memory, account, state] = await Promise.all([readMemory(), readAccount(login), readState()]);
+  const [memory, account, loaded] = await Promise.all([readMemory(), readAccount(login), readState()]);
+  const state = await walkToday(loaded);
   const letter = account.coverLetter || COVER_LETTER;
   const saved = splitQueries(account.hhQuery.trim() || DEFAULT_QUERY);
   const stop = state.hung === true && state.auto === false;
@@ -20,21 +22,28 @@ export const GET: RequestHandler = async ({ request, url }) => {
   const hours = account.hhHours !== '0';
   const day = dayOpen(memory);
   const open = (hours === false || workHours()) && day;
+  const walked = walkFrom(state);
+  const spot = saved.length === 0 || walked.at < saved.length ? walked.at : 0;
+  const focus = saved[spot] ?? '';
+  if (spot !== state.walkAt)
+    await writeState({ walkAt: spot });
+
   if (open === false)
-    return json({ items: [], links: [], letter, queries: saved, want: false, imitation: account.imitation, stop, hours, auto, start, day });
+    return json({ items: [], links: [], letter, queries: saved, focus, depth: walked.left, phase: walked.phase, want: false, imitation: account.imitation, stop, hours, auto, start, day });
 
   const queued = await pendingCount();
   const want = account.hhLive === '1' && state.auto && queued < QUEUE_TARGET;
-  const cycle = url.searchParams.get('cycle') === '1';
-  const queries = want && listen === false ? await shownPass(saved, state, cycle) : saved;
-  const [items, links, pages] = await Promise.all([pending(10), keptLinks(account.hhRules), searchPages(queries)]);
+  const [items, links, pages] = await Promise.all([pending(10), keptLinks(account.hhRules), searchPages(saved)]);
 
   return json({
     items: items.map(row => ({ id: row.id, company: row.company, title: row.title, url: row.url })),
     links,
     pages,
     letter,
-    queries,
+    queries: saved,
+    focus,
+    depth: walked.left,
+    phase: walked.phase,
     want,
     imitation: account.imitation,
     stop,
@@ -52,7 +61,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (login === null)
     return json({ error: 'нет' }, { status: 401 });
 
-  const body = await request.json().catch(() => null) as { ids?: unknown; links?: unknown; drop?: unknown; cursor?: unknown; resetPages?: unknown; gate?: unknown; opened?: unknown; hidden?: unknown } | null;
+  const body = await request.json().catch(() => null) as { ids?: unknown; links?: unknown; drop?: unknown; cursor?: unknown; resetPages?: unknown; gate?: unknown; opened?: unknown; hidden?: unknown; walk?: unknown } | null;
   if (body === null)
     return json({ error: 'пустое тело' }, { status: 400 });
 
@@ -87,6 +96,17 @@ export const POST: RequestHandler = async ({ request }) => {
     await remember([id]);
 
     return json({ open: true });
+  }
+
+  const walked = walkNote(body.walk);
+  if (walked !== null) {
+    const account = await readAccount(login);
+    const saved = splitQueries(account.hhQuery.trim() || DEFAULT_QUERY);
+    const state = await walkToday(await readState());
+    const next = stepWalk(walkFrom(state), saved.length, walked.read, walked.done, Math.random());
+    await writeState({ walkPhase: next.phase, walkAt: next.at, walkLeft: next.left, walkDay: moscowDay() });
+
+    return json({ ok: true });
   }
 
   const cursor = cursorOf(body.cursor);
@@ -311,15 +331,20 @@ function pageIds(value: unknown): string[] {
   return ids;
 }
 
-async function shownPass(saved: string[], state: { frontAt: number; lessAt: number; queryPass: number }, advance: boolean): Promise<string[]> {
-  const served = serveQueries(saved, {
-    frontAt: state.frontAt,
-    lessAt: state.lessAt,
-    queryPass: state.queryPass,
-  }, advance);
-  if (served.cursor.frontAt !== state.frontAt || served.cursor.lessAt !== state.lessAt || served.cursor.queryPass !== state.queryPass)
-    await writeState({ frontAt: served.cursor.frontAt, lessAt: served.cursor.lessAt, queryPass: served.cursor.queryPass });
+async function walkToday(state: State): Promise<State> {
+  if (state.walkDay === moscowDay())
+    return state;
 
-  return served.queries;
+  return writeState({ walkPhase: 'cover', walkAt: 0, walkLeft: 1, walkDay: moscowDay() });
+}
+
+function walkNote(value: unknown): { read: number; done: boolean } | null {
+  if (typeof value !== 'object' || value === null)
+    return null;
+
+  const raw = value as { read?: unknown; done?: unknown };
+  const read = typeof raw.read === 'number' && Number.isFinite(raw.read) ? Math.max(0, Math.floor(raw.read)) : 0;
+
+  return { read, done: raw.done === true };
 }
 
