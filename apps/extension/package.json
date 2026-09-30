@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node --test pilot.test.mjs page-load.test.mjs && node --test offscreen.test.mjs && rm -rf dist && tsdown && node scripts/copy-static.mjs"
+    "build": "node --test pilot.test.mjs page-load.test.mjs hide-popup.test.mjs && node --test offscreen.test.mjs && rm -rf dist && tsdown && node scripts/copy-static.mjs"
   },
   "dependencies": {
     "@cursor-chrome/protocol": "workspace:*"

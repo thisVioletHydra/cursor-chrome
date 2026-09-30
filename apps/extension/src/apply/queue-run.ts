@@ -11,7 +11,8 @@ import { isPilotLinkText, readPilotLink } from '../pilot/pilot-link';
 import { applyPilot } from '../pilot/pilot-apply';
 import { markPilotStop } from '../pilot/pilot-stop';
 import { runHhApply } from './hh-apply-cmd';
-import { collectVacancies, readVacancyPage } from '../search/hh-search';
+import { HIDE_POPUP_STUCK } from '../search/hide-popup';
+import { collectVacancies, readVacancyPage, releaseHidePopup } from '../search/hh-search';
 import { requireTabId } from '../link/inject';
 import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
@@ -360,6 +361,8 @@ async function applyPending(base: string, key: string, run: QueueRun): Promise<A
       seen.add(item.id);
       started = true;
       const reply = await applyOne(item);
+      if (reply.reason === HIDE_POPUP_STUCK)
+        return { started, stop: true, reason: HIDE_POPUP_STUCK };
       if (hangHalted()) {
         run.left -= 1;
 
@@ -453,6 +456,9 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
   if ('tabId' in shown === false) {
     if ((shown.reason || '') === 'уже видели')
       return { started: false, stop: false, reason: '', seen: true };
+
+    if (shown.reason === HIDE_POPUP_STUCK)
+      return { started: false, stop: true, reason: HIDE_POPUP_STUCK };
 
     return stallLink(base, key, shown);
   }
@@ -619,6 +625,9 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
     return { stop: 'капча, позови человека' };
   }
 
+  if (found.reason === HIDE_POPUP_STUCK)
+    return { stop: found.reason };
+
   if (found.login) {
     await pauseUntilMorning();
     await tellStop(base, key, 'hh.ru просит войти (login)');
@@ -756,6 +765,12 @@ async function showVacancy(url: string, read?: { base: string; key: string; id: 
 
   if (await tabShowsCaptcha(tabId))
     return { status: 'skip', reason: 'капча' };
+
+  if (await releaseHidePopup(tabId) === 'stuck') {
+    await tellPage(HIDE_POPUP_STUCK);
+
+    return { status: 'skip', reason: HIDE_POPUP_STUCK };
+  }
 
   const loaded = waitTab(tabId, 15_000);
   await browser.tabs.update(tabId, { url, active: false });

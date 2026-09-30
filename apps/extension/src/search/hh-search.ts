@@ -1,7 +1,11 @@
+import type { HideFace, HideStep } from './hide-popup';
+
 import { getFlags } from '../pilot/flags';
 import { freshPilot, pilotStep } from '../chrome/pilot';
 import { tabShowsCaptcha } from '../tab/hh-captcha';
 import { hangHalted, loadWithin, tellPage, whileSearching } from '../pilot/page-log';
+import { hideDom } from './hide-dom';
+import { HIDE_POLL_MS, HIDE_POPUP_STUCK, hideBlocks, hideClickOk, hideFaceOf, hideLimit, hideStart, stepHide } from './hide-popup';
 import { PAGE_LOAD_MS, endedAfter, flipWaitMs, hideWaitMs, landedPage, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchStep } from './page-load';
 import { getWorkerTabId, isBotWorkUrl, isHhUrl, openBotSearch, requireWorkerTab, wakeWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
@@ -75,6 +79,7 @@ export async function collectVacancies(
   let missed = false;
   let done = true;
   let checkFailed = false;
+  let hideBlocked = false;
   const login = await whileSearching(async () => {
     async function keep(query: string, next: number): Promise<boolean> {
       if (await rememberPage({ query, page: next }))
@@ -90,6 +95,14 @@ export async function collectVacancies(
     const listedNext = new Map<string, number>();
 
     async function harvest(query: string, page: number, hold: number | null, gap: boolean): Promise<PageHit> {
+      if (await releaseHidePopup(tabId) === 'stuck') {
+        await tellPage(HIDE_POPUP_STUCK);
+        hideBlocked = true;
+        done = false;
+
+        return 'fail';
+      }
+
       if (gap)
         await flipPause();
 
@@ -149,7 +162,13 @@ export async function collectVacancies(
         await tellPage(`уже видели, ${knownIds.length}`);
 
       const fresh = new Set(marks.saved);
-      await hideKnown(tabId, pulled.url, knownIds.filter(id => fresh.has(id) === false));
+      const hidden = await hideKnown(tabId, pulled.url, knownIds.filter(id => fresh.has(id) === false));
+      if (hidden === false) {
+        hideBlocked = true;
+        done = false;
+
+        return 'fail';
+      }
 
       const step = searchStep({ saved: marks.saved.length, hasNext: more });
       if (step === 'saved') {
@@ -257,6 +276,9 @@ export async function collectVacancies(
 
     return miss(false, false, 'сервер не сверил вакансии');
   }
+
+  if (hideBlocked)
+    return { login: false, captcha: false, saved, more: false, done: false, reason: HIDE_POPUP_STUCK };
 
   return { login: false, captcha: false, saved, more: false, done, reason: '' };
 }
@@ -372,20 +394,129 @@ function scrollPager(): void {
   window.scrollTo(0, document.body.scrollHeight);
 }
 
-async function hideKnown(tabId: number, url: string, ids: readonly string[]): Promise<void> {
+async function hideKnown(tabId: number, url: string, ids: readonly string[]): Promise<boolean> {
   if (resumePath(url) || ids.length === 0)
-    return;
+    return true;
 
   let gap = false;
   for (const id of ids) {
     if (hangHalted())
-      return;
+      return true;
 
     if (gap)
       await hidePause();
 
     gap = true;
-    await clickHide(tabId, id);
+    const hit = await settleHide(tabId, id);
+    if (hit === 'halt')
+      return true;
+
+    if (hit === 'stuck') {
+      await tellPage(HIDE_POPUP_STUCK);
+
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export async function releaseHidePopup(tabId: number): Promise<'clear' | 'stuck'> {
+  const before = await readHideFace(tabId);
+  if (before === null || before === 'resume' || hideBlocks(before) === false)
+    return 'clear';
+
+  const hit = await runHide(tabId, hideStart());
+  if (hit === 'stuck')
+    return 'stuck';
+
+  return 'clear';
+}
+
+async function settleHide(tabId: number, id: string): Promise<'done' | 'stuck' | 'skip' | 'halt'> {
+  if (hangHalted())
+    return 'halt';
+
+  const before = await readHideFace(tabId);
+  if (before === null || before === 'resume')
+    return 'skip';
+
+  if (hideBlocks(before)) {
+    const held = await runHide(tabId, hideStart());
+    if (held !== 'done')
+      return held;
+  }
+
+  const eye = await hideCall(tabId, 'eye', id);
+  if (eye === null || hideClickOk(eye) === false)
+    return 'skip';
+
+  return runHide(tabId, hideStart());
+}
+
+async function runHide(tabId: number, step: HideStep): Promise<'done' | 'stuck' | 'skip' | 'halt'> {
+  let since = Date.now();
+  let guard = 0;
+  while (step.phase !== 'done' && step.phase !== 'stuck') {
+    if (hangHalted())
+      return 'halt';
+
+    if (guard > 200)
+      return 'stuck';
+
+    guard += 1;
+    const face = await readHideFace(tabId);
+    if (face === null)
+      return 'skip';
+
+    if (face === 'resume')
+      return 'skip';
+
+    const waited = Date.now() - since >= hideLimit(step.phase);
+    const move = stepHide(step, face, waited);
+    const changed = hideMoved(step, move.step);
+    if (move.action !== null) {
+      await hideCall(tabId, move.action, '');
+      since = Date.now();
+    }
+    else if (changed)
+      since = Date.now();
+    else if (waited === false)
+      await hideTick();
+
+    step = move.step;
+  }
+
+  if (step.phase === 'stuck')
+    return 'stuck';
+
+  return 'done';
+}
+
+function hideMoved(step: HideStep, next: HideStep): boolean {
+  return next.phase !== step.phase || next.form !== step.form || next.retryMenu !== step.retryMenu || next.retried !== step.retried;
+}
+
+async function readHideFace(tabId: number): Promise<HideFace | 'resume' | null> {
+  const raw = await hideCall(tabId, 'read', '');
+  if (raw === null)
+    return null;
+
+  return hideFaceOf(raw);
+}
+
+async function hideCall(tabId: number, op: string, id: string): Promise<unknown> {
+  try {
+    const results = await browser.scripting.executeScript({
+      target: { tabId },
+      func: hideDom,
+      args: [op, id],
+    });
+
+    return results[0]?.result;
+  }
+  catch {
+    return null;
   }
 }
 
@@ -393,61 +524,8 @@ function hidePause(): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, hideWaitMs(Math.random())));
 }
 
-async function clickHide(tabId: number, id: string): Promise<void> {
-  if (/^\d+$/.test(id) === false)
-    return;
-
-  try {
-    await browser.scripting.executeScript({
-      target: { tabId },
-      func: hideVacancy,
-      args: [id],
-    });
-  }
-  catch {
-    return;
-  }
-}
-
-async function hideVacancy(id: string): Promise<boolean> {
-  if (/\/resume(?:_converter|_print)?(?:\/|$)/i.test(location.pathname))
-    return false;
-
-  if (/^\d+$/.test(id) === false)
-    return false;
-
-  const link = document.querySelector(`a[href*="/vacancy/${id}"]`);
-  const card = link?.closest('[data-qa="vacancy-serp__vacancy"]');
-  const button = card?.querySelector('button[aria-label="Скрыть"], button[data-qa="vacancy__blacklist-show-add_narrow-card"]');
-  if ((button instanceof HTMLElement) === false)
-    return false;
-
-  button.scrollIntoView({ block: 'center' });
-  button.click();
-  const menu = await new Promise<HTMLElement | null>((resolve) => {
-    const start = Date.now();
-    const timer = window.setInterval(() => {
-      const found = document.querySelector('button[data-qa="vacancy__blacklist-menu-add-vacancy"], button[data-qa*="blacklist-menu-add-vacancy"]');
-      const labeled = found instanceof HTMLElement ? found : hideMenuLabel();
-      if (labeled !== null || Date.now() - start > 700) {
-        window.clearInterval(timer);
-        resolve(labeled);
-      }
-    }, 40);
-  });
-  if (menu !== null)
-    menu.click();
-
-  return true;
-
-  function hideMenuLabel(): HTMLElement | null {
-    for (const node of document.querySelectorAll('button')) {
-      if (node instanceof HTMLElement && (node.textContent ?? '').includes('Скрыть эту вакансию'))
-        return node;
-    }
-
-    return null;
-  }
+function hideTick(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, HIDE_POLL_MS));
 }
 
 function resumePath(url: string): boolean {
