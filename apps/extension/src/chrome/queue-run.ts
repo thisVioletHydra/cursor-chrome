@@ -9,6 +9,7 @@ import { markTeaWork, maybeTea, noteTeaSession } from './tea';
 import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage, waitBeforeLoad } from './page-log';
 import { isPilotLinkText, readPilotLink } from './pilot-link';
 import { markPilotStop } from './pilot-stop';
+import { nextRun } from './run-next';
 import { runHhApply } from './hh-apply-cmd';
 import { collectVacancies, readVacancyPage } from './hh-search';
 import { requireTabId } from './inject';
@@ -553,7 +554,11 @@ async function noteReply(base: string, key: string, run: QueueRun, item: QueueIt
   if (stop.length === 0)
     return null;
 
-  await pauseUntilMorning();
+  if (stop.startsWith('лимит откликов hh'))
+    await applyDaily();
+  else
+    await pauseUntilMorning();
+
   await report(base, key, item, { status: 'stop', reason: stop });
 
   return { started: true, stop: true, reason: `Стоп до утра: ${stop}` };
@@ -573,8 +578,20 @@ function blank(reason: string): QueueRun {
 }
 
 async function stopForToday(): Promise<void> {
-  await tellPage('лимит на сегодня');
-  await pauseUntilMorning();
+  await tellPage(nextRun({ type: 'stop', reason: 'daily' }).status);
+  await applyDaily();
+}
+
+async function applyDaily(): Promise<void> {
+  const decision = nextRun({ type: 'stop', reason: 'daily' });
+  if (decision.on === false)
+    await markPilotStop();
+
+  if (decision.closeBotTab)
+    await pauseUntilMorning();
+
+  if (decision.on === false)
+    await setFlags({ autoQueue: false });
 }
 
 async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: string } | { note: string; saved: number; more: boolean; done: boolean; retry: boolean }> {
@@ -883,9 +900,7 @@ export async function guardCaptcha(again = false): Promise<boolean> {
   }
 
   if (seen === null && await captchaHolding()) {
-    await markPilotStop();
-    await pauseUntilMorning();
-    await setFlags({ autoQueue: false });
+    await applyCaptchaStop();
 
     return true;
   }
@@ -911,11 +926,21 @@ async function clearCaptchaHold(): Promise<void> {
 }
 
 async function holdCaptcha(again: boolean): Promise<void> {
-  await markPilotStop();
-  await pauseUntilMorning();
-  await setFlags({ autoQueue: false });
+  await applyCaptchaStop();
   await browser.storage.local.set({ [CAPTCHA_HOLD]: true });
   await postCaptcha(again);
+}
+
+async function applyCaptchaStop(): Promise<void> {
+  const decision = nextRun({ type: 'stop', reason: 'captcha' });
+  if (decision.on === false)
+    await markPilotStop();
+
+  if (decision.closeBotTab)
+    await pauseUntilMorning();
+
+  if (decision.on === false)
+    await setFlags({ autoQueue: false });
 }
 
 async function postCaptcha(again: boolean): Promise<void> {

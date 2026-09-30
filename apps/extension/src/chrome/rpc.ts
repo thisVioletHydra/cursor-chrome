@@ -7,6 +7,7 @@ import { bindPilotSettle, clearStuckHang, forgetStuckHang, liveLines, stallStep,
 import { reconcilePilot } from './pilot-heal';
 import { clearPilotLink, clearPilotPending, notePilotLink, setPilotPending } from './pilot-link';
 import { clearPilotStop, markPilotStop } from './pilot-stop';
+import { nextRun } from './run-next';
 import { pushPilot, retryPilotPush } from './pilot-switch';
 import { forgetHangReport, guardCaptcha, queueBusy, readPausedUntil, readQueueReport, runQueue } from './queue-run';
 import { pullSavedResume } from './resume-pull';
@@ -274,10 +275,15 @@ async function enablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; s
 }
 
 async function disablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean }): Promise<unknown> {
+  const decision = nextRun({ type: 'stop', reason: 'user' });
   await setPilotPending('off');
-  await markPilotStop();
+  if (decision.on === false)
+    await markPilotStop();
+
   const next = await setFlags(patch);
-  await closePinnedHh();
+  if (decision.closeBotTab)
+    await closePinnedHh();
+
   await clearPilotLink();
   await forgetStuckHang();
   const pushed = await pushPilot(false);

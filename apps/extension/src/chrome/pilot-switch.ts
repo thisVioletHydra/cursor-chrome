@@ -1,6 +1,9 @@
 import { getSyncKey, getSyncUrl } from './apply-log';
+import { setFlags } from './flags';
 import { bumpPilot } from './page-log';
 import { clearPilotLink, clearPilotPending, gatewayText, notePilotLink, readPilotPending, SERVER_SILENT } from './pilot-link';
+import { nextRun } from './run-next';
+import { closePinnedHh } from './worker-tab';
 
 const PUSH_MS = 12_000;
 const RETRY_MS = 60_000;
@@ -63,12 +66,37 @@ async function postPilot(on: boolean): Promise<{ ok: true } | { ok: false; error
 
     const detail = typeof body?.error === 'string' ? body.error : '';
     const down = gatewayText(res.status);
+    if (down !== null && on)
+      return serverDown('502');
 
     return { ok: false, error: down ?? (detail.length > 0 ? detail : `сервер ${res.status}`) };
   }
-  catch {
+  catch (error) {
+    if (on)
+      return serverDown(timedOut(error) ? 'timeout' : 'network');
+
     return { ok: false, error: SERVER_SILENT };
   }
+}
+
+async function serverDown(fault: '502' | 'timeout' | 'network'): Promise<{ ok: false; error: string }> {
+  const decision = nextRun({ type: 'server', fault, justEnabled: true });
+  if (decision.on === false)
+    await setFlags({ autoQueue: false });
+
+  if (decision.closeBotTab)
+    await closePinnedHh();
+
+  return { ok: false, error: decision.status };
+}
+
+function timedOut(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null)
+    return false;
+
+  const name = 'name' in error ? error.name : '';
+
+  return name === 'TimeoutError' || name === 'AbortError';
 }
 
 async function pilotAuth(): Promise<{ host: string; key: string } | null> {

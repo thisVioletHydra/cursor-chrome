@@ -1,12 +1,14 @@
-import { browser } from '../browser-host';
 import { getFlags } from './flags';
+import { nextRun, SERVER_WAIT } from './run-next';
+import { browser } from '../browser-host';
 
 const LINK_KEY = 'pilotLink';
 const PENDING_KEY = 'pilotPending';
 
 export const PILOT_LINK_KEY = LINK_KEY;
 export const SERVER_SILENT = 'сервер не ответил, попробуй позже';
-export const SERVER_WAIT = 'жду сервер';
+
+export { SERVER_WAIT };
 
 type Pending = 'on' | 'off' | '';
 
@@ -47,19 +49,30 @@ export async function clearPilotLink(): Promise<void> {
 }
 
 export async function noteGateway(status: number): Promise<void> {
-  const text = gatewayText(status);
-  if (text === null)
+  if (status !== 502 && status !== 503 && status !== 504)
     return;
 
   const matters = await linkMatters();
-  if (matters)
-    await notePilotLink(text);
+  if (matters === false)
+    return;
+
+  const decision = nextRun({ type: 'server', fault: '502', justEnabled: true });
+  if (decision.on === false || decision.closeBotTab)
+    return;
+
+  await notePilotLink(decision.status);
 }
 
 export async function noteServerSilent(): Promise<void> {
   const matters = await linkMatters();
-  if (matters)
-    await notePilotLink(SERVER_SILENT);
+  if (matters === false)
+    return;
+
+  const decision = nextRun({ type: 'server', fault: 'timeout', justEnabled: true });
+  if (decision.on === false || decision.closeBotTab)
+    return;
+
+  await notePilotLink(decision.status);
 }
 
 export async function readPilotPending(): Promise<Pending> {

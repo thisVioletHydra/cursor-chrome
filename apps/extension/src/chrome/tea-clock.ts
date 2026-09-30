@@ -1,7 +1,7 @@
+import { TEA_PERIOD_MS, teaFires } from './run-next';
 import { browser } from '../browser-host';
 
 const SWAY = 0.16;
-const TEA_EVERY_MS = 45 * 60 * 1000;
 const TEA_RUN_KEY = 'teaRun';
 const TEA_NEED_KEY = 'teaNeed';
 const TEA_SEEN_KEY = 'teaSeen';
@@ -93,11 +93,12 @@ async function planTea(now: number, draw: () => { hit: boolean; pause: number })
     return null;
 
   const live = await settle(now);
-  if (woke || live.run < live.need)
+  const due = await readTeaDue();
+  if (woke || teaFires({ runMs: live.run, needMs: live.need, teaDue: due }) === false)
     return null;
 
   const drawn = draw();
-  const need = swayMs(TEA_EVERY_MS);
+  const need = swayMs(TEA_PERIOD_MS);
   holdUntil = now + drawn.pause;
   clock = { run: 0, need, seen: now };
   await persist(clock, now);
@@ -159,7 +160,7 @@ function accrue(prev: TeaClock, now: number): TeaClock {
 }
 
 function opened(now: number): TeaClock {
-  return { run: 0, need: swayMs(TEA_EVERY_MS), seen: now };
+  return { run: 0, need: swayMs(TEA_PERIOD_MS), seen: now };
 }
 
 async function persist(next: TeaClock, now: number): Promise<void> {
@@ -173,6 +174,15 @@ async function persist(next: TeaClock, now: number): Promise<void> {
 
 async function dropWallClock(): Promise<void> {
   await browser.storage.local.remove([TEA_AT_KEY, TEA_DUE_KEY]);
+}
+
+async function readTeaDue(): Promise<number | null> {
+  const stored = await browser.storage.local.get(TEA_DUE_KEY);
+  const value = stored[TEA_DUE_KEY];
+  if (typeof value !== 'number' || Number.isFinite(value) === false)
+    return null;
+
+  return value;
 }
 
 async function readClock(): Promise<TeaClock> {
@@ -193,8 +203,8 @@ async function readClock(): Promise<TeaClock> {
 
 function needOf(value: unknown): number {
   const need = stampOf(value);
-  const min = Math.floor(TEA_EVERY_MS * (1 - SWAY));
-  const max = Math.ceil(TEA_EVERY_MS * (1 + SWAY));
+  const min = Math.floor(TEA_PERIOD_MS * (1 - SWAY));
+  const max = Math.ceil(TEA_PERIOD_MS * (1 + SWAY));
   if (need < min || need > max)
     return 0;
 
@@ -203,7 +213,7 @@ function needOf(value: unknown): number {
 
 function runOf(value: unknown, need: number): number {
   const run = stampOf(value);
-  if (run <= 0 || run > need + TEA_EVERY_MS)
+  if (run <= 0 || run > need + TEA_PERIOD_MS)
     return 0;
 
   return run;

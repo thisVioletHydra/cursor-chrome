@@ -1,5 +1,6 @@
 import { getFlags } from './flags';
 import { restoreFocus, snapshotFocus, spareFocus, withStayPut } from './focus-lock';
+import { nextRun } from './run-next';
 import { browser } from '../browser-host';
 
 export const WORKER_KEY = 'workerTabId';
@@ -109,6 +110,10 @@ export function openingTab(): boolean {
 }
 
 export async function pinWorker(tabId: number): Promise<WorkerCheck> {
+  const decision = nextRun({ type: 'touch', action: 'pin', on: true });
+  if (decision.closeBotTab || decision.on === false)
+    return { ok: false, reason: 'пин' };
+
   const refused = await userPage(tabId);
   if (refused !== null)
     return refused;
@@ -152,6 +157,10 @@ export async function closePinnedHh(): Promise<void> {
 
 // Хром не грузит вкладку, открытую в фоне, пока её один раз не активировать.
 export async function wakeWorkerTab(tabId: number, force = false): Promise<void> {
+  const decision = nextRun({ type: 'touch', action: 'wake', on: true });
+  if (decision.closeBotTab || decision.on === false)
+    return;
+
   await browser.tabs.update(tabId, { autoDiscardable: false }).catch(() => {});
   const tab = await browser.tabs.get(tabId).catch(() => null);
   if (tab === null || (force === false && asleep(tab) === false))

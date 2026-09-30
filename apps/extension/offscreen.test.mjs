@@ -37,21 +37,20 @@ test('offscreen never reads storage.local', async () => {
 });
 
 function buildExtension() {
+  return runHere('pnpm', ['exec', 'tsdown']).then(() => runHere('node', ['scripts/copy-static.mjs']));
+}
+
+function runHere(command, args) {
   return new Promise((resolve, reject) => {
-    childProcess.execFile(
-      'pnpm',
-      ['--filter', '@cursor-chrome/extension', 'build'],
-      { cwd: repo },
-      (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(stderr || stdout || error.message));
+    childProcess.execFile(command, args, { cwd: here }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(stderr || stdout || error.message));
 
-          return;
-        }
+        return;
+      }
 
-        resolve();
-      },
-    );
+      resolve();
+    });
   });
 }
 

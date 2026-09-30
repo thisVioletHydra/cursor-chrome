@@ -5,6 +5,7 @@ import { loadPace, waitMs } from './pace';
 import { reconcilePilot } from './pilot-heal';
 import { clearPilotLink, clearPilotPending, noteGateway, notePilotAnswer, noteServerSilent, readPilotPending, remoteStopCounts } from './pilot-link';
 import { markPilotStop } from './pilot-stop';
+import { nextRun } from './run-next';
 import { closePinnedHh } from './worker-tab';
 import { browser } from '../browser-host';
 
@@ -132,9 +133,16 @@ export async function haltHang(): Promise<void> {
     clearTimeout(stall);
 
   stall = undefined;
-  await markPilotStop();
-  await setFlags({ autoQueue: false });
-  await closePinnedHh();
+  const decision = nextRun({ type: 'stop', reason: 'hang' });
+  if (decision.on === false)
+    await markPilotStop();
+
+  if (decision.on === false)
+    await setFlags({ autoQueue: false });
+
+  if (decision.closeBotTab)
+    await closePinnedHh();
+
   await clearPilotPending();
   await clearPilotLink();
   if (onHangClear !== undefined)

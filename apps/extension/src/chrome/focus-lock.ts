@@ -1,3 +1,4 @@
+import { nextRun } from './run-next';
 import { browser } from '../browser-host';
 
 type Hold = {
@@ -55,6 +56,10 @@ export async function snapshotFocus(): Promise<Hold | null> {
 }
 
 export async function restoreFocus(prev: Hold | null): Promise<void> {
+  const decision = nextRun({ type: 'touch', action: 'restore', on: true });
+  if (decision.closeBotTab || decision.on === false)
+    return;
+
   if (prev === null)
     return;
 

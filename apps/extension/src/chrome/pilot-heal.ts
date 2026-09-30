@@ -3,6 +3,7 @@ import type { Flags } from './flags';
 import { getFlags, setFlags } from './flags';
 import { clearPilotPending, readPilotPending, setPilotPending } from './pilot-link';
 import { pilotStopped } from './pilot-stop';
+import { nextRun } from './run-next';
 import { checkWorker, closePinnedHh, isBotWorkUrl, openingTab } from './worker-tab';
 import { browser } from '../browser-host';
 
@@ -14,7 +15,14 @@ export async function reconcilePilot(): Promise<Flags> {
   if (flags.autoQueue === true || openingTab())
     return flags;
 
-  if (await botSearchPinned() === false) {
+  const botTab = await botSearchPinned();
+  const decision = nextRun({
+    type: 'pair',
+    on: flags.autoQueue,
+    botTab,
+    explicitStop: await keepOff(),
+  });
+  if (decision.closeBotTab && botTab === false) {
     if (openingTab() || (await getFlags()).autoQueue === true)
       return getFlags();
 
@@ -25,7 +33,7 @@ export async function reconcilePilot(): Promise<Flags> {
     return getFlags();
   }
 
-  if (await keepOff()) {
+  if (decision.closeBotTab) {
     if (openingTab() || (await getFlags()).autoQueue === true)
       return getFlags();
 
@@ -33,6 +41,9 @@ export async function reconcilePilot(): Promise<Flags> {
 
     return getFlags();
   }
+
+  if (decision.on === false)
+    return getFlags();
 
   await setPilotPending('on');
   const next = await setFlags({ autoQueue: true });
