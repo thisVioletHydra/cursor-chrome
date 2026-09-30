@@ -1,5 +1,5 @@
 import { getFlags } from './flags';
-import { freshPilot, pilotStep, SERVER_SILENT, SERVER_WAIT } from './pilot';
+import { freshPilot, pilotStep, SERVER_SILENT, SERVER_WAIT } from '../chrome/pilot';
 import { browser } from '../browser-host';
 
 const LINK_KEY = 'pilotLink';

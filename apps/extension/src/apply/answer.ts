@@ -1,4 +1,4 @@
-import { getSyncKey } from './apply-log';
+import { getSyncKey } from '../diary/apply-log';
 import { syncBase } from './queue-run';
 
 export type CloudAnswer = { answer?: string; human?: boolean; reason?: string };

@@ -1,6 +1,6 @@
 import type { ApplyPayload } from './bridge';
 
-import { isJunkApply } from '../chrome/apply-log';
+import { isJunkApply } from '../diary/apply-log';
 import { ancestors, ask, localDay } from './bridge';
 
 const MONTH = 'января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря';

@@ -1,4 +1,4 @@
-import { browser } from './browser-host';
+import { browser } from '../browser-host';
 
 type WorkerSnap = {
   ok?: boolean;

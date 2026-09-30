@@ -1,4 +1,4 @@
-import { freshPilot, pilotStep, TEA_PERIOD_MS } from './pilot';
+import { freshPilot, pilotStep, TEA_PERIOD_MS } from '../chrome/pilot';
 import { browser } from '../browser-host';
 
 const SWAY = 0.16;

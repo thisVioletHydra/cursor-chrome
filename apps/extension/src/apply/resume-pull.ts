@@ -1,6 +1,6 @@
 import { fetchResumeId, postResume } from './admin-api';
-import { getSyncKey, getSyncUrl } from './apply-log';
-import { isHhUrl, requireWorkerTab, waitTab } from './worker-tab';
+import { getSyncKey, getSyncUrl } from '../diary/apply-log';
+import { isHhUrl, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
 type Pulled = {

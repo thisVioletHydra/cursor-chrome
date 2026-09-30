@@ -1,11 +1,11 @@
 import type { CommandName } from '@cursor-chrome/protocol';
 
-import { getFlags } from './flags';
-import { withStayPut } from './focus-lock';
-import { runHhApply } from './hh-apply-cmd';
-import { detachAndLog } from './human-review';
+import { getFlags } from '../pilot/flags';
+import { withStayPut } from '../tab/focus-lock';
+import { runHhApply } from '../apply/hh-apply-cmd';
+import { detachAndLog } from '../apply/human-review';
 import { ensureContent, frameMessage, hasTabId, listFrameIds, RESTRICTED, requireTabId } from './inject';
-import { adoptHhWorker, checkWorker, isHhUrl, requireWorkerTab, waitTab } from './worker-tab';
+import { adoptHhWorker, checkWorker, isHhUrl, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
 type CommandCtx = {

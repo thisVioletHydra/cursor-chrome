@@ -1,8 +1,8 @@
 // Секунды пауз берутся из кода, не из догадки.
-// Чтение, быстрое и отвлечение: apps/extension/src/chrome/pace.ts, waitMs и rare.
-// Чай: apps/extension/src/chrome/tea.ts, один бросок раз в 45 минут.
+// Чтение, быстрое и отвлечение: apps/extension/src/apply/pace.ts, waitMs и rare.
+// Чай: apps/extension/src/apply/tea.ts, один бросок раз в 45 минут.
 // На графике период и промах 15 с идут через sway (±16%). Таймер расширения тот же.
-// Отдых круга: apps/extension/src/chrome/queue-run.ts, REST_MIN_SEC / REST_MAX_SEC, один раз в restCycle.
+// Отдых круга: apps/extension/src/apply/queue-run.ts, REST_MIN_SEC / REST_MAX_SEC, один раз в restCycle.
 // Паузы перед кликом: apps/extension/src/hh/apply-run.ts, between() в clickOpen и submitStep.
 // Потолок дня: apps/hh/src/limits.ts, SEND_PER_DAY.
 // «Жду ответ» ждёт страницу и выходит раньше, потолок beat 8 с. В сумму секунд не входит.

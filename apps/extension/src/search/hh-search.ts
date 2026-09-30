@@ -1,8 +1,8 @@
-import { getFlags } from './flags';
-import { freshPilot, pilotStep } from './pilot';
-import { tabShowsCaptcha } from './hh-captcha';
-import { hangHalted, tellPage, waitBeforeLoad, whileSearching } from './page-log';
-import { getWorkerTabId, isBotWorkUrl, isHhUrl, openBotSearch, requireWorkerTab, wakeWorkerTab, waitTab } from './worker-tab';
+import { getFlags } from '../pilot/flags';
+import { freshPilot, pilotStep } from '../chrome/pilot';
+import { tabShowsCaptcha } from '../tab/hh-captcha';
+import { hangHalted, tellPage, waitBeforeLoad, whileSearching } from '../pilot/page-log';
+import { getWorkerTabId, isBotWorkUrl, isHhUrl, openBotSearch, requireWorkerTab, wakeWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
 const FIRST_PAGE = 0;

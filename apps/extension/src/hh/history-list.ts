@@ -1,4 +1,4 @@
-import { isJunkApply } from '../chrome/apply-log';
+import { isJunkApply } from '../diary/apply-log';
 
 export type HistoryItem = {
   title: string;

@@ -1,8 +1,8 @@
 import type { WorkerCheck } from './worker-tab';
 
-import { getSyncKey, getSyncUrl } from './apply-log';
+import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 import { withStayPut } from './focus-lock';
-import { huntSearchUrl } from './hh-search';
+import { huntSearchUrl } from '../search/hh-search';
 import { adoptHhWorker, checkWorker, getWorkerTabId, isBotWorkUrl, isHhUrl, listJobTabs, openBotSearch, pinWorker, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
 

@@ -1,8 +1,8 @@
-import { PILOT_LINK_KEY, readPilotLink, SERVER_SILENT, SERVER_WAIT } from './chrome/pilot-link';
-import { WORKER_KEY } from './chrome/worker-tab';
-import { labeledApplies, paintApplyGroup, readWaitingKey } from './hh/history-list';
+import { PILOT_LINK_KEY, readPilotLink, SERVER_SILENT, SERVER_WAIT } from '../pilot/pilot-link';
+import { WORKER_KEY } from '../tab/worker-tab';
+import { labeledApplies, paintApplyGroup, readWaitingKey } from '../hh/history-list';
 import { openWorkerUrl, pinHere, refreshWorkerPanel } from './popup-pin';
-import { browser } from './browser-host';
+import { browser } from '../browser-host';
 
 type ApplyRecord = {
   title: string;

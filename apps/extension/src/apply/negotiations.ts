@@ -1,9 +1,9 @@
-import { getSyncKey } from './apply-log';
-import { getFlags } from './flags';
-import { tabShowsCaptcha } from './hh-captcha';
-import { requireTabId } from './inject';
+import { getSyncKey } from '../diary/apply-log';
+import { getFlags } from '../pilot/flags';
+import { tabShowsCaptcha } from '../tab/hh-captcha';
+import { requireTabId } from '../link/inject';
 import { captchaHolding, syncBase } from './queue-run';
-import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from './worker-tab';
+import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
 export type NegotiationState = 'invitation' | 'discard' | 'response';

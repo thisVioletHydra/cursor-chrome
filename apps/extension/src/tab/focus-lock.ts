@@ -1,4 +1,4 @@
-import { freshPilot, pilotStep } from './pilot';
+import { freshPilot, pilotStep } from '../chrome/pilot';
 import { browser } from '../browser-host';
 
 type Hold = {

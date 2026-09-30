@@ -1,4 +1,4 @@
-import { tickPage } from './page-log';
+import { tickPage } from '../pilot/page-log';
 import { waitMs } from './pace';
 import { beatTea, doneTea, rollTea, swayMs } from './tea-clock';
 import { browser } from '../browser-host';

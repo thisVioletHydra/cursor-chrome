@@ -4,7 +4,7 @@ import { getFlags } from './flags';
 import { applyPilot } from './pilot-apply';
 import { clearPilotPending, readPilotPending, setPilotPending } from './pilot-link';
 import { pilotStopped } from './pilot-stop';
-import { checkWorker, isBotWorkUrl, openingTab } from './worker-tab';
+import { checkWorker, isBotWorkUrl, openingTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
 const CAPTCHA_HOLD = 'captchaHold';

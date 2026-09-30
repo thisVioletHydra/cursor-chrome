@@ -1,17 +1,17 @@
 import type { CommandName, WsRequest } from '@cursor-chrome/protocol';
 
 import { NATIVE_HOST_NAME } from '@cursor-chrome/protocol';
-import { pageInfo, runCommand } from './chrome/commands';
-import { installFocusLock } from './chrome/focus-lock';
-import { getFlags } from './chrome/flags';
-import { runMakeGood } from './chrome/make-good';
-import { postNative as sendNative } from './chrome/native-post';
-import { syncNegotiations } from './chrome/negotiations';
-import { ensureOffscreen, setBadge, waitOffscreen } from './chrome/offscreen-ctl';
-import { bindPilotWake, clearHangHalt, hangHalted, pulseNow } from './chrome/page-log';
-import { applyPilot } from './chrome/pilot-apply';
-import { clearSearchBusy, clearSearchSoon, isPaused, kickedRecently, markKicked, markSearchSoon, queueBusy, runQueue } from './chrome/queue-run';
-import { rpc } from './chrome/rpc';
+import { pageInfo, runCommand } from './link/commands';
+import { installFocusLock } from './tab/focus-lock';
+import { getFlags } from './pilot/flags';
+import { runMakeGood } from './tab/make-good';
+import { postNative as sendNative } from './link/native-post';
+import { syncNegotiations } from './apply/negotiations';
+import { ensureOffscreen, setBadge, waitOffscreen } from './link/offscreen-ctl';
+import { bindPilotWake, clearHangHalt, hangHalted, pulseNow } from './pilot/page-log';
+import { applyPilot } from './pilot/pilot-apply';
+import { clearSearchBusy, clearSearchSoon, isPaused, kickedRecently, markKicked, markSearchSoon, queueBusy, runQueue } from './apply/queue-run';
+import { rpc } from './link/rpc';
 import { browser } from './browser-host';
 
 const ALARM = 'cc-keepalive';

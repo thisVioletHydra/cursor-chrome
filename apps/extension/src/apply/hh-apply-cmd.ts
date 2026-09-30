@@ -1,7 +1,7 @@
 import { handleNeedsHuman } from './human-review';
-import { tabShowsCaptcha } from './hh-captcha';
-import { ensureContent, requireTabId, workerTopMessage } from './inject';
-import { getWorkerTabId, requireWorkerTab, waitTab } from './worker-tab';
+import { tabShowsCaptcha } from '../tab/hh-captcha';
+import { ensureContent, requireTabId, workerTopMessage } from '../link/inject';
+import { getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
 type ApplyReply = {

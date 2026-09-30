@@ -1,8 +1,8 @@
-import type { ApplyRecord } from './apply-log';
+import type { ApplyRecord } from '../diary/apply-log';
 
 import { browser } from '../browser-host';
-import { appendApply, forgetWaitDismiss, isJunkApply, listApplies, todayCount, waitingHuman } from './apply-log';
-import { adoptHhWorker, getWorkerTabId, isHhUrl } from './worker-tab';
+import { appendApply, forgetWaitDismiss, isJunkApply, listApplies, todayCount, waitingHuman } from '../diary/apply-log';
+import { adoptHhWorker, getWorkerTabId, isHhUrl } from '../tab/worker-tab';
 
 export async function isHhWorkerTab(tabId?: number): Promise<{ worker: boolean }> {
   const workerId = await getWorkerTabId();

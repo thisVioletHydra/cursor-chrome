@@ -1,8 +1,8 @@
-import type { Pilot, PilotEvent } from './pilot';
+import type { Pilot, PilotEvent } from '../chrome/pilot';
 
 import { getFlags, setFlags } from './flags';
-import { freshPilot, pilotStep } from './pilot';
-import { closePinnedHh } from './worker-tab';
+import { freshPilot, pilotStep } from '../chrome/pilot';
+import { closePinnedHh } from '../tab/worker-tab';
 
 export async function applyPilot(event: PilotEvent): Promise<Pilot> {
   const flags = await getFlags();

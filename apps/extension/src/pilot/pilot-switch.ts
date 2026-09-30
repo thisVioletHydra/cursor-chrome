@@ -1,4 +1,4 @@
-import { getSyncKey, getSyncUrl } from './apply-log';
+import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 import { bumpPilot } from './page-log';
 import { applyPilot } from './pilot-apply';
 import { clearPilotLink, clearPilotPending, gatewayText, notePilotLink, readPilotPending, SERVER_SILENT } from './pilot-link';

@@ -16,6 +16,6 @@ const shared = {
 export default defineConfig([
   { ...shared, entry: { background: 'src/background.ts' } },
   { ...shared, entry: { offscreen: 'src/offscreen.ts' } },
-  { ...shared, entry: { popup: 'src/popup.ts' } },
+  { ...shared, entry: { popup: 'src/popup/popup.ts' } },
   { ...shared, entry: { content: 'src/content.ts' } },
 ]);

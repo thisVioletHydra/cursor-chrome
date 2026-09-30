@@ -1,7 +1,7 @@
 import { setCoverLetter } from '../hh/letter';
 import { noteHours } from './hours-flag';
-import { haltHang, pilotStamp } from './page-log';
-import { noteGateway, notePilotAnswer, noteServerSilent, remoteStopCounts } from './pilot-link';
+import { haltHang, pilotStamp } from '../pilot/page-log';
+import { noteGateway, notePilotAnswer, noteServerSilent, remoteStopCounts } from '../pilot/pilot-link';
 import { rememberPace } from './pace';
 
 export type QueueItem = { id: string; company: string; title: string; url: string };

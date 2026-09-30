@@ -1,19 +1,19 @@
 import type { Hunt, QueueItem } from './admin-api';
 
 import { dropKnown, dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, markRead, postFound, rememberPage, seenAmong } from './admin-api';
-import { getSyncKey, getSyncUrl } from './apply-log';
-import { getFlags } from './flags';
-import { pinnedCaptcha, tabShowsCaptcha } from './hh-captcha';
+import { getSyncKey, getSyncUrl } from '../diary/apply-log';
+import { getFlags } from '../pilot/flags';
+import { pinnedCaptcha, tabShowsCaptcha } from '../tab/hh-captcha';
 import { loadPace, rare, waitMs } from './pace';
 import { markTeaWork, maybeTea, noteTeaSession } from './tea';
-import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage, waitBeforeLoad } from './page-log';
-import { isPilotLinkText, readPilotLink } from './pilot-link';
-import { applyPilot } from './pilot-apply';
-import { markPilotStop } from './pilot-stop';
+import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage, waitBeforeLoad } from '../pilot/page-log';
+import { isPilotLinkText, readPilotLink } from '../pilot/pilot-link';
+import { applyPilot } from '../pilot/pilot-apply';
+import { markPilotStop } from '../pilot/pilot-stop';
 import { runHhApply } from './hh-apply-cmd';
-import { collectVacancies, readVacancyPage } from './hh-search';
-import { requireTabId } from './inject';
-import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from './worker-tab';
+import { collectVacancies, readVacancyPage } from '../search/hh-search';
+import { requireTabId } from '../link/inject';
+import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
 type ApplyReply = { status?: string; reason?: string; hints?: unknown };

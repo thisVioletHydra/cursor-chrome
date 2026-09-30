@@ -1,6 +1,6 @@
-import { getFlags } from './flags';
+import { getFlags } from '../pilot/flags';
 import { restoreFocus, snapshotFocus, spareFocus, withStayPut } from './focus-lock';
-import { freshPilot, pilotStep } from './pilot';
+import { freshPilot, pilotStep } from '../chrome/pilot';
 import { browser } from '../browser-host';
 
 export const WORKER_KEY = 'workerTabId';

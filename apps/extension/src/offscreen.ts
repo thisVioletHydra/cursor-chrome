@@ -2,7 +2,7 @@ import type { CommandName, WsRequest, WsResponse } from '@cursor-chrome/protocol
 
 import { WS_URL } from '@cursor-chrome/protocol';
 import { browser } from './browser-host';
-import { holdExtLink } from './chrome/ext-link';
+import { holdExtLink } from './link/ext-link';
 
 const CONNECT_BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
 

@@ -1,7 +1,7 @@
-import { getSyncKey, getSyncUrl } from './apply-log';
+import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 import { getFlags } from './flags';
-import { noteHours } from './hours-flag';
-import { loadPace, waitMs } from './pace';
+import { noteHours } from '../apply/hours-flag';
+import { loadPace, waitMs } from '../apply/pace';
 import { reconcilePilot } from './pilot-heal';
 import { clearPilotLink, clearPilotPending, noteGateway, notePilotAnswer, noteServerSilent, readPilotPending, remoteStopCounts } from './pilot-link';
 import { applyPilot } from './pilot-apply';

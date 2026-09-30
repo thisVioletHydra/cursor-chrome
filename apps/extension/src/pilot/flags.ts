@@ -1,6 +1,6 @@
 import { clearPilotStop, pilotStopped } from './pilot-stop';
-import { clearTeaClock, resetTeaClock } from './tea-clock';
-import { openingTab } from './worker-tab';
+import { clearTeaClock, resetTeaClock } from '../apply/tea-clock';
+import { openingTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
 export type Flags = {

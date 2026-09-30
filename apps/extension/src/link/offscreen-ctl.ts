@@ -1,4 +1,4 @@
-import { getSyncKey, getSyncUrl, todayCount } from './apply-log';
+import { getSyncKey, getSyncUrl, todayCount } from '../diary/apply-log';
 import { browser } from '../browser-host';
 
 // У offscreen нет storage. Адрес и ключ читает воркер и кладёт их в ping.

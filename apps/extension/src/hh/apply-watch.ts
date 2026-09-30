@@ -1,6 +1,6 @@
 import type { ApplyPayload } from './bridge';
 
-import { isJunkApply } from '../chrome/apply-log';
+import { isJunkApply } from '../diary/apply-log';
 import { ancestors, ask } from './bridge';
 import { refreshOverlay } from './overlay';
 

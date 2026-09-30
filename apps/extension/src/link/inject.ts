@@ -1,6 +1,6 @@
 import type { CommandName } from '@cursor-chrome/protocol';
 
-import { requireWorkerTab } from './worker-tab';
+import { requireWorkerTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
 export const RESTRICTED = /^(chrome|chrome-extension|edge|about|devtools|chrome-search):/i;
