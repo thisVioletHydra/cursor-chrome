@@ -222,7 +222,7 @@ function ensureHost(): HTMLElement {
   host.id = HOST_ID;
   host.setAttribute('popover', 'manual');
   host.setAttribute('data-cc-shut', '');
-  host.style.cssText = `position:fixed;inset:12px auto auto 12px;margin:0;padding:0;border:0;background:transparent;width:220px;height:fit-content;overflow:visible;z-index:${Z};pointer-events:none;`;
+  host.style.cssText = `position:fixed;inset:auto auto 12px 12px;margin:0;padding:0;border:0;background:transparent;width:220px;height:fit-content;overflow:visible;z-index:${Z};pointer-events:none;`;
   host.attachShadow({ mode: 'open' });
   document.documentElement.append(host);
   fillHost(host);
@@ -329,7 +329,7 @@ function pad(value: number): string {
 }
 
 function paintCss(): void {
-  const text = `#${HOST_ID},#${HOST_ID}:popover-open{position:fixed;inset:12px auto auto 12px;margin:0;border:0;padding:0;background:transparent;width:220px;height:fit-content;overflow:visible;z-index:${Z};pointer-events:none}#${HOST_ID}[data-cc-shut]{display:none !important}#${HOST_ID}::backdrop{display:none;pointer-events:none}`;
+  const text = `#${HOST_ID},#${HOST_ID}:popover-open{position:fixed;inset:auto auto 12px 12px;margin:0;border:0;padding:0;background:transparent;width:220px;height:fit-content;overflow:visible;z-index:${Z};pointer-events:none}#${HOST_ID}[data-cc-shut]{display:none !important}#${HOST_ID}::backdrop{display:none;pointer-events:none}`;
   const found = document.getElementById(`${HOST_ID}-css`);
   if (found instanceof HTMLStyleElement) {
     if (found.textContent !== text)
