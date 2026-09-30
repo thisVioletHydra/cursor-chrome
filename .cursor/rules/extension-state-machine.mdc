@@ -1,0 +1,6 @@
+---
+description: Поведение расширения только через стейтмашину
+alwaysApply: true
+---
+
+Включение, выключение и закрытие вкладки бота только через `apps/extension/src/chrome/pilot.ts`. Смотри скилл extension-state-machine.

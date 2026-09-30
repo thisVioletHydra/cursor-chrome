@@ -1,5 +1,5 @@
 import { getFlags } from './flags';
-import { nextSearchPage } from './run-next';
+import { freshPilot, pilotStep } from './pilot';
 import { tabShowsCaptcha } from './hh-captcha';
 import { hangHalted, tellPage, waitBeforeLoad, whileSearching } from './page-log';
 import { getWorkerTabId, isBotWorkUrl, isHhUrl, openBotSearch, requireWorkerTab, wakeWorkerTab, waitTab } from './worker-tab';
@@ -170,7 +170,7 @@ export async function collectVacancies(
           return false;
 
         if (hit === 'more') {
-          const next = nextSearchPage(page, true);
+          const next = pilotStep(freshPilot(), { type: 'page', page, hasNext: true }).page;
           if (next === null) {
             await noteEnded(query);
 

@@ -6,12 +6,12 @@ import { syncNegotiations } from './negotiations';
 import { bindPilotSettle, clearStuckHang, forgetStuckHang, liveLines, stallStep, stalling, tellPage } from './page-log';
 import { reconcilePilot } from './pilot-heal';
 import { clearPilotLink, clearPilotPending, notePilotLink, setPilotPending } from './pilot-link';
+import { applyPilot } from './pilot-apply';
 import { clearPilotStop, markPilotStop } from './pilot-stop';
-import { nextRun } from './run-next';
 import { pushPilot, retryPilotPush } from './pilot-switch';
 import { forgetHangReport, guardCaptcha, queueBusy, readPausedUntil, readQueueReport, runQueue } from './queue-run';
 import { pullSavedResume } from './resume-pull';
-import { checkWorker, closePinnedHh, listJobTabs, openHhBackground, openOnHhTab, pinWorker } from './worker-tab';
+import { checkWorker, listJobTabs, openHhBackground, openOnHhTab, pinWorker } from './worker-tab';
 import { ensurePinnedHh, openPinnedWorker } from './worker-open';
 
 type Reply = (value?: unknown) => void;
@@ -213,6 +213,15 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
 
     return true;
   },
+  'pilot-touch': (message, reply) => {
+    const action = touchAction(message.action);
+    if (action === null)
+      return false;
+
+    replyJob(reply, applyPilot({ type: 'touch', action }));
+
+    return true;
+  },
   'set-flags': (message, reply) => {
     const patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean } = {};
     if ('hideJunk' in message)
@@ -232,6 +241,16 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
     return true;
   },
 };
+
+function touchAction(value: unknown): 'popup' | 'pin' | 'wake' | 'restore' | 'discarded' | 'tab' | null {
+  if (value === 'popup' || value === 'pin' || value === 'wake')
+    return value;
+
+  if (value === 'restore' || value === 'discarded' || value === 'tab')
+    return value;
+
+  return null;
+}
 
 async function writeFlags(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean }): Promise<unknown> {
   if (patch.autoQueue === true)
@@ -253,7 +272,8 @@ async function enablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; s
 
   await clearPilotStop();
   await setPilotPending('on');
-  const next = await setFlags(patch);
+  const decided = await applyPilot({ type: 'enable' });
+  const next = await flagsAfter(patch, decided.on);
   if (next.autoQueue === true) {
     const opened = await ensurePinnedHh();
     if (opened.ok === false)
@@ -275,14 +295,10 @@ async function enablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; s
 }
 
 async function disablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean }): Promise<unknown> {
-  const decision = nextRun({ type: 'stop', reason: 'user' });
   await setPilotPending('off');
-  if (decision.on === false)
-    await markPilotStop();
-
-  const next = await setFlags(patch);
-  if (decision.closeBotTab)
-    await closePinnedHh();
+  await markPilotStop();
+  const decided = await applyPilot({ type: 'stop', reason: 'user' });
+  const next = await flagsAfter(patch, decided.on);
 
   await clearPilotLink();
   await forgetStuckHang();

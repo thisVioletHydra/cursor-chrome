@@ -1,14 +1,13 @@
 import { getFlags } from './flags';
-import { nextRun, SERVER_WAIT } from './run-next';
+import { freshPilot, pilotStep, SERVER_SILENT, SERVER_WAIT } from './pilot';
 import { browser } from '../browser-host';
 
 const LINK_KEY = 'pilotLink';
 const PENDING_KEY = 'pilotPending';
 
 export const PILOT_LINK_KEY = LINK_KEY;
-export const SERVER_SILENT = 'сервер не ответил, попробуй позже';
 
-export { SERVER_WAIT };
+export { SERVER_SILENT, SERVER_WAIT };
 
 type Pending = 'on' | 'off' | '';
 
@@ -56,11 +55,11 @@ export async function noteGateway(status: number): Promise<void> {
   if (matters === false)
     return;
 
-  const decision = nextRun({ type: 'server', fault: '502', justEnabled: true });
-  if (decision.on === false || decision.closeBotTab)
+  const decided = pilotStep({ ...freshPilot(), on: true }, { type: 'server', fault: '502' });
+  if (decided.on === false || decided.closeBotTab)
     return;
 
-  await notePilotLink(decision.status);
+  await notePilotLink(decided.status);
 }
 
 export async function noteServerSilent(): Promise<void> {
@@ -68,11 +67,11 @@ export async function noteServerSilent(): Promise<void> {
   if (matters === false)
     return;
 
-  const decision = nextRun({ type: 'server', fault: 'timeout', justEnabled: true });
-  if (decision.on === false || decision.closeBotTab)
+  const decided = pilotStep({ ...freshPilot(), on: true }, { type: 'server', fault: 'unreachable' });
+  if (decided.on === false || decided.closeBotTab)
     return;
 
-  await notePilotLink(decision.status);
+  await notePilotLink(decided.status);
 }
 
 export async function readPilotPending(): Promise<Pending> {

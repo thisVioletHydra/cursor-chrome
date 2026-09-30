@@ -1,6 +1,6 @@
 import { getFlags } from './flags';
 import { restoreFocus, snapshotFocus, spareFocus, withStayPut } from './focus-lock';
-import { nextRun } from './run-next';
+import { freshPilot, step } from './pilot';
 import { browser } from '../browser-host';
 
 export const WORKER_KEY = 'workerTabId';
@@ -109,9 +109,22 @@ export function openingTab(): boolean {
   return shield > 0;
 }
 
+async function touchKeeps(action: 'pin' | 'wake' | 'tab' | 'discarded'): Promise<boolean> {
+  const on = (await getFlags()).autoQueue;
+  const decided = step({ ...freshPilot(), on }, { type: 'touch', action });
+
+  return decided.closeBotTab === false && decided.on === on;
+}
+
+async function keepDiscarded(tabId: number): Promise<void> {
+  if (await touchKeeps('discarded') === false)
+    return;
+
+  seen.add(tabId);
+}
+
 export async function pinWorker(tabId: number): Promise<WorkerCheck> {
-  const decision = nextRun({ type: 'touch', action: 'pin', on: true });
-  if (decision.closeBotTab || decision.on === false)
+  if (await touchKeeps('pin') === false)
     return { ok: false, reason: 'пин' };
 
   const refused = await userPage(tabId);
@@ -157,8 +170,7 @@ export async function closePinnedHh(): Promise<void> {
 
 // Хром не грузит вкладку, открытую в фоне, пока её один раз не активировать.
 export async function wakeWorkerTab(tabId: number, force = false): Promise<void> {
-  const decision = nextRun({ type: 'touch', action: 'wake', on: true });
-  if (decision.closeBotTab || decision.on === false)
+  if (await touchKeeps('wake') === false)
     return;
 
   await browser.tabs.update(tabId, { autoDiscardable: false }).catch(() => {});
@@ -532,6 +544,9 @@ async function replacement(gone: number): Promise<number | null> {
 }
 
 async function followTab(removed: number, added: number): Promise<void> {
+  if (await touchKeeps('tab') === false)
+    return;
+
   const stored = await getWorkerTabId();
   const ours = removed === stored || removed === tracked || seen.has(removed);
   if (ours === false)
@@ -585,6 +600,6 @@ if (inWorker()) {
     if (tabId !== tracked)
       return;
 
-    seen.add(tabId);
+    void keepDiscarded(tabId);
   });
 }

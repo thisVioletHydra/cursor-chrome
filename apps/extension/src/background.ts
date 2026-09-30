@@ -3,15 +3,15 @@ import type { CommandName, WsRequest } from '@cursor-chrome/protocol';
 import { NATIVE_HOST_NAME } from '@cursor-chrome/protocol';
 import { pageInfo, runCommand } from './chrome/commands';
 import { installFocusLock } from './chrome/focus-lock';
-import { getFlags, setFlags } from './chrome/flags';
+import { getFlags } from './chrome/flags';
 import { runMakeGood } from './chrome/make-good';
 import { postNative as sendNative } from './chrome/native-post';
 import { syncNegotiations } from './chrome/negotiations';
 import { ensureOffscreen, setBadge, waitOffscreen } from './chrome/offscreen-ctl';
 import { bindPilotWake, clearHangHalt, hangHalted, pulseNow } from './chrome/page-log';
+import { applyPilot } from './chrome/pilot-apply';
 import { clearSearchBusy, clearSearchSoon, isPaused, kickedRecently, markKicked, markSearchSoon, queueBusy, runQueue } from './chrome/queue-run';
 import { rpc } from './chrome/rpc';
-import { closePinnedHh } from './chrome/worker-tab';
 import { browser } from './browser-host';
 
 const ALARM = 'cc-keepalive';
@@ -40,7 +40,7 @@ let holdSoon = false;
 bindPilotWake(async () => {
   holdSoon = true;
   clearHangHalt();
-  await setFlags({ autoQueue: true });
+  await applyPilot({ type: 'enable' });
   holdSoon = false;
   void runQueue();
 });
@@ -216,7 +216,7 @@ async function hangUp(): Promise<{ ok: true }> {
   detail = 'отключено';
   await disableWsFallback();
   await setBadge(false);
-  await closePinnedHh();
+  await applyPilot({ type: 'close-tab' });
 
   return { ok: true };
 }

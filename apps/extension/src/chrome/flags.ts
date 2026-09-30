@@ -1,6 +1,6 @@
 import { clearPilotStop, pilotStopped } from './pilot-stop';
 import { clearTeaClock, resetTeaClock } from './tea-clock';
-import { closePinnedHh, openingTab } from './worker-tab';
+import { openingTab } from './worker-tab';
 import { browser } from '../browser-host';
 
 export type Flags = {
@@ -55,8 +55,6 @@ export async function setFlags(patch: Partial<Flags>): Promise<Flags> {
     await clearPilotStop();
 
   await browser.storage.local.set({ [KEY]: stored });
-  if (live.autoQueue === true && stored.autoQueue === false)
-    await closePinnedHh();
 
   return stored;
 }

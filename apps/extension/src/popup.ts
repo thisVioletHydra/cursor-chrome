@@ -26,6 +26,10 @@ const QUEUE_LABEL = 'Откликнуться сейчас';
 const CLOSE_TAB = 'Закрыть запиненную вкладку';
 const RAISE_HH = 'Поднять HH';
 
+window.addEventListener('pagehide', () => {
+  void browser.runtime.sendMessage({ type: 'pilot-touch', action: 'popup' });
+});
+
 const verEl = document.getElementById('ver');
 const mainBtn = document.getElementById('make-good') as HTMLButtonElement | null;
 const powerBtn = document.getElementById('power') as HTMLButtonElement | null;

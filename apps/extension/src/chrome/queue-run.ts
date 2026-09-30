@@ -2,18 +2,18 @@ import type { Hunt, QueueItem } from './admin-api';
 
 import { dropKnown, dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, markRead, postFound, rememberPage, seenAmong } from './admin-api';
 import { getSyncKey, getSyncUrl } from './apply-log';
-import { getFlags, setFlags } from './flags';
+import { getFlags } from './flags';
 import { pinnedCaptcha, tabShowsCaptcha } from './hh-captcha';
 import { loadPace, rare, waitMs } from './pace';
 import { markTeaWork, maybeTea, noteTeaSession } from './tea';
 import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage, waitBeforeLoad } from './page-log';
 import { isPilotLinkText, readPilotLink } from './pilot-link';
+import { applyPilot } from './pilot-apply';
 import { markPilotStop } from './pilot-stop';
-import { nextRun } from './run-next';
 import { runHhApply } from './hh-apply-cmd';
 import { collectVacancies, readVacancyPage } from './hh-search';
 import { requireTabId } from './inject';
-import { adoptHhWorker, closePinnedHh, getWorkerTabId, requireWorkerTab, waitTab } from './worker-tab';
+import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
 
 type ApplyReply = { status?: string; reason?: string; hints?: unknown };
@@ -555,7 +555,7 @@ async function noteReply(base: string, key: string, run: QueueRun, item: QueueIt
     return null;
 
   if (stop.startsWith('лимит откликов hh'))
-    await applyDaily();
+    await stopForToday();
   else
     await pauseUntilMorning();
 
@@ -578,20 +578,10 @@ function blank(reason: string): QueueRun {
 }
 
 async function stopForToday(): Promise<void> {
-  await tellPage(nextRun({ type: 'stop', reason: 'daily' }).status);
-  await applyDaily();
-}
-
-async function applyDaily(): Promise<void> {
-  const decision = nextRun({ type: 'stop', reason: 'daily' });
-  if (decision.on === false)
-    await markPilotStop();
-
-  if (decision.closeBotTab)
-    await pauseUntilMorning();
-
-  if (decision.on === false)
-    await setFlags({ autoQueue: false });
+  await markPilotStop();
+  const decided = await applyPilot({ type: 'stop', reason: 'daily' });
+  await pauseUntilMorning();
+  await tellPage(decided.status);
 }
 
 async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: string } | { note: string; saved: number; more: boolean; done: boolean; retry: boolean }> {
@@ -888,7 +878,7 @@ function stopLabel(status: Status, reason: string, text: string): string {
 
 async function pauseUntilMorning(): Promise<void> {
   await browser.storage.local.set({ [PAUSED_KEY]: nextMorning() });
-  await closePinnedHh();
+  await applyPilot({ type: 'close-tab' });
 }
 
 export async function guardCaptcha(again = false): Promise<boolean> {
@@ -932,15 +922,9 @@ async function holdCaptcha(again: boolean): Promise<void> {
 }
 
 async function applyCaptchaStop(): Promise<void> {
-  const decision = nextRun({ type: 'stop', reason: 'captcha' });
-  if (decision.on === false)
-    await markPilotStop();
-
-  if (decision.closeBotTab)
-    await pauseUntilMorning();
-
-  if (decision.on === false)
-    await setFlags({ autoQueue: false });
+  await markPilotStop();
+  await pauseUntilMorning();
+  await applyPilot({ type: 'stop', reason: 'captcha' });
 }
 
 async function postCaptcha(again: boolean): Promise<void> {

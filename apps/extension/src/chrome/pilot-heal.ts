@@ -1,56 +1,42 @@
 import type { Flags } from './flags';
 
-import { getFlags, setFlags } from './flags';
+import { getFlags } from './flags';
+import { applyPilot } from './pilot-apply';
 import { clearPilotPending, readPilotPending, setPilotPending } from './pilot-link';
 import { pilotStopped } from './pilot-stop';
-import { nextRun } from './run-next';
-import { checkWorker, closePinnedHh, isBotWorkUrl, openingTab } from './worker-tab';
+import { checkWorker, isBotWorkUrl, openingTab } from './worker-tab';
 import { browser } from '../browser-host';
 
 const CAPTCHA_HOLD = 'captchaHold';
 const PAUSED_KEY = 'pausedUntil';
 
 export async function reconcilePilot(): Promise<Flags> {
+  if (openingTab())
+    return getFlags();
+
   const flags = await getFlags();
-  if (flags.autoQueue === true || openingTab())
-    return flags;
+  const botTab = flags.autoQueue === true ? false : await botSearchPinned();
+  const explicitStop = flags.autoQueue === true ? false : await keepOff();
+  if (explicitStop === false && botTab && flags.autoQueue === false)
+    await setPilotPending('on');
 
-  const botTab = await botSearchPinned();
-  const decision = nextRun({
-    type: 'pair',
-    on: flags.autoQueue,
-    botTab,
-    explicitStop: await keepOff(),
-  });
-  if (decision.closeBotTab && botTab === false) {
-    if (openingTab() || (await getFlags()).autoQueue === true)
-      return getFlags();
-
-    const check = await checkWorker();
-    if (check.ok === true && openingTab() === false)
-      await closePinnedHh();
-
-    return getFlags();
-  }
-
-  if (decision.closeBotTab) {
-    if (openingTab() || (await getFlags()).autoQueue === true)
-      return getFlags();
-
-    await closePinnedHh();
-
-    return getFlags();
-  }
-
-  if (decision.on === false)
-    return getFlags();
-
-  await setPilotPending('on');
-  const next = await setFlags({ autoQueue: true });
-  if (next.autoQueue !== true && (await readPilotPending()) === 'on')
+  const decided = await applyPilot({ type: 'pair', botTab, explicitStop });
+  if (await healRefused(decided.on, flags.autoQueue))
     await clearPilotPending();
 
-  return next;
+  return getFlags();
+}
+
+async function healRefused(turnedOn: boolean, wasOn: boolean): Promise<boolean> {
+  if (turnedOn === false || wasOn)
+    return false;
+
+  if ((await readPilotPending()) !== 'on')
+    return false;
+
+  const stored = await getFlags();
+
+  return stored.autoQueue !== true;
 }
 
 async function botSearchPinned(): Promise<boolean> {

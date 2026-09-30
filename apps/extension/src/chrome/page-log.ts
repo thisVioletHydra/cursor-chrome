@@ -1,12 +1,11 @@
 import { getSyncKey, getSyncUrl } from './apply-log';
-import { getFlags, setFlags } from './flags';
+import { getFlags } from './flags';
 import { noteHours } from './hours-flag';
 import { loadPace, waitMs } from './pace';
 import { reconcilePilot } from './pilot-heal';
 import { clearPilotLink, clearPilotPending, noteGateway, notePilotAnswer, noteServerSilent, readPilotPending, remoteStopCounts } from './pilot-link';
+import { applyPilot } from './pilot-apply';
 import { markPilotStop } from './pilot-stop';
-import { nextRun } from './run-next';
-import { closePinnedHh } from './worker-tab';
 import { browser } from '../browser-host';
 
 const MAX_LINES = 12;
@@ -133,15 +132,8 @@ export async function haltHang(): Promise<void> {
     clearTimeout(stall);
 
   stall = undefined;
-  const decision = nextRun({ type: 'stop', reason: 'hang' });
-  if (decision.on === false)
-    await markPilotStop();
-
-  if (decision.on === false)
-    await setFlags({ autoQueue: false });
-
-  if (decision.closeBotTab)
-    await closePinnedHh();
+  await markPilotStop();
+  await applyPilot({ type: 'stop', reason: 'hang' });
 
   await clearPilotPending();
   await clearPilotLink();
@@ -434,7 +426,7 @@ export async function pulseNow(): Promise<void> {
     await onPilotSettle();
 
   if (halted)
-    await closePinnedHh();
+    await applyPilot({ type: 'stop', reason: 'hang' });
 
   let flags = await getFlags();
   if (halted === false && flags.autoQueue !== true) {

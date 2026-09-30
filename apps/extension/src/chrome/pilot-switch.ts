@@ -1,9 +1,7 @@
 import { getSyncKey, getSyncUrl } from './apply-log';
-import { setFlags } from './flags';
 import { bumpPilot } from './page-log';
+import { applyPilot } from './pilot-apply';
 import { clearPilotLink, clearPilotPending, gatewayText, notePilotLink, readPilotPending, SERVER_SILENT } from './pilot-link';
-import { nextRun } from './run-next';
-import { closePinnedHh } from './worker-tab';
 
 const PUSH_MS = 12_000;
 const RETRY_MS = 60_000;
@@ -73,21 +71,16 @@ async function postPilot(on: boolean): Promise<{ ok: true } | { ok: false; error
   }
   catch (error) {
     if (on)
-      return serverDown(timedOut(error) ? 'timeout' : 'network');
+      return serverDown(timedOut(error) ? 'timeout' : 'unreachable');
 
     return { ok: false, error: SERVER_SILENT };
   }
 }
 
-async function serverDown(fault: '502' | 'timeout' | 'network'): Promise<{ ok: false; error: string }> {
-  const decision = nextRun({ type: 'server', fault, justEnabled: true });
-  if (decision.on === false)
-    await setFlags({ autoQueue: false });
+async function serverDown(fault: '502' | 'timeout' | 'unreachable'): Promise<{ ok: false; error: string }> {
+  const decided = await applyPilot({ type: 'server', fault });
 
-  if (decision.closeBotTab)
-    await closePinnedHh();
-
-  return { ok: false, error: decision.status };
+  return { ok: false, error: decided.status.length > 0 ? decided.status : SERVER_SILENT };
 }
 
 function timedOut(error: unknown): boolean {

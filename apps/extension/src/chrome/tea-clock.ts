@@ -1,4 +1,4 @@
-import { TEA_PERIOD_MS, teaFires } from './run-next';
+import { freshPilot, pilotStep, TEA_PERIOD_MS } from './pilot';
 import { browser } from '../browser-host';
 
 const SWAY = 0.16;
@@ -94,7 +94,8 @@ async function planTea(now: number, draw: () => { hit: boolean; pause: number })
 
   const live = await settle(now);
   const due = await readTeaDue();
-  if (woke || teaFires({ runMs: live.run, needMs: live.need, teaDue: due }) === false)
+  const decided = pilotStep({ ...freshPilot(), on: true }, { type: 'tea', runMs: live.run, needMs: live.need, teaDue: due });
+  if (woke || decided.tea === false)
     return null;
 
   const drawn = draw();

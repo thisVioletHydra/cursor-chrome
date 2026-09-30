@@ -1,4 +1,4 @@
-import { nextRun } from './run-next';
+import { freshPilot, pilotStep } from './pilot';
 import { browser } from '../browser-host';
 
 type Hold = {
@@ -56,8 +56,8 @@ export async function snapshotFocus(): Promise<Hold | null> {
 }
 
 export async function restoreFocus(prev: Hold | null): Promise<void> {
-  const decision = nextRun({ type: 'touch', action: 'restore', on: true });
-  if (decision.closeBotTab || decision.on === false)
+  const decided = pilotStep({ ...freshPilot(), on: true }, { type: 'touch', action: 'restore' });
+  if (decided.closeBotTab || decided.on === false)
     return;
 
   if (prev === null)
