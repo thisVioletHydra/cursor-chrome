@@ -1,8 +1,8 @@
 import { getFlags } from '../pilot/flags';
 import { freshPilot, pilotStep } from '../chrome/pilot';
 import { tabShowsCaptcha } from '../tab/hh-captcha';
-import { hangHalted, loadWithin, tellPage, waitBeforeLoad, whileSearching } from '../pilot/page-log';
-import { PAGE_LOAD_MS, pageLoadMiss } from './page-load';
+import { hangHalted, loadWithin, tellPage, whileSearching } from '../pilot/page-log';
+import { PAGE_LOAD_MS, flipWaitMs, pageLoadMiss, searchStep } from './page-load';
 import { getWorkerTabId, isBotWorkUrl, isHhUrl, openBotSearch, requireWorkerTab, wakeWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
@@ -52,6 +52,8 @@ export async function collectVacancies(
   rememberPage: (cursor: SearchCursor) => Promise<boolean>,
 ): Promise<SearchHit> {
   sawCaptcha = false;
+  endedQuery.clear();
+  saidEnded = false;
   const pinned = await getWorkerTabId();
   if (pinned !== null && await tabShowsCaptcha(pinned))
     return miss(true, false, '');
@@ -85,7 +87,7 @@ export async function collectVacancies(
       return false;
     }
 
-    async function harvest(query: string, page: number, hold: number | null, noteSeen: boolean): Promise<PageHit> {
+    async function harvest(query: string, page: number, hold: number | null): Promise<PageHit> {
       const pulled = await pull(tabId, searchUrl(query, page));
       if (sawCaptcha)
         return 'fail';
@@ -102,11 +104,14 @@ export async function collectVacancies(
       if (isLogin(pulled.url, pulled.html))
         return 'login';
 
-      const batch = cardsOf(serpHtml(pulled.html));
-      if (batch.length === 0 || landedEarlier(pulled.url, page))
-        return 'empty';
+      if (landedEarlier(pulled.url, page))
+        return 'end';
 
+      const batch = cardsOf(serpHtml(pulled.html));
       const more = pulled.html.includes('data-qa="pager-next"');
+      if (batch.length === 0)
+        return searchStep({ saved: 0, hasNext: more });
+
       const fitting = batch.filter(card => fitsTitle(card.title, queries));
       const marks = await knownOnPage(
         batch.map(card => card.id),
@@ -120,23 +125,21 @@ export async function collectVacancies(
         return 'fail';
       }
 
-      if (noteSeen && batch.every(card => marks.seen.has(card.id)))
+      if (batch.every(card => marks.seen.has(card.id)))
         await tellPage(`уже видели, ${batch.length}`);
 
-      if (marks.saved.length > 0) {
+      const step = searchStep({ saved: marks.saved.length, hasNext: more });
+      if (step === 'saved') {
         saved += marks.saved.length;
         done = false;
         await tellPage(`в список ${marks.saved.length}`);
-        if (hold === null && more === false)
+        if (more === false)
           await noteEnded(query);
 
         return 'saved';
       }
 
-      if (more)
-        return 'more';
-
-      return 'end';
+      return step;
     }
 
     async function noteMiss(): Promise<void> {
@@ -147,12 +150,10 @@ export async function collectVacancies(
       await tellPage('не прочиталась страница hh');
     }
 
+    const openedFirst = new Set<string>();
     for (const query of queries) {
       const deep = storedPage(pages[query]);
-      if (deep === FIRST_PAGE && endedQuery.has(query) === false)
-        continue;
-
-      const hit = await harvest(query, FIRST_PAGE, deep, false);
+      const hit = await harvest(query, FIRST_PAGE, deep);
       if (hit === 'login')
         return true;
 
@@ -161,6 +162,12 @@ export async function collectVacancies(
 
       if (hit === 'fail' || hit === 'saved')
         return false;
+
+      if (hit === 'more')
+        openedFirst.add(query);
+
+      if (hit === 'end')
+        await noteEnded(query);
     }
 
     for (const query of queries) {
@@ -168,8 +175,11 @@ export async function collectVacancies(
         continue;
 
       let page = storedPage(pages[query]);
+      if (page === FIRST_PAGE && openedFirst.has(query))
+        page = 1;
+
       while (true) {
-        const hit = await harvest(query, page, null, true);
+        const hit = await harvest(query, page, null);
         if (hit === 'login')
           return true;
 
@@ -181,17 +191,14 @@ export async function collectVacancies(
 
         if (hit === 'more') {
           const next = pilotStep(freshPilot(), { type: 'page', page, hasNext: true }).page;
-          if (next === null) {
-            await noteEnded(query);
-
+          if (next === null)
             break;
-          }
 
           page = next;
           continue;
         }
 
-        if (hit === 'empty' && await keep(query, page) === false)
+        if (await keep(query, page) === false)
           return false;
 
         await noteEnded(query);
@@ -235,7 +242,7 @@ export async function readVacancyPage(tabId: number, id: string, url: string): P
   return vacancyFromHtml(pulled.html, id, url);
 }
 
-type PageHit = 'login' | 'fail' | 'saved' | 'empty' | 'end' | 'more' | 'miss';
+type PageHit = 'login' | 'fail' | 'saved' | 'end' | 'more' | 'miss';
 
 function heldPage(hold: number | null, page: number, more: boolean): number {
   if (hold !== null)
@@ -362,7 +369,7 @@ function onHhRoot(url: string): boolean {
 
 // Service worker fetch не видит сессию вкладки. Запрос делает сама страница hh.ru.
 async function pull(tabId: number, url: string): Promise<{ url: string; html: string } | null> {
-  await waitBeforeLoad();
+  await flipPause();
   if (hangHalted())
     return null;
 
@@ -393,7 +400,7 @@ async function readSearchPage(tabId: number, url: string, until: number): Promis
   if (late(until) || hangHalted() || await captchaNow(tabId, until))
     return null;
 
-  await showUrl(tabId, url, false, until);
+  await showUrl(tabId, url, until);
   if (late(until) || sawCaptcha || hangHalted() || await captchaNow(tabId, until))
     return null;
 
@@ -445,10 +452,7 @@ async function readTab(tabId: number, until = 0): Promise<{ url: string; html: s
   }
 }
 
-async function showUrl(tabId: number, url: string, paced = true, until = 0): Promise<void> {
-  if (paced)
-    await waitBeforeLoad();
-
+async function showUrl(tabId: number, url: string, until = 0): Promise<void> {
   const deadline = until > 0 ? until : Date.now() + PAGE_LOAD_MS;
   if (late(deadline) || hangHalted() || await captchaNow(tabId, deadline))
     return;
@@ -780,6 +784,10 @@ function within<T>(work: Promise<T>, ms: number): Promise<T | null> {
       },
     );
   });
+}
+
+function flipPause(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, flipWaitMs(Math.random())));
 }
 
 function pause(min: number, max: number): Promise<void> {

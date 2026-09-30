@@ -1,4 +1,5 @@
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
+import { foldLiveLine } from '../search/page-load';
 import { getFlags } from './flags';
 import { noteHours } from '../apply/hours-flag';
 import { loadPace, waitMs } from '../apply/pace';
@@ -172,10 +173,9 @@ export async function tellPage(line: string): Promise<void> {
     return;
   }
 
-  if (sameTick(previous, text) && lines.length > 0)
-    lines[lines.length - 1] = text;
-  else
-    lines.push(text);
+  const folded = foldLiveLine(lines, text);
+  lines.length = 0;
+  lines.push(...folded);
 
   if (lines.length > MAX_LINES)
     lines.shift();
@@ -293,27 +293,13 @@ async function broadcast(rows: string[]): Promise<void> {
   }
 }
 
-function sameTick(previous: string, next: string): boolean {
-  if (SEARCH_TICK.test(previous) && SEARCH_TICK.test(next))
-    return true;
-
-  if (PAGE_TICK.test(previous) && PAGE_TICK.test(next))
-    return true;
-
-  const was = previous.match(TICK);
-  const now = next.match(TICK);
-  if (was === null || now === null)
-    return false;
-
-  return was[1] === now[1];
-}
-
 function movingTick(text: string): boolean {
   return TICK.test(text) || SEARCH_TICK.test(text) || PAGE_TICK.test(text);
 }
 
 let searchGen = 0;
 let pagePulse = 0;
+let pageClockFrom = 0;
 let loadingPage = false;
 
 export async function whileSearching<T>(work: () => Promise<T>): Promise<T> {
@@ -351,9 +337,13 @@ async function beatSearch(gen: number, started: number): Promise<void> {
 }
 
 export async function loadWithin<T>(work: Promise<T>, ms: number): Promise<T | undefined> {
+  if (loadingPage)
+    return withinMs(work, ms);
+
   const gen = ++pagePulse;
+  pageClockFrom = Date.now();
   loadingPage = true;
-  void runPageClock(gen, Date.now());
+  void runPageClock(gen, pageClockFrom);
   try {
     return await withinMs(work, ms);
   }

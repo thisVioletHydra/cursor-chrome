@@ -132,6 +132,12 @@ export async function watchPulse(line: string): Promise<boolean> {
 
   if (TICK.test(text) || searchTick(text)) {
     stepped = true;
+    const last = rows[rows.length - 1];
+    if (last !== undefined && last.death === false && tickLine(last.text) && last.text !== text) {
+      last.text = text;
+      last.at = Date.now();
+      await save();
+    }
 
     return pilotStop();
   }
@@ -385,6 +391,10 @@ function queueRestHang(text: string): boolean {
 
 function searchTick(text: string): boolean {
   return SEARCH_TICK.test(text) || PAGE_TICK.test(text);
+}
+
+function tickLine(text: string): boolean {
+  return TICK.test(text) || searchTick(text);
 }
 
 function searchHang(text: string): boolean {
