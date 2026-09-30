@@ -5,6 +5,7 @@ import { browser } from '../browser-host';
 
 const PAGE_CAP = 20;
 let sawCaptcha = false;
+let peekAfterCap = false;
 const PAGE_MS = 45_000;
 const SEARCH = 'https://hh.ru/search/vacancy';
 const HH_ROOT = 'https://hh.ru/';
@@ -52,13 +53,26 @@ export async function collectVacancies(
   if (pinned !== null && await tabShowsCaptcha(pinned))
     return miss(true, false, '');
 
+  const capped = pagesCapped(queries, pages);
+  if (capped && peekAfterCap === false) {
+    peekAfterCap = true;
+    await tellPage('страницы кончились');
+
+    return { login: false, captcha: false, saved: 0, more: false, done: false, reason: 'страницы кончились' };
+  }
+
   const tabId = await searchTab();
   if (sawCaptcha)
     return miss(true, false, '');
 
-  if (tabId === null)
-    return miss(false, false, 'нет запиненной вкладки hh');
+  if (tabId === null) {
+    await tellPage('нет запиненной вкладки hh');
 
+    return miss(false, false, 'нет запиненной вкладки hh');
+  }
+
+  const peekOnce = capped && peekAfterCap;
+  peekAfterCap = false;
   const here = await browser.tabs.get(tabId).catch(() => null);
   if (here !== null && isLogin(here.url || '', ''))
     return { login: true, captcha: false, saved: 0, more: false, done: false, reason: '' };
@@ -80,10 +94,16 @@ export async function collectVacancies(
       return false;
     }
 
+    let forced = false;
     for (const query of queries) {
       let page = storedPage(pages[query]);
-      if (page >= PAGE_CAP)
-        continue;
+      if (page >= PAGE_CAP) {
+        if (peekOnce === false || forced)
+          continue;
+
+        page = 0;
+        forced = true;
+      }
 
       opened = true;
       while (page < PAGE_CAP) {
@@ -107,6 +127,9 @@ export async function collectVacancies(
 
         const batch = cardsOf(serpHtml(pulled.html));
         if (batch.length === 0) {
+          if (forced)
+            return false;
+
           const next = pulled.html.includes('data-qa="pager-next"') && page + 1 < PAGE_CAP ? page + 1 : PAGE_CAP;
           if (await keep(query, next) === false)
             return false;
@@ -119,6 +142,9 @@ export async function collectVacancies(
         }
 
         if (landedEarlier(pulled.url, page)) {
+          if (forced)
+            return false;
+
           const next = page + 1 < PAGE_CAP ? page + 1 : PAGE_CAP;
           if (await keep(query, next) === false)
             return false;
@@ -136,7 +162,7 @@ export async function collectVacancies(
         const marks = await knownOnPage(
           batch.map(card => card.id),
           fitting.map(card => ({ id: card.id, url: card.url, title: card.title })),
-          { query, page: next },
+          { query, page: forced ? PAGE_CAP : next },
         );
         if (marks === null) {
           checkFailed = true;
@@ -156,7 +182,13 @@ export async function collectVacancies(
 
           return false;
         }
+
+        if (forced)
+          return false;
       }
+
+      if (forced)
+        return false;
     }
 
     return false;
@@ -181,8 +213,14 @@ export async function collectVacancies(
   }
 
   if (saved === 0 && sawCards === false) {
-    if (opened === false)
-      return { login: false, captcha: false, saved: 0, more: false, done: true, reason: '' };
+    if (opened === false) {
+      peekAfterCap = true;
+      await tellPage('страницы кончились');
+
+      return { login: false, captcha: false, saved: 0, more: false, done: false, reason: 'страницы кончились' };
+    }
+
+    await tellPage('пустая выдача');
 
     return { login: false, captcha: false, saved: 0, more: false, done, reason: 'пустая выдача' };
   }
@@ -202,6 +240,10 @@ export async function readVacancyPage(tabId: number, id: string, url: string): P
     return null;
 
   return vacancyFromHtml(pulled.html, id, url);
+}
+
+function pagesCapped(queries: string[], pages: Readonly<Record<string, number>>): boolean {
+  return queries.length > 0 && queries.every(query => storedPage(pages[query]) >= PAGE_CAP);
 }
 
 function storedPage(page: number | undefined): number {

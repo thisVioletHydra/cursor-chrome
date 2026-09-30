@@ -114,7 +114,7 @@ export async function forgetStuckHang(): Promise<void> {
   clearStuckHang();
   const dropped = onHangClear !== undefined ? await onHangClear() : false;
   if (had || dropped)
-    await browser.runtime.sendMessage({ type: 'hang-clear' }).catch(() => {});
+    await withinMs(browser.runtime.sendMessage({ type: 'hang-clear' }).catch(() => {}), 400);
 }
 
 export async function haltHang(): Promise<void> {
@@ -150,12 +150,19 @@ export async function tellPage(line: string): Promise<void> {
 
   if (repeatedHang(text)) {
     planStall();
-    await enqueuePulse(text);
+    await withinMs(enqueuePulse(text), 1_000);
 
     return;
   }
 
   const previous = lines[lines.length - 1] ?? '';
+  if (previous === text) {
+    planStall();
+    await withinMs(enqueuePulse(text), 1_000);
+
+    return;
+  }
+
   if (sameTick(previous, text) && lines.length > 0)
     lines[lines.length - 1] = text;
   else
@@ -165,9 +172,9 @@ export async function tellPage(line: string): Promise<void> {
     lines.shift();
 
   planStall();
-  await Promise.all([enqueuePulse(text), broadcast(lines)]);
+  await withinMs(Promise.all([enqueuePulse(text), broadcast(lines)]), 1_000);
   if (stallText(text))
-    await browser.runtime.sendMessage({ type: 'hang-status', step: stallStep() }).catch(() => {});
+    void withinMs(browser.runtime.sendMessage({ type: 'hang-status', step: stallStep() }).catch(() => {}), 400);
 }
 
 const STAGE: Record<string, string> = {
@@ -175,7 +182,6 @@ const STAGE: Record<string, string> = {
   быстро: 'пролистал',
   чай: 'ушёл курить',
   отвлёкся: 'отвлёкся',
-  жду: 'жду очередь',
 };
 
 export async function tickPage(label: string, ms: number, resume: '' | 'hunt' = ''): Promise<void> {
@@ -186,8 +192,9 @@ export async function tickPage(label: string, ms: number, resume: '' | 'hunt' = 
   loopOwns = true;
   try {
     while (Date.now() < job.until && halted === false) {
+      const beat = Date.now();
       await postWaitSecond();
-      const pause = Math.min(1_000, job.until - Date.now());
+      const pause = Math.min(1_000 - (Date.now() - beat), job.until - Date.now());
       if (pause > 0)
         await delay(pause);
     }
@@ -210,17 +217,14 @@ function planStall(): void {
     clearTimeout(stall);
 
   stall = undefined;
-  if (armed === 0 || halted)
+  if (armed === 0 || halted || namedWait)
     return;
 
   const quiet = Date.now() - notedAt;
-  if (namedWait && quiet < 5_000)
-    return;
-
   const limit = stallLimit();
   stall = setTimeout(() => {
     stall = undefined;
-    if (armed === 0 || halted)
+    if (armed === 0 || halted || namedWait)
       return;
 
     if (Date.now() - notedAt < stallLimit() - 1000) {
@@ -233,6 +237,9 @@ function planStall(): void {
     if (step === 'ищу вакансию' || step.startsWith('ищу вакансию,'))
       return;
 
+    if (queueRestStep(step))
+      return;
+
     const mins = Math.max(1, Math.round((Date.now() - notedAt) / 60_000));
     void tellPage(serverWait ? 'сервер молчит' : `я завис: ${step}, ${mins} мин`);
   }, Math.max(0, limit - quiet));
@@ -240,6 +247,10 @@ function planStall(): void {
 
 function stallLimit(): number {
   return serverWait ? SERVER_STALL_MS : STALL_MS;
+}
+
+function queueRestStep(step: string): boolean {
+  return step === 'жду очередь' || /^жду \d+$/.test(step);
 }
 
 function repeatedHang(text: string): boolean {
@@ -255,19 +266,19 @@ function repeatedHang(text: string): boolean {
 
 // Сообщение во вкладку не активирует её. Зависший кадр не держит секунды.
 async function broadcast(rows: string[]): Promise<void> {
-  const tabs = await Promise.race([
+  const tabs = await withinMs(
     browser.tabs.query({ url: HH_URLS }).catch(() => [] as chrome.tabs.Tab[]),
-    delay(400).then(() => [] as chrome.tabs.Tab[]),
-  ]);
-  await Promise.race([
-    Promise.all(tabs.map(async (tab) => {
-      if (typeof tab.id !== 'number')
-        return;
+    400,
+  );
+  if (tabs === undefined)
+    return;
 
-      await browser.tabs.sendMessage(tab.id, { type: 'hh-log', lines: rows }).catch(() => {});
-    })),
-    delay(400),
-  ]);
+  for (const tab of tabs) {
+    if (typeof tab.id !== 'number')
+      continue;
+
+    void withinMs(browser.tabs.sendMessage(tab.id, { type: 'hh-log', lines: rows }).catch(() => {}), 400);
+  }
 }
 
 function sameTick(previous: string, next: string): boolean {
@@ -630,6 +641,22 @@ function pilotAuto(body: unknown): boolean {
 
 function stopFlag(body: unknown): boolean {
   return typeof body === 'object' && body !== null && 'stop' in body && body.stop === true;
+}
+
+function withinMs<T>(work: Promise<T>, ms: number): Promise<T | undefined> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(undefined), ms);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(undefined);
+      },
+    );
+  });
 }
 
 function delay(ms: number): Promise<void> {

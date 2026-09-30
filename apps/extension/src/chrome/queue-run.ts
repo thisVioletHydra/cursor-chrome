@@ -561,11 +561,17 @@ function blank(reason: string): QueueRun {
 }
 
 async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: string } | { note: string; saved: number; more: boolean; done: boolean; retry: boolean }> {
-  if (hunt.want === false)
-    return { note: 'сервер не просит поиск', saved: 0, more: false, done: false, retry: true };
+  if (hunt.want === false) {
+    await tellPage('сервер не просит поиск');
 
-  if (hunt.queries.length === 0)
+    return { note: 'сервер не просит поиск', saved: 0, more: false, done: false, retry: true };
+  }
+
+  if (hunt.queries.length === 0) {
+    await tellPage('сервер не прислал запрос');
+
     return { note: 'сервер не прислал запрос', saved: 0, more: false, done: false, retry: true };
+  }
 
   const found = await collectVacancies(hunt.queries, hunt.pages, async (ids, links, cursor) => {
     const marks = await seenAmong(base, key, ids, links, cursor);
@@ -590,7 +596,7 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
     return { stop: 'hh.ru просит войти (login)' };
   }
 
-  const retry = found.reason === 'не прочиталась страница hh' || found.reason === 'сервер не сверил вакансии';
+  const retry = found.done === false && found.saved === 0 && found.reason.length > 0;
 
   return { note: found.reason, saved: found.saved, more: found.more, done: found.done, retry };
 }

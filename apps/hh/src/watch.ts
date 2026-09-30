@@ -79,15 +79,21 @@ export async function watchPulse(line: string): Promise<boolean> {
 
   silenceNoted = false;
   const previous = pulse.line;
-  if (text.startsWith('я завис') && queueWait(previous) && tickMoving()) {
+  if (text.startsWith('я завис') && queueRestHang(text)) {
     pulse = { at: Date.now(), line: previous };
 
     return pilotStop();
   }
 
   if (frozenTick(text)) {
+    if (queueWait(text)) {
+      pulse = { at: Date.now(), line: text };
+
+      return pilotStop();
+    }
+
     const mins = Math.max(1, Math.round((Date.now() - tickAt) / 60_000));
-    const hang = `я завис: жду очередь, ${mins} мин`;
+    const hang = `я завис: ${text}, ${mins} мин`;
     pulse = { at: Date.now(), line: hang };
     await mark('extension', hang, true);
 
@@ -228,7 +234,7 @@ async function silence(): Promise<void> {
     return;
 
   const where = shortStep(pulse.line) ? pulse.line : 'нет пульса';
-  if (queueWait(where) && frozenTick(where) === false && tickMoving())
+  if (queueWait(where))
     return;
 
   if (where === 'ищу вакансию' || searchTick(where)) {
@@ -247,9 +253,8 @@ async function silence(): Promise<void> {
 
   silenceNoted = true;
 
-  const stuck = queueWait(where) || frozenTick(where);
   const mins = Math.max(1, Math.round((Date.now() - (tickAt || pulse.at)) / 60_000));
-  const text = stuck ? `я завис: жду очередь, ${mins} мин` : `замолчало на шаге ${where}`;
+  const text = frozenTick(where) ? `я завис: ${where}, ${mins} мин` : `замолчало на шаге ${where}`;
   try {
     await mark('extension', text, true);
   }
@@ -360,6 +365,21 @@ function hangLine(text: string): boolean {
 
 function queueWait(text: string): boolean {
   return text === 'жду очередь' || /^жду \d+$/.test(text);
+}
+
+function queueRestHang(text: string): boolean {
+  if (queueWait(text))
+    return true;
+
+  if (text.startsWith('я завис: ') === false)
+    return false;
+
+  const body = text.slice('я завис: '.length);
+  const at = body.lastIndexOf(', ');
+  if (at < 0)
+    return false;
+
+  return queueWait(body.slice(0, at));
 }
 
 function searchTick(text: string): boolean {
