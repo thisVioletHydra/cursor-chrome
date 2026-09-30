@@ -976,7 +976,9 @@ function textAt(html: string, qa: string): string {
   const rest = block.slice(close + 1);
   const end = rest.search(/<\/(a|span|div|h\d)/i);
 
-  return decode(end < 0 ? rest : rest.slice(0, end));
+  const piece = (end < 0 ? rest : rest.slice(0, end)).replace(/<svg\b[\s\S]*$/i, ' ');
+
+  return decode(piece);
 }
 
 function currencyOf(text: string): string {

@@ -383,9 +383,20 @@ function showBoard(next: 'accepted' | 'hidden'): void {
   board = next;
 }
 
+function plainLabel(raw: string): string {
+  return raw
+    .replace(/<svg\b[\s\S]*$/i, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/<[^>\n]*/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function passedName(row: { company: string; title: string; id: string }): string {
-  const company = row.company.trim();
-  const title = row.title.trim();
+  const company = plainLabel(row.company);
+  const title = plainLabel(row.title);
   if (company.length > 0 && title.length > 0)
     return `${company} · ${title}`;
 
@@ -614,7 +625,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
             {#each stats.rows as row (row.id)}
               <tr>
                 <td class="max-w-xs truncate">
-                  <a class="text-zinc-200 underline-offset-4 hover:underline" href={row.url} target="_blank" rel="noreferrer">{row.company} · {row.title}</a>
+                  <a class="text-zinc-200 underline-offset-4 hover:underline" href={row.url} target="_blank" rel="noreferrer">{plainLabel(row.company)} · {plainLabel(row.title)}</a>
                 </td>
                 <td><span class="badge badge-sm {statusBadge[row.status] ?? 'badge-ghost'}">{statusText[row.status] ?? row.status}</span></td>
                 <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
