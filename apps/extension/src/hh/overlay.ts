@@ -9,6 +9,8 @@ type Overlay = {
   shadow: ShadowRoot;
 };
 
+const OVERLAY_Z = '2147483646';
+
 let overlay: Overlay | null = null;
 let guarded = false;
 let refreshing = false;
@@ -35,8 +37,10 @@ export function mountOverlay(): void {
       };
     }
 
-    existing.setAttribute('popover', 'manual');
+    if (existing.getAttribute('popover') !== 'manual')
+      existing.setAttribute('popover', 'manual');
 
+    keepOverlayZ(existing);
     guardPage();
     void refreshOverlay();
 
@@ -46,11 +50,12 @@ export function mountOverlay(): void {
   const host = document.createElement('div');
   host.id = 'cc-hh-overlay';
   host.setAttribute('popover', 'manual');
-  host.style.cssText = 'position:fixed;inset:auto 12px 12px auto;margin:0;padding:0;border:0;background:transparent;width:220px;overflow:visible;';
+  host.style.cssText = `position:fixed;inset:auto 12px 12px auto;margin:0;padding:0;border:0;background:transparent;width:220px;overflow:visible;z-index:${OVERLAY_Z};`;
   const shadow = host.attachShadow({ mode: 'open' });
   shadow.innerHTML = `
     <style>
       :host { display: block; }
+      :host([data-cc-shut]) { display: none !important; }
       .cc-card { width: 220px; background: #111; border: 1px solid #333; border-radius: 10px; padding: 8px 10px; box-shadow: 0 8px 24px #0008; font: 12px/1.35 ui-sans-serif, system-ui, sans-serif; color: #eee; }
       button { width: 100%; margin: 0 0 6px; padding: 8px; border: 0; border-radius: 6px; background: #222; color: #eee; cursor: pointer; font: inherit; }
       button.cc-drop { width: auto; flex: 0 0 auto; margin: 0; padding: 0 4px; background: transparent; color: #9ca3af; font-size: 14px; line-height: 1; }
@@ -233,17 +238,32 @@ async function paintOverlay(): Promise<void> {
 }
 
 function paintOverlayCss(): void {
-  if (document.getElementById('cc-hh-overlay-css'))
+  const text = `#cc-hh-overlay,#cc-hh-overlay:popover-open{position:fixed;inset:auto 12px 12px auto;margin:0;border:0;padding:0;background:transparent;width:220px;height:fit-content;overflow:visible;z-index:${OVERLAY_Z}}#cc-hh-overlay[data-cc-shut]{display:none !important;pointer-events:none}#cc-hh-overlay::backdrop{display:none;pointer-events:none}`;
+  const found = document.getElementById('cc-hh-overlay-css');
+  if (found instanceof HTMLStyleElement) {
+    if (found.textContent === text)
+      return;
+
+    found.textContent = text;
+
     return;
+  }
 
   const css = document.createElement('style');
   css.id = 'cc-hh-overlay-css';
-  css.textContent = '#cc-hh-overlay,#cc-hh-overlay:popover-open{position:fixed;inset:auto 12px 12px auto;margin:0;border:0;padding:0;background:transparent;width:220px;height:fit-content;overflow:visible}#cc-hh-overlay::backdrop{display:none;pointer-events:none}';
+  css.textContent = text;
   document.documentElement.append(css);
 }
 
 function rowKey(item: HistoryRow): string {
   return `${item.vacancyId}|${item.title}|${item.company}|${item.hints?.[0] || ''}|${item.sentAt}`;
+}
+
+function keepOverlayZ(host: HTMLElement): void {
+  if (host.style.zIndex === OVERLAY_Z)
+    return;
+
+  host.style.zIndex = OVERLAY_Z;
 }
 
 function raiseOverlay(host: HTMLElement): void {
@@ -256,20 +276,30 @@ function raiseOverlay(host: HTMLElement): void {
 }
 
 function setPopVisible(host: HTMLElement, visible: boolean): boolean {
-  const open = host.hidden === false && host.matches(':popover-open');
-  if (visible === open)
-    return false;
-
+  const shut = host.hasAttribute('data-cc-shut');
+  const popped = host.matches(':popover-open');
   if (visible) {
-    host.hidden = false;
+    if (shut === false && host.hidden === false && popped)
+      return false;
+
+    if (shut)
+      host.removeAttribute('data-cc-shut');
+
+    if (host.hidden)
+      host.hidden = false;
+
     raiseOverlay(host);
 
-    return true;
+    return shut;
   }
 
-  host.hidden = true;
+  if (shut && popped === false)
+    return false;
+
+  // hidden на popover Хром снимает и роняет карточку из top layer, она остаётся под страницей.
+  host.setAttribute('data-cc-shut', '');
   try {
-    if (host.matches(':popover-open'))
+    if (popped)
       host.hidePopover();
   }
   catch {
