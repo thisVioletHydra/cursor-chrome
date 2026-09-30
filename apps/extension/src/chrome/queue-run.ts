@@ -6,7 +6,7 @@ import { getFlags, setFlags } from './flags';
 import { pinnedCaptcha, tabShowsCaptcha } from './hh-captcha';
 import { loadPace, rare, waitMs } from './pace';
 import { maybeTea, noteTeaSession } from './tea';
-import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage } from './page-log';
+import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage, waitBeforeLoad } from './page-log';
 import { runHhApply } from './hh-apply-cmd';
 import { collectVacancies, readVacancyPage } from './hh-search';
 import { requireTabId } from './inject';
@@ -710,6 +710,13 @@ async function showVacancy(url: string, read?: { base: string; key: string; id: 
     if (open === false)
       return { status: 'skip', reason: 'уже видели' };
   }
+
+  await waitBeforeLoad();
+  if (hangHalted())
+    return { status: 'skip', reason: 'расширение зависло' };
+
+  if (await tabShowsCaptcha(tabId))
+    return { status: 'skip', reason: 'капча' };
 
   const loaded = waitTab(tabId, 15_000);
   await browser.tabs.update(tabId, { url, active: false });

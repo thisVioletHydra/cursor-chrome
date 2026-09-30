@@ -1,6 +1,7 @@
 import { getSyncKey, getSyncUrl } from './apply-log';
 import { getFlags, setFlags } from './flags';
 import { noteHours } from './hours-flag';
+import { loadPace, waitMs } from './pace';
 import { browser } from '../browser-host';
 
 const MAX_LINES = 12;
@@ -199,6 +200,11 @@ export async function tickPage(label: string, ms: number, resume: '' | 'hunt' = 
   }
 }
 
+export async function waitBeforeLoad(): Promise<void> {
+  const pace = await loadPace();
+  await tickPage('жду', waitMs(pace.readMin, pace.readMax));
+}
+
 function planStall(): void {
   if (stall !== undefined)
     clearTimeout(stall);
@@ -298,7 +304,9 @@ export async function whileSearching<T>(work: () => Promise<T>): Promise<T> {
 
 async function runSearchClock(gen: number, started: number): Promise<void> {
   while (gen === searchGen && halted === false) {
-    await beatSearch(gen, started);
+    if (namedWait === false)
+      await beatSearch(gen, started);
+
     if (gen !== searchGen || halted)
       return;
 

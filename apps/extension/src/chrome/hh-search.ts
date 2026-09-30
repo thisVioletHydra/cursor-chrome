@@ -1,5 +1,5 @@
 import { tabShowsCaptcha } from './hh-captcha';
-import { tellPage, whileSearching } from './page-log';
+import { hangHalted, tellPage, waitBeforeLoad, whileSearching } from './page-log';
 import { getWorkerTabId, isHhUrl, requireWorkerTab, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
 
@@ -93,6 +93,9 @@ export async function collectVacancies(
 
         if (pulled === null) {
           done = false;
+          if (hangHalted())
+            return false;
+
           if (sawCards === false && saved === 0)
             unread = true;
 
@@ -281,6 +284,16 @@ async function pull(tabId: number, url: string): Promise<{ url: string; html: st
     return null;
   }
 
+  await waitBeforeLoad();
+  if (hangHalted())
+    return null;
+
+  if (await tabShowsCaptcha(tabId)) {
+    sawCaptcha = true;
+
+    return null;
+  }
+
   const fetched = await fetchInPage(tabId, url);
   if (usable(fetched))
     return fetched;
@@ -291,8 +304,8 @@ async function pull(tabId: number, url: string): Promise<{ url: string; html: st
     return null;
   }
 
-  await showUrl(tabId, url);
-  if (sawCaptcha)
+  await showUrl(tabId, url, false);
+  if (sawCaptcha || hangHalted())
     return null;
 
   if (await tabShowsCaptcha(tabId)) {
@@ -348,7 +361,19 @@ async function readTab(tabId: number): Promise<{ url: string; html: string } | n
   }
 }
 
-async function showUrl(tabId: number, url: string): Promise<void> {
+async function showUrl(tabId: number, url: string, paced = true): Promise<void> {
+  if (await tabShowsCaptcha(tabId)) {
+    sawCaptcha = true;
+
+    return;
+  }
+
+  if (paced)
+    await waitBeforeLoad();
+
+  if (hangHalted())
+    return;
+
   if (await tabShowsCaptcha(tabId)) {
     sawCaptcha = true;
 
