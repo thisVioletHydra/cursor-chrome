@@ -17,7 +17,18 @@ let hoursOn = $state(data.hours !== false);
 let hoursSaving = $state(false);
 let hoursNote = $state('');
 let hoursOk = $state(false);
-let copyNote = $state('Скопировать');
+const COPY_LABEL = 'Скопировать';
+let copyNote = $state(COPY_LABEL);
+let copyTone = $state<'idle' | 'ok' | 'fail'>('idle');
+let copyTimer: ReturnType<typeof setTimeout> | undefined;
+
+const copyClass = $derived(
+  copyTone === 'ok'
+    ? 'border-emerald-400/50 text-emerald-300'
+    : copyTone === 'fail'
+      ? 'border-rose-400/50 text-rose-300'
+      : 'border-white/15 text-zinc-100',
+);
 
 const whoName: Record<string, string> = {
   extension: 'расширение',
@@ -146,54 +157,56 @@ function clock(at: number): string {
   return new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(at);
 }
 
-function journalLine(at: number, who: string, text: string): string {
-  return `${clock(at)} ${whoName[who] ?? who} ${text}`;
+function flashCopy(note: string, tone: 'ok' | 'fail'): void {
+  copyNote = note;
+  copyTone = tone;
+  clearTimeout(copyTimer);
+  copyTimer = setTimeout(() => {
+    copyNote = COPY_LABEL;
+    copyTone = 'idle';
+    copyTimer = undefined;
+  }, 2000);
 }
 
-function visibleJournal(): string {
-  const rows = logSnap.rows;
+function shownJournal(): string {
   const list = watchList;
-  if (rows.length === 0)
-    return '';
-
   if (list === undefined)
-    return rows.map(row => journalLine(row.at, row.who, row.text)).join('\n');
+    return '';
 
   const box = list.getBoundingClientRect();
   const lines: string[] = [];
-  for (const row of rows) {
-    const item = list.querySelector<HTMLElement>(`:scope > li[data-k="${CSS.escape(logKey(row))}"]`);
-    if (item === null)
-      continue;
-
+  for (const item of list.querySelectorAll<HTMLLIElement>(':scope > li')) {
     const rect = item.getBoundingClientRect();
-    if (rect.bottom <= box.top || rect.top >= box.bottom)
+    if (rect.height === 0 || rect.bottom <= box.top || rect.top >= box.bottom)
       continue;
 
-    lines.push(journalLine(row.at, row.who, row.text));
+    const time = item.querySelector('time')?.textContent?.trim() ?? '';
+    const bits = item.querySelectorAll('span');
+    const who = bits[0]?.textContent?.trim() ?? '';
+    const text = bits[1]?.textContent?.trim() ?? '';
+    const line = [time, who, text].filter(part => part.length > 0).join(' ');
+    if (line.length > 0)
+      lines.push(line);
   }
 
-  if (lines.length > 0)
-    return lines.join('\n');
-
-  return rows.map(row => journalLine(row.at, row.who, row.text)).join('\n');
+  return lines.join('\n');
 }
 
 async function copyJournal(): Promise<void> {
-  const text = visibleJournal();
+  const text = shownJournal();
   if (text.length === 0) {
-    copyNote = 'в журнале пусто';
+    flashCopy('в журнале пусто', 'fail');
 
     return;
   }
 
   try {
     await navigator.clipboard.writeText(text);
-    copyNote = 'Скопировано';
+    flashCopy('Скопировано', 'ok');
   }
   catch (error) {
     const message = error instanceof Error ? error.message : '';
-    copyNote = message.length > 0 ? message : 'не скопировалось';
+    flashCopy(message.length > 0 ? message : 'не скопировалось', 'fail');
   }
 }
 
@@ -422,7 +435,24 @@ function hoursAnswer(payload: unknown): { ok: boolean; detail: string; hours: bo
 <section class="mb-8">
   <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
     <h2 class="text-base font-semibold">Логирование</h2>
-    <button class="btn btn-ghost btn-sm h-8 min-h-8 px-3" type="button" onclick={copyJournal}>{copyNote}</button>
+    <button
+      class="inline-flex h-8 min-h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border bg-[#10131a] px-3 text-sm font-medium transition hover:border-white/30 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-[0.98] {copyClass}"
+      type="button"
+      aria-live="polite"
+      onclick={copyJournal}
+    >
+      {#if copyTone === 'ok'}
+        <svg class="size-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <path d="M5 12.5 9.5 17 19 7" />
+        </svg>
+      {:else}
+        <svg class="size-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <rect x="9" y="9" width="11" height="11" rx="2" />
+          <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+        </svg>
+      {/if}
+      {copyNote}
+    </button>
   </div>
   <div class="overflow-hidden rounded-lg border border-white/10 bg-[#07080c] font-mono text-[13px] leading-snug">
     <p class="flex min-w-0 items-center gap-2 overflow-hidden border-b border-white/10 px-3 py-2 whitespace-nowrap">
