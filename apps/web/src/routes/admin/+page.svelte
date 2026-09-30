@@ -238,7 +238,7 @@ function rememberLog(node: HTMLUListElement): void {
 
 function placeLog(node: HTMLUListElement): void {
   if (logPlace.follow) {
-    node.scrollTop = node.scrollHeight;
+    node.scrollTop = 0;
     return;
   }
 
@@ -322,7 +322,7 @@ $effect(() => {
     if (watchList === undefined || logPlace.follow === false)
       return;
 
-    watchList.scrollTop = watchList.scrollHeight;
+    watchList.scrollTop = 0;
   });
 });
 
@@ -497,7 +497,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
       <p class="px-3 py-2 text-zinc-500">Пока тихо. Сюда попадают смена шага и поломки, не каждая секунда.</p>
     {:else}
       <ul use:keepLog class="max-h-80 overflow-x-hidden overflow-y-auto px-3 py-2 [overflow-anchor:none]" onscroll={onLogScroll}>
-        {#each logSnap.rows as row (logKey(row))}
+        {#each journalRows as row (logKey(row))}
           <li data-k={logKey(row)} class="flex items-baseline gap-x-2 py-0.5">
             <time class="shrink-0 text-xs text-zinc-500 tabular-nums whitespace-nowrap">{clock(row.at)}</time>
             <span class="shrink-0 text-xs text-zinc-500 whitespace-nowrap">{whoName[row.who] ?? row.who}</span>
