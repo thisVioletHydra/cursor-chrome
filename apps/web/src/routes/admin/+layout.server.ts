@@ -20,7 +20,7 @@ async function statsOf(preview: boolean) {
       invitations: 0,
       discards: 0,
       waitingReply: 0,
-      autopilot: { auto: false, lastNote: '' },
+      autopilot: { auto: false, lastNote: '', runAt: 0 },
     };
   }
 
@@ -44,7 +44,7 @@ async function statsOf(preview: boolean) {
     invitations: queue.filter(row => row.outcome === 'invitation').length,
     discards: queue.filter(row => row.outcome === 'discard').length,
     waitingReply: queue.filter(row => row.outcome === 'response').length,
-    autopilot: { auto: state.auto, lastNote: state.lastNote },
+    autopilot: { auto: state.auto, lastNote: state.lastNote, runAt: state.auto ? state.runAt : 0 },
   };
 }
 import { allowedLogins, readSession } from '$lib/server/session';

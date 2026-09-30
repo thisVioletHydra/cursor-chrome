@@ -23,6 +23,7 @@ const COPY_LABEL = 'Скопировать';
 let copyNote = $state(COPY_LABEL);
 let copyTone = $state<'idle' | 'ok' | 'fail'>('idle');
 let copyTimer: ReturnType<typeof setTimeout> | undefined;
+let now = $state(Date.now());
 
 const copyClass = $derived(
   copyTone === 'ok'
@@ -54,11 +55,15 @@ onMount(() => {
   const timer = setInterval(() => {
     void refresh(mine);
   }, 4_000);
+  const clock = setInterval(() => {
+    now = Date.now();
+  }, 1_000);
   void refresh(mine);
 
   return () => {
     alive = false;
     clearInterval(timer);
+    clearInterval(clock);
   };
 });
 
@@ -71,7 +76,7 @@ async function refresh(mine: number): Promise<void> {
     polling?: boolean;
     figures?: { today: number; queued: number; waiting: number; invitations: number; discards: number; waitingReply: number };
     rows?: typeof stats.rows;
-    autopilot?: { auto: boolean; lastNote: string };
+    autopilot?: { auto: boolean; lastNote: string; runAt: number };
     judged?: number;
     pulse?: { line?: string };
     log?: unknown;
@@ -156,6 +161,37 @@ const liveStep = $derived.by(() => {
 });
 
 const journalRows = $derived([...logSnap.rows].reverse());
+
+const HOUR_MS = 60 * 60 * 1000;
+
+function runMeter(auto: boolean, runAt: number, at: number): { pct: number; label: string; lap: string } {
+  if (auto === false || runAt <= 0 || at < runAt)
+    return { pct: 0, label: '', lap: '' };
+
+  const elapsed = at - runAt;
+  const hour = Math.floor(elapsed / HOUR_MS);
+
+  return {
+    pct: (elapsed % HOUR_MS) / HOUR_MS * 100,
+    label: runText(elapsed),
+    lap: hour < 1 ? '' : `x${hour + 1}`,
+  };
+}
+
+function runText(elapsed: number): string {
+  const total = Math.floor(elapsed / 60_000);
+  const hours = Math.floor(total / 60);
+  const mins = total % 60;
+  if (hours < 1)
+    return `${mins} мин`;
+
+  if (mins === 0)
+    return `${hours} ч`;
+
+  return `${hours} ч ${mins} мин`;
+}
+
+const run = $derived(runMeter(stats.autopilot.auto === true, stats.autopilot.runAt ?? 0, now));
 
 function clock(at: number): string {
   return new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(at);
@@ -489,6 +525,25 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
     </button>
   </div>
   <div class="overflow-hidden rounded-lg border border-white/10 bg-[#07080c] font-mono text-[13px] leading-snug">
+    <div class="flex items-center gap-2 border-b border-white/10 px-3 py-2">
+      <div
+        class="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-white/10"
+        role="progressbar"
+        aria-label="Время прогона"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(run.pct)}
+        aria-valuetext={run.label}
+      >
+        <div class="h-full rounded-full bg-[#8eae9a]" style:width="{run.pct}%"></div>
+      </div>
+      {#if run.label}
+        <span class="shrink-0 text-xs text-zinc-400 tabular-nums">{run.label}</span>
+      {/if}
+      {#if run.lap}
+        <span class="shrink-0 text-xs text-zinc-200 tabular-nums">{run.lap}</span>
+      {/if}
+    </div>
     <p class="flex min-w-0 items-center gap-2 overflow-hidden border-b border-white/10 px-3 py-2 whitespace-nowrap">
       <span class="shrink-0 text-zinc-500">&gt;</span>
       <span class="min-w-0 truncate {liveStep.length > 0 ? 'text-[#9dccab]' : 'text-zinc-500'}">{liveStep.length > 0 ? liveStep : 'пульса ещё нет'}</span>
@@ -577,8 +632,11 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
           const parsed = restartDetail(result.type === 'success' ? result.data : null);
           restartOk = parsed.ok;
           restartNote = parsed.detail;
-          if (parsed.ok)
-            stats = { ...stats, autopilot: { ...stats.autopilot, auto: true } };
+          if (parsed.ok) {
+            const pilot = stats.autopilot;
+            const runAt = pilot.auto === true && pilot.runAt > 0 ? pilot.runAt : Date.now();
+            stats = { ...stats, autopilot: { ...pilot, auto: true, runAt } };
+          }
         };
       }}
     >

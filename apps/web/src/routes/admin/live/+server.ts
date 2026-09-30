@@ -34,7 +34,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
       status: row.status,
       when: when.format(row.doneAt ?? row.at),
     })),
-    autopilot: { auto: state.auto, lastNote: state.lastNote },
+    autopilot: { auto: state.auto, lastNote: state.lastNote, runAt: state.auto ? state.runAt : 0 },
     judged,
     pulse: watch.pulse,
     log: watch.rows,

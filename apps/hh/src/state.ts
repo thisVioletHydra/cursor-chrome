@@ -12,6 +12,7 @@ export type State = {
   frontAt: number;
   lessAt: number;
   queryPass: number;
+  runAt: number;
 };
 
 const EMPTY: State = {
@@ -22,6 +23,7 @@ const EMPTY: State = {
   frontAt: 0,
   lessAt: 0,
   queryPass: -1,
+  runAt: 0,
 };
 
 export function statePath(): string {
@@ -51,6 +53,7 @@ export async function readState(): Promise<State> {
     frontAt: atOf(raw.frontAt),
     lessAt: atOf(raw.lessAt),
     queryPass: typeof raw.queryPass === 'number' && Number.isFinite(raw.queryPass) ? raw.queryPass : -1,
+    runAt: atOf(raw.runAt),
   };
 }
 
@@ -62,9 +65,15 @@ function atOf(value: unknown): number {
 }
 
 export async function writeState(patch: Partial<State>): Promise<State> {
-  const next = { ...await readState(), ...patch };
+  const prev = await readState();
+  const next = { ...prev, ...patch, runAt: prev.runAt };
   if (patch.auto === true)
     next.hung = false;
+
+  if (patch.auto === false)
+    next.runAt = 0;
+  else if (patch.auto === true && (prev.auto === false || prev.runAt === 0))
+    next.runAt = Date.now();
 
   await writeJsonAtomic(statePath(), next);
 
