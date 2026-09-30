@@ -1,6 +1,7 @@
 import { setCoverLetter } from '../hh/letter';
 import { noteHours } from './hours-flag';
 import { haltHang, pilotStamp } from './page-log';
+import { noteGateway, notePilotAnswer, noteServerSilent, remoteStopCounts } from './pilot-link';
 import { rememberPace } from './pace';
 
 export type QueueItem = { id: string; company: string; title: string; url: string };
@@ -176,15 +177,24 @@ async function getQueue(base: string, key: string, advance = false): Promise<{ i
   const stamp = pilotStamp();
   try {
     const path = advance ? '/api/queue?cycle=1' : '/api/queue';
-    const res = await fetch(`${base}${path}`, { headers: { authorization: `Bearer ${key}` } });
-    if (res.ok === false)
+    const res = await fetch(`${base}${path}`, {
+      headers: { authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (res.ok === false) {
+      if (stamp === pilotStamp())
+        await noteGateway(res.status);
+
       return null;
+    }
 
     const body = await res.json() as { items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; stop?: unknown; hours?: unknown; day?: unknown };
     noteHours(body);
 
-    if (body.stop === true && stamp === pilotStamp())
+    if (body.stop === true && stamp === pilotStamp() && await remoteStopCounts())
       await haltHang();
+    else
+      await notePilotAnswer(body);
 
     if (typeof body.letter === 'string')
       await setCoverLetter(body.letter);
@@ -194,6 +204,9 @@ async function getQueue(base: string, key: string, advance = false): Promise<{ i
     return body;
   }
   catch {
+    if (stamp === pilotStamp())
+      await noteServerSilent();
+
     return null;
   }
 }

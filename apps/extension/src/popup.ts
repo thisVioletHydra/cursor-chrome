@@ -1,3 +1,4 @@
+import { PILOT_LINK_KEY, readPilotLink, SERVER_SILENT } from './chrome/pilot-link';
 import { labeledApplies, paintApplyGroup, readWaitingKey } from './hh/history-list';
 import { openWorkerUrl, pinHere, refreshWorkerPanel } from './popup-pin';
 import { browser } from './browser-host';
@@ -155,7 +156,14 @@ keepSessionEl?.addEventListener('change', () => {
 });
 
 browser.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || changes.flags === undefined)
+  if (area !== 'local')
+    return;
+
+  const linkChange = changes[PILOT_LINK_KEY];
+  if (linkChange !== undefined && autoOn)
+    paintPilotLink(linkChange.newValue);
+
+  if (changes.flags === undefined)
     return;
 
   const next = changes.flags.newValue;
@@ -539,6 +547,21 @@ type HhOpen = {
   url?: string;
 };
 
+function paintPilotLink(value: unknown): void {
+  const text = typeof value === 'string' ? value : '';
+  if (text.length > 0) {
+    paintStatus(text, 'fail');
+    paintPower();
+
+    return;
+  }
+
+  if (powering)
+    return;
+
+  void paintBootStatus();
+}
+
 function paintStatus(text: string, kind: 'ok' | 'fail' | 'plain' = 'plain'): void {
   if (pillEl === null)
     return;
@@ -744,6 +767,13 @@ async function paintBootStatus(): Promise<void> {
     return;
   }
 
+  const link = await readPilotLink();
+  if (link.length > 0) {
+    paintStatus(link, 'fail');
+
+    return;
+  }
+
   if (powering)
     return;
 
@@ -843,15 +873,30 @@ async function togglePower(): Promise<void> {
     }
 
     const result = await browser.runtime.sendMessage({ type: 'set-flags', autoQueue: next }) as { error?: string; autoQueue?: boolean };
+    if (typeof result?.error === 'string' && result.error.length > 0 && result.autoQueue === true) {
+      autoOn = true;
+      paintStatus(result.error, 'fail');
+
+      return;
+    }
+
     if (typeof result?.error === 'string' && result.error.length > 0) {
       powerFail = result.error;
-      if (next)
-        autoOn = false;
+      autoOn = false;
+      paintStatus('Выключено');
 
       return;
     }
 
     if (typeof result?.autoQueue !== 'boolean') {
+      await syncAuto();
+      const link = await readPilotLink();
+      if (autoOn && link.length > 0) {
+        paintStatus(link, 'fail');
+
+        return;
+      }
+
       powerFail = 'нет ответа';
       if (next)
         autoOn = false;
@@ -881,6 +926,14 @@ async function togglePower(): Promise<void> {
   }
   catch (error) {
     const text = error instanceof Error ? error.message : 'не вышло';
+    await syncAuto();
+    const link = await readPilotLink();
+    if (next && autoOn) {
+      paintStatus(link.length > 0 ? link : SERVER_SILENT, 'fail');
+
+      return;
+    }
+
     if (next) {
       powerFail = text;
       autoOn = false;

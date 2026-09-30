@@ -1,8 +1,48 @@
 import { getSyncKey, getSyncUrl } from './apply-log';
 import { bumpPilot } from './page-log';
+import { clearPilotLink, clearPilotPending, gatewayText, notePilotLink, readPilotPending, SERVER_SILENT } from './pilot-link';
+
+const PUSH_MS = 12_000;
+const RETRY_MS = 60_000;
+
+let pushing = false;
+let pushedAt = 0;
 
 export async function pushPilot(on: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
   bumpPilot();
+  pushedAt = Date.now();
+  pushing = true;
+  try {
+    return await postPilot(on);
+  }
+  finally {
+    pushing = false;
+  }
+}
+
+export async function retryPilotPush(): Promise<boolean> {
+  if (pushing || Date.now() - pushedAt < RETRY_MS)
+    return false;
+
+  const pending = await readPilotPending();
+  if (pending === '')
+    return false;
+
+  const pushed = await pushPilot(pending === 'on');
+  if (pushed.ok === false) {
+    if (pending === 'on')
+      await notePilotLink(pushed.error);
+
+    return false;
+  }
+
+  await clearPilotPending();
+  await clearPilotLink();
+
+  return pending === 'on';
+}
+
+async function postPilot(on: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
   const auth = await pilotAuth();
   if (auth === null)
     return { ok: false, error: 'нет адреса админки' };
@@ -15,20 +55,19 @@ export async function pushPilot(on: boolean): Promise<{ ok: true } | { ok: false
         'content-type': 'application/json',
       },
       body: JSON.stringify({ on }),
+      signal: AbortSignal.timeout(PUSH_MS),
     });
     const body = await res.json().catch(() => null) as { error?: unknown; ok?: unknown } | null;
-    if (res.ok === false || body?.ok === false) {
-      const error = typeof body?.error === 'string' && body.error.length > 0
-        ? body.error
-        : `сервер ${res.status}`;
+    if (res.ok && body?.ok !== false)
+      return { ok: true };
 
-      return { ok: false, error };
-    }
+    const detail = typeof body?.error === 'string' ? body.error : '';
+    const down = gatewayText(res.status);
 
-    return { ok: true };
+    return { ok: false, error: down ?? (detail.length > 0 ? detail : `сервер ${res.status}`) };
   }
   catch {
-    return { ok: false, error: 'сервер не ответил' };
+    return { ok: false, error: SERVER_SILENT };
   }
 }
 

@@ -3,8 +3,9 @@ import { appendApply, clearWaiting, dropWaiting, getSyncKey, getSyncUrl, listApp
 import { getFlags, setFlags } from './flags';
 import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from './human-review';
 import { syncNegotiations } from './negotiations';
-import { clearStuckHang, forgetStuckHang, liveLines, stallStep, stalling, tellPage } from './page-log';
-import { pushPilot } from './pilot-switch';
+import { bindPilotSettle, clearStuckHang, forgetStuckHang, liveLines, stallStep, stalling, tellPage } from './page-log';
+import { clearPilotLink, clearPilotPending, notePilotLink, setPilotPending } from './pilot-link';
+import { pushPilot, retryPilotPush } from './pilot-switch';
 import { forgetHangReport, guardCaptcha, queueBusy, readPausedUntil, readQueueReport, runQueue } from './queue-run';
 import { pullSavedResume } from './resume-pull';
 import { checkWorker, closePinnedHh, listJobTabs, openHhBackground, openOnHhTab, pinWorker } from './worker-tab';
@@ -230,21 +231,58 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
 };
 
 async function writeFlags(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean }): Promise<unknown> {
-  if (patch.autoQueue === true && await guardCaptcha(true))
-    return { error: 'капча, позови человека', autoQueue: false };
+  if (patch.autoQueue === true)
+    return enablePilot(patch);
 
-  if (patch.autoQueue === true || patch.autoQueue === false) {
-    const pushed = await pushPilot(patch.autoQueue);
-    if (pushed.ok === false)
-      return { error: pushed.error, autoQueue: patch.autoQueue === false };
+  if (patch.autoQueue === false)
+    return disablePilot(patch);
+
+  return setFlags(patch);
+}
+
+async function enablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean }): Promise<unknown> {
+  if (await guardCaptcha(true)) {
+    await clearPilotPending();
+    await clearPilotLink();
+
+    return { error: 'капча, позови человека', autoQueue: false };
   }
 
+  await setPilotPending('on');
   const next = await setFlags(patch);
-  if (patch.autoQueue === false)
-    await closePinnedHh();
+  await forgetStuckHang();
+  const pushed = await pushPilot(true);
+  if (pushed.ok) {
+    await clearPilotPending();
+    await clearPilotLink();
 
-  if ('autoQueue' in patch)
-    await forgetStuckHang();
+    return next;
+  }
+
+  await notePilotLink(pushed.error);
+
+  return { ...next, error: pushed.error };
+}
+
+async function disablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean }): Promise<unknown> {
+  await setPilotPending('off');
+  const next = await setFlags(patch);
+  await closePinnedHh();
+  await clearPilotLink();
+  await forgetStuckHang();
+  const pushed = await pushPilot(false);
+  if (pushed.ok)
+    await clearPilotPending();
 
   return next;
 }
+
+bindPilotSettle(async () => {
+  const confirmed = await retryPilotPush();
+  if (confirmed === false)
+    return;
+
+  const flags = await getFlags();
+  if (flags.autoQueue === true)
+    await runQueue();
+});

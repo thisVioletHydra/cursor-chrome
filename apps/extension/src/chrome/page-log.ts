@@ -2,6 +2,7 @@ import { getSyncKey, getSyncUrl } from './apply-log';
 import { getFlags, setFlags } from './flags';
 import { noteHours } from './hours-flag';
 import { loadPace, waitMs } from './pace';
+import { clearPilotLink, clearPilotPending, noteGateway, notePilotAnswer, noteServerSilent, readPilotPending, remoteStopCounts } from './pilot-link';
 import { closePinnedHh } from './worker-tab';
 import { browser } from '../browser-host';
 
@@ -130,6 +131,8 @@ export async function haltHang(): Promise<void> {
 
   stall = undefined;
   await setFlags({ autoQueue: false });
+  await clearPilotPending();
+  await clearPilotLink();
   await closePinnedHh();
   if (onHangClear !== undefined)
     await onHangClear();
@@ -342,6 +345,7 @@ let resuming = false;
 let lastSent = 0;
 let waking = false;
 let onWake: (() => Promise<void>) | undefined;
+let onPilotSettle: (() => Promise<void>) | undefined;
 let onResume: (() => void) | undefined;
 let currentWait: WaitJob | null = null;
 
@@ -357,6 +361,10 @@ type WaitJob = {
 
 export function bindPilotWake(fn: () => Promise<void>): void {
   onWake = fn;
+}
+
+export function bindPilotSettle(fn: () => Promise<void>): void {
+  onPilotSettle = fn;
 }
 
 export function bindWaitResume(fn: () => void): void {
@@ -411,6 +419,9 @@ function enqueuePulse(line: string): Promise<void> {
 let pulseChain: Promise<void> = Promise.resolve();
 
 export async function pulseNow(): Promise<void> {
+  if (onPilotSettle !== undefined)
+    await onPilotSettle();
+
   const flags = await getFlags();
   if (halted || flags.autoQueue !== true) {
     await listenPilot();
@@ -548,17 +559,19 @@ async function postPulse(line: string): Promise<void> {
   noteHours(body);
 
   if (pilotStart(body)) {
+    await notePilotAnswer(body);
     await pilotWake();
 
     return;
   }
 
-  if (stopFlag(body)) {
+  if (stopFlag(body) && await remoteStopCounts()) {
     await haltHang();
 
     return;
   }
 
+  await notePilotAnswer(body);
   await forgetStuckHang();
 }
 
@@ -569,6 +582,11 @@ async function listenPilot(): Promise<void> {
     return;
 
   noteHours(body);
+
+  if ((await readPilotPending()) === 'off')
+    return;
+
+  await notePilotAnswer(body);
 
   if (pilotStart(body) || pilotAuto(body))
     await pilotWake();
@@ -594,6 +612,7 @@ async function pilotFetch(path: string, init?: { method: string; body: string; s
   if (auth === null)
     return null;
 
+  const stamp = pilotStamp();
   try {
     const headers: Record<string, string> = { authorization: `Bearer ${auth.key}` };
     if (init?.body !== undefined)
@@ -603,16 +622,23 @@ async function pilotFetch(path: string, init?: { method: string; body: string; s
       method: init?.method ?? 'GET',
       headers,
       body: init?.body,
-      signal: init?.signal,
+      signal: init?.signal ?? AbortSignal.timeout(12_000),
     });
-    if (res.ok === false)
+    if (res.ok === false) {
+      if (stamp === pilotStamp())
+        await noteGateway(res.status);
+
       return null;
+    }
 
     const body: unknown = await res.json();
 
     return body;
   }
   catch {
+    if (stamp === pilotStamp())
+      await noteServerSilent();
+
     return null;
   }
 }

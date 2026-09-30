@@ -7,6 +7,7 @@ import { pinnedCaptcha, tabShowsCaptcha } from './hh-captcha';
 import { loadPace, rare, waitMs } from './pace';
 import { maybeTea, noteTeaSession } from './tea';
 import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage, waitBeforeLoad } from './page-log';
+import { isPilotLinkText, readPilotLink } from './pilot-link';
 import { runHhApply } from './hh-apply-cmd';
 import { collectVacancies, readVacancyPage } from './hh-search';
 import { requireTabId } from './inject';
@@ -136,9 +137,11 @@ export async function forgetHangReport(): Promise<boolean> {
 }
 
 async function rememberReport(run: QueueRun): Promise<void> {
-  if (run.reason === 'расширение зависло') {
+  const link = await readPilotLink();
+  if (run.reason === 'расширение зависло' || link.length > 0 || isPilotLinkText(run.reason)) {
+    const reason = link.length > 0 ? link : run.reason;
     await browser.storage.local.remove(REPORT_KEY);
-    await browser.runtime.sendMessage({ type: 'queue-report', run: { ...run, lines: [] } }).catch(() => {});
+    await browser.runtime.sendMessage({ type: 'queue-report', run: { ...run, reason, lines: [] } }).catch(() => {});
 
     return;
   }
