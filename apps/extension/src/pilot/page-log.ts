@@ -23,6 +23,7 @@ let onHangClear: (() => Promise<boolean>) | undefined;
 
 const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
 const SEARCH_TICK = /^ищу вакансию, \d+ с$/;
+const PAGE_TICK = /^жду страницу, \d+ с$/;
 
 function stallText(text: string): boolean {
   return text === 'сервер молчит' || text.startsWith('я завис');
@@ -245,6 +246,9 @@ function planStall(): void {
     if (step === 'ищу вакансию' || step.startsWith('ищу вакансию,'))
       return;
 
+    if (step.startsWith('жду страницу'))
+      return;
+
     if (queueRestStep(step))
       return;
 
@@ -293,6 +297,9 @@ function sameTick(previous: string, next: string): boolean {
   if (SEARCH_TICK.test(previous) && SEARCH_TICK.test(next))
     return true;
 
+  if (PAGE_TICK.test(previous) && PAGE_TICK.test(next))
+    return true;
+
   const was = previous.match(TICK);
   const now = next.match(TICK);
   if (was === null || now === null)
@@ -302,10 +309,12 @@ function sameTick(previous: string, next: string): boolean {
 }
 
 function movingTick(text: string): boolean {
-  return TICK.test(text) || SEARCH_TICK.test(text);
+  return TICK.test(text) || SEARCH_TICK.test(text) || PAGE_TICK.test(text);
 }
 
 let searchGen = 0;
+let pagePulse = 0;
+let loadingPage = false;
 
 export async function whileSearching<T>(work: () => Promise<T>): Promise<T> {
   const gen = ++searchGen;
@@ -323,7 +332,7 @@ export async function whileSearching<T>(work: () => Promise<T>): Promise<T> {
 
 async function runSearchClock(gen: number, started: number): Promise<void> {
   while (gen === searchGen && halted === false) {
-    if (namedWait === false)
+    if (namedWait === false && loadingPage === false)
       await beatSearch(gen, started);
 
     if (gen !== searchGen || halted)
@@ -339,6 +348,32 @@ async function beatSearch(gen: number, started: number): Promise<void> {
 
   const sec = Math.max(1, Math.ceil((Date.now() - started) / 1000));
   await tellPage(`ищу вакансию, ${sec} с`);
+}
+
+export async function loadWithin<T>(work: Promise<T>, ms: number): Promise<T | undefined> {
+  const gen = ++pagePulse;
+  loadingPage = true;
+  void runPageClock(gen, Date.now());
+  try {
+    return await withinMs(work, ms);
+  }
+  finally {
+    if (pagePulse === gen)
+      pagePulse += 1;
+
+    loadingPage = false;
+  }
+}
+
+async function runPageClock(gen: number, started: number): Promise<void> {
+  while (gen === pagePulse && halted === false) {
+    const sec = Math.max(1, Math.ceil((Date.now() - started) / 1000));
+    await tellPage(`жду страницу, ${sec} с`);
+    if (gen !== pagePulse || halted)
+      return;
+
+    await delay(1000);
+  }
 }
 
 let namedWait = false;

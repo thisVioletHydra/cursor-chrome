@@ -21,6 +21,7 @@ const START_GRACE_MS = 5 * 60_000;
 const HANG_BLIND_MS = 60_000;
 const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
 const SEARCH_TICK = /^ищу вакансию, \d+ с$/;
+const PAGE_TICK = /^жду страницу, \d+ с$/;
 const FROZEN_MS = 90_000;
 const STEP_MAX = 80;
 const STEP_PREFIX = /^(открыл|ищу|читаю|в очереди|в список|мимо,|сервер|админка|жду|уже видели)/;
@@ -383,11 +384,14 @@ function queueRestHang(text: string): boolean {
 }
 
 function searchTick(text: string): boolean {
-  return SEARCH_TICK.test(text);
+  return SEARCH_TICK.test(text) || PAGE_TICK.test(text);
 }
 
 function searchHang(text: string): boolean {
-  return text.startsWith('я завис: ищу вакансию') || text.startsWith('замолчало на шаге ищу');
+  if (text.startsWith('я завис: ищу вакансию') || text.startsWith('я завис: жду страницу'))
+    return true;
+
+  return text.startsWith('замолчало на шаге ищу') || text.startsWith('замолчало на шаге жду страницу');
 }
 
 function noteTick(text: string): void {

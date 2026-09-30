@@ -1,7 +1,8 @@
 import { getFlags } from '../pilot/flags';
 import { freshPilot, pilotStep } from '../chrome/pilot';
 import { tabShowsCaptcha } from '../tab/hh-captcha';
-import { hangHalted, tellPage, waitBeforeLoad, whileSearching } from '../pilot/page-log';
+import { hangHalted, loadWithin, tellPage, waitBeforeLoad, whileSearching } from '../pilot/page-log';
+import { PAGE_LOAD_MS, pageLoadMiss } from './page-load';
 import { getWorkerTabId, isBotWorkUrl, isHhUrl, openBotSearch, requireWorkerTab, wakeWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
@@ -9,7 +10,6 @@ const FIRST_PAGE = 0;
 const endedQuery = new Set<string>();
 let saidEnded = false;
 let sawCaptcha = false;
-const PAGE_MS = 45_000;
 const SEARCH = 'https://hh.ru/search/vacancy';
 const HH_ROOT = 'https://hh.ru/';
 
@@ -71,8 +71,7 @@ export async function collectVacancies(
     return { login: true, captcha: false, saved: 0, more: false, done: false, reason: '' };
 
   let saved = 0;
-  let sawCards = false;
-  let unread = false;
+  let missed = false;
   let done = true;
   let checkFailed = false;
   const login = await whileSearching(async () => {
@@ -92,14 +91,12 @@ export async function collectVacancies(
         return 'fail';
 
       if (pulled === null) {
-        done = false;
-        if (hangHalted())
+        if (hangHalted() || sawCaptcha)
           return 'fail';
 
-        if (sawCards === false && saved === 0)
-          unread = true;
+        await noteMiss();
 
-        return 'fail';
+        return 'miss';
       }
 
       if (isLogin(pulled.url, pulled.html))
@@ -109,7 +106,6 @@ export async function collectVacancies(
       if (batch.length === 0 || landedEarlier(pulled.url, page))
         return 'empty';
 
-      sawCards = true;
       const more = pulled.html.includes('data-qa="pager-next"');
       const fitting = batch.filter(card => fitsTitle(card.title, queries));
       const marks = await knownOnPage(
@@ -143,6 +139,14 @@ export async function collectVacancies(
       return 'end';
     }
 
+    async function noteMiss(): Promise<void> {
+      if (missed || hangHalted() || sawCaptcha)
+        return;
+
+      missed = true;
+      await tellPage('не прочиталась страница hh');
+    }
+
     for (const query of queries) {
       const deep = storedPage(pages[query]);
       if (deep === FIRST_PAGE && endedQuery.has(query) === false)
@@ -151,6 +155,9 @@ export async function collectVacancies(
       const hit = await harvest(query, FIRST_PAGE, deep, false);
       if (hit === 'login')
         return true;
+
+      if (hit === 'miss')
+        continue;
 
       if (hit === 'fail' || hit === 'saved')
         return false;
@@ -165,6 +172,9 @@ export async function collectVacancies(
         const hit = await harvest(query, page, null, true);
         if (hit === 'login')
           return true;
+
+        if (hit === 'miss')
+          break;
 
         if (hit === 'fail' || hit === 'saved')
           return false;
@@ -199,11 +209,8 @@ export async function collectVacancies(
   if (login)
     return { login: true, captcha: false, saved, more: false, done: false, reason: '' };
 
-  if (unread) {
-    await tellPage('не прочиталась страница hh');
-
+  if (missed && saved === 0)
     return miss(false, false, 'не прочиталась страница hh');
-  }
 
   if (checkFailed && saved === 0) {
     await tellPage('сервер не сверил вакансии');
@@ -228,7 +235,7 @@ export async function readVacancyPage(tabId: number, id: string, url: string): P
   return vacancyFromHtml(pulled.html, id, url);
 }
 
-type PageHit = 'login' | 'fail' | 'saved' | 'empty' | 'end' | 'more';
+type PageHit = 'login' | 'fail' | 'saved' | 'empty' | 'end' | 'more' | 'miss';
 
 function heldPage(hold: number | null, page: number, more: boolean): number {
   if (hold !== null)
@@ -355,44 +362,42 @@ function onHhRoot(url: string): boolean {
 
 // Service worker fetch не видит сессию вкладки. Запрос делает сама страница hh.ru.
 async function pull(tabId: number, url: string): Promise<{ url: string; html: string } | null> {
-  await wakeWorkerTab(tabId);
-  if (await tabShowsCaptcha(tabId)) {
-    sawCaptcha = true;
-
-    return null;
-  }
-
   await waitBeforeLoad();
   if (hangHalted())
     return null;
 
-  if (await tabShowsCaptcha(tabId)) {
-    sawCaptcha = true;
-
-    return null;
-  }
-
-  const fetched = await fetchInPage(tabId, url);
-  if (usable(fetched))
-    return fetched;
-
-  if (await tabShowsCaptcha(tabId)) {
-    sawCaptcha = true;
-
-    return null;
-  }
-
-  await showUrl(tabId, url, false);
+  const started = Date.now();
+  const until = started + PAGE_LOAD_MS;
+  const loaded = await loadWithin(readSearchPage(tabId, url, until), until - started);
   if (sawCaptcha || hangHalted())
     return null;
 
-  if (await tabShowsCaptcha(tabId)) {
-    sawCaptcha = true;
-
+  if (loaded === undefined || loaded === null || pageLoadMiss(Date.now() - started))
     return null;
-  }
 
-  return readTab(tabId);
+  return loaded;
+}
+
+async function readSearchPage(tabId: number, url: string, until: number): Promise<{ url: string; html: string } | null> {
+  if (late(until))
+    return null;
+
+  await budget(wakeWorkerTab(tabId), until);
+  if (late(until) || hangHalted() || await captchaNow(tabId, until))
+    return null;
+
+  const fetched = await fetchInPage(tabId, url, until);
+  if (usable(fetched))
+    return fetched;
+
+  if (late(until) || hangHalted() || await captchaNow(tabId, until))
+    return null;
+
+  await showUrl(tabId, url, false, until);
+  if (late(until) || sawCaptcha || hangHalted() || await captchaNow(tabId, until))
+    return null;
+
+  return readTab(tabId, until);
 }
 
 function usable(page: { url: string; html: string; ok: boolean } | null): page is { url: string; html: string; ok: boolean } {
@@ -405,14 +410,14 @@ function usable(page: { url: string; html: string; ok: boolean } | null): page i
   return page.ok && page.html.length > 0 && isGuard(page.html) === false;
 }
 
-async function fetchInPage(tabId: number, url: string): Promise<{ url: string; html: string; ok: boolean } | null> {
+async function fetchInPage(tabId: number, url: string, until: number): Promise<{ url: string; html: string; ok: boolean } | null> {
   try {
-    const results = await within(browser.scripting.executeScript({
+    const results = await budget(browser.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
       func: fetchPage,
-      args: [url, PAGE_MS],
-    }), PAGE_MS + 5_000);
+      args: [url, Math.max(1, until - Date.now())],
+    }), until);
     if (results === null)
       return null;
 
@@ -423,12 +428,13 @@ async function fetchInPage(tabId: number, url: string): Promise<{ url: string; h
   }
 }
 
-async function readTab(tabId: number): Promise<{ url: string; html: string } | null> {
+async function readTab(tabId: number, until = 0): Promise<{ url: string; html: string } | null> {
+  const deadline = until > 0 ? until : Date.now() + PAGE_LOAD_MS;
   try {
-    const results = await within(browser.scripting.executeScript({
+    const results = await budget(browser.scripting.executeScript({
       target: { tabId },
       func: readPage,
-    }), PAGE_MS);
+    }), deadline);
     if (results === null)
       return null;
 
@@ -439,31 +445,52 @@ async function readTab(tabId: number): Promise<{ url: string; html: string } | n
   }
 }
 
-async function showUrl(tabId: number, url: string, paced = true): Promise<void> {
-  if (await tabShowsCaptcha(tabId)) {
-    sawCaptcha = true;
-
-    return;
-  }
-
+async function showUrl(tabId: number, url: string, paced = true, until = 0): Promise<void> {
   if (paced)
     await waitBeforeLoad();
 
-  if (hangHalted())
+  const deadline = until > 0 ? until : Date.now() + PAGE_LOAD_MS;
+  if (late(deadline) || hangHalted() || await captchaNow(tabId, deadline))
     return;
 
-  if (await tabShowsCaptcha(tabId)) {
-    sawCaptcha = true;
-
+  await budget(wakeWorkerTab(tabId), deadline);
+  if (late(deadline) || hangHalted() || await captchaNow(tabId, deadline))
     return;
-  }
 
-  await wakeWorkerTab(tabId);
-  const tab = await browser.tabs.get(tabId).catch(() => null);
-  const loaded = waitTab(tabId, 15_000);
-  await within(browser.tabs.update(tabId, tab?.active === true ? { url } : { url, active: false }), PAGE_MS);
-  await loaded;
-  await pause(500, 1200);
+  const tab = await budget(browser.tabs.get(tabId).catch(() => null), deadline);
+  if (late(deadline))
+    return;
+
+  const loaded = waitTab(tabId, Math.min(15_000, Math.max(0, deadline - Date.now())));
+  const open = tab?.active === true ? { url } : { url, active: false };
+  await budget(browser.tabs.update(tabId, open), deadline);
+  await budget(loaded, deadline);
+  if (late(deadline))
+    return;
+
+  await budget(pause(500, 1200), deadline);
+}
+
+function late(until: number): boolean {
+  return Date.now() >= until;
+}
+
+function budget<T>(work: Promise<T>, until: number): Promise<T | null> {
+  const ms = until - Date.now();
+  if (ms <= 0)
+    return Promise.resolve(null);
+
+  return within(work, ms);
+}
+
+async function captchaNow(tabId: number, until: number): Promise<boolean> {
+  const shown = await budget(tabShowsCaptcha(tabId), until);
+  if (shown !== true)
+    return false;
+
+  sawCaptcha = true;
+
+  return true;
 }
 
 function fetchPage(url: string, ms: number): Promise<{ url: string; html: string; ok: boolean }> {
