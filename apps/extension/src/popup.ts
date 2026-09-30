@@ -877,20 +877,6 @@ async function togglePower(): Promise<void> {
   powerBtn.textContent = next ? 'Включаю…' : 'Выключаю…';
   clearPowerNote();
   try {
-    if (next) {
-      const opened = await ensureHh();
-      if (opened.ok !== true) {
-        const text = openFail(opened);
-        paintPowerNote(text);
-        paintStatus(text, 'fail');
-
-        return;
-      }
-
-      revivedAt = Date.now();
-      await refreshWorkerPanel();
-    }
-
     const result = await browser.runtime.sendMessage({ type: 'set-flags', autoQueue: next }) as { error?: string; autoQueue?: boolean };
     if (typeof result?.error === 'string' && result.error.length > 0 && result.autoQueue === true) {
       autoOn = true;

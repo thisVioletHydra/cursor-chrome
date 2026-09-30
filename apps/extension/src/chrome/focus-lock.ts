@@ -9,6 +9,11 @@ type Hold = {
 let hold: Hold | null = null;
 const spawned = new Set<number>();
 let installed = false;
+let spare = false;
+
+export function spareFocus(on: boolean): void {
+  spare = on;
+}
 
 export function installFocusLock(): void {
   if (installed)
@@ -16,7 +21,7 @@ export function installFocusLock(): void {
 
   installed = true;
   browser.tabs.onCreated.addListener((tab) => {
-    if (hold === null || typeof tab.id !== 'number')
+    if (spare || hold === null || typeof tab.id !== 'number')
       return;
 
     spawned.add(tab.id);
@@ -24,10 +29,14 @@ export function installFocusLock(): void {
       void browser.tabs.update(tab.id, { active: false }).catch(() => {});
   });
   browser.tabs.onActivated.addListener((info) => {
-    if (hold === null || hold.windowFocused === false || info.tabId === hold.tabId)
+    const locked = hold;
+    if (spare || locked === null || locked.windowFocused === false)
       return;
 
-    void browser.tabs.update(hold.tabId, { active: true }).catch(() => {});
+    if (info.tabId === locked.tabId)
+      return;
+
+    void browser.tabs.update(locked.tabId, { active: true }).catch(() => {});
   });
 }
 

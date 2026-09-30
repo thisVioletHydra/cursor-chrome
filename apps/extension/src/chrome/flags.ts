@@ -1,6 +1,6 @@
 import { clearPilotStop, pilotStopped } from './pilot-stop';
 import { clearTeaClock, resetTeaClock } from './tea-clock';
-import { closePinnedHh } from './worker-tab';
+import { closePinnedHh, openingTab } from './worker-tab';
 import { browser } from '../browser-host';
 
 export type Flags = {
@@ -34,6 +34,9 @@ export async function setFlags(patch: Partial<Flags>): Promise<Flags> {
   const next = { ...prev, ...patch };
   const turningOn = prev.autoQueue === false && next.autoQueue === true;
   const turningOff = prev.autoQueue === true && next.autoQueue === false;
+  if (turningOff && openingTab())
+    return prev;
+
   if (turningOn)
     await resetTeaClock();
 

@@ -6,7 +6,7 @@ import { syncNegotiations } from './negotiations';
 import { bindPilotSettle, clearStuckHang, forgetStuckHang, liveLines, stallStep, stalling, tellPage } from './page-log';
 import { reconcilePilot } from './pilot-heal';
 import { clearPilotLink, clearPilotPending, notePilotLink, setPilotPending } from './pilot-link';
-import { markPilotStop } from './pilot-stop';
+import { clearPilotStop, markPilotStop } from './pilot-stop';
 import { pushPilot, retryPilotPush } from './pilot-switch';
 import { forgetHangReport, guardCaptcha, queueBusy, readPausedUntil, readQueueReport, runQueue } from './queue-run';
 import { pullSavedResume } from './resume-pull';
@@ -250,8 +250,15 @@ async function enablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; s
     return { error: 'капча, позови человека', autoQueue: false };
   }
 
+  await clearPilotStop();
   await setPilotPending('on');
   const next = await setFlags(patch);
+  if (next.autoQueue === true) {
+    const opened = await ensurePinnedHh();
+    if (opened.ok === false)
+      return { ...next, error: opened.reason || 'не удалось открыть hh' };
+  }
+
   await forgetStuckHang();
   const pushed = await pushPilot(true);
   if (pushed.ok) {

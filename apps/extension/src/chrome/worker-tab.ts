@@ -1,10 +1,14 @@
 import { getFlags } from './flags';
-import { restoreFocus, snapshotFocus, withStayPut } from './focus-lock';
+import { restoreFocus, snapshotFocus, spareFocus, withStayPut } from './focus-lock';
 import { browser } from '../browser-host';
 
 export const WORKER_KEY = 'workerTabId';
 const SEARCH = 'https://hh.ru/search/vacancy';
 const USER_PAGE = /\/resume(?:_converter|_print)?(?:\/|$)|\/chat(?:\/|$)/i;
+
+let shield = 0;
+let tracked: number | null = null;
+const seen = new Set<number>();
 
 export type TabRow = {
   id: number;
@@ -100,15 +104,22 @@ export async function listJobTabs(): Promise<TabRow[]> {
   return rows;
 }
 
-export async function pinWorker(tabId: number): Promise<WorkerCheck> {
-  await browser.tabs.update(tabId, { pinned: true, autoDiscardable: false });
-  await browser.storage.local.set({ [WORKER_KEY]: tabId });
-  await wakeWorkerTab(tabId);
+export function openingTab(): boolean {
+  return shield > 0;
+}
 
-  return checkWorker();
+export async function pinWorker(tabId: number): Promise<WorkerCheck> {
+  const refused = await userPage(tabId);
+  if (refused !== null)
+    return refused;
+
+  return shieldOpen(() => pinLive(tabId));
 }
 
 export async function closePinnedHh(): Promise<void> {
+  if (shield > 0)
+    return;
+
   const workerId = await getWorkerTabId();
   const prev = await snapshotFocus().catch(() => null);
   let drop = true;
@@ -153,7 +164,7 @@ export async function wakeWorkerTab(tabId: number, force = false): Promise<void>
 }
 
 export async function checkWorker(): Promise<WorkerCheck> {
-  const tabId = await getWorkerTabId();
+  let tabId = await getWorkerTabId();
   if (tabId === null)
     return { ok: false, reason: 'вкладка не выбрана' };
 
@@ -162,7 +173,17 @@ export async function checkWorker(): Promise<WorkerCheck> {
     tab = await browser.tabs.get(tabId);
   }
   catch {
-    return { ok: false, reason: 'вкладка закрыта', tabId };
+    const swapped = await swappedId(tabId);
+    if (swapped === null)
+      return { ok: false, reason: 'вкладка закрыта', tabId };
+
+    tabId = swapped;
+    try {
+      tab = await browser.tabs.get(tabId);
+    }
+    catch {
+      return { ok: false, reason: 'вкладка закрыта', tabId };
+    }
   }
 
   const url = tab.url || tab.pendingUrl || '';
@@ -254,12 +275,12 @@ async function openOnlyHh(url: string): Promise<WorkerCheck> {
     return created.id;
   }, { keepSpawned: true });
 
-  await wakeWorkerTab(tabId, true);
-  await waitLoaded(tabId);
-  const pinned = await pinWorker(tabId);
-  await releaseOldPin(previous, tabId);
+  return shieldOpen(async () => {
+    const pinned = await pinWorker(tabId);
+    await releaseOldPin(previous, typeof pinned.tabId === 'number' ? pinned.tabId : tabId);
 
-  return pinned;
+    return pinned;
+  });
 }
 
 async function resumeHh(tabId: number, url?: string): Promise<WorkerCheck> {
@@ -286,7 +307,7 @@ async function releaseOldPin(previous: number | null, nextId: number): Promise<v
 
   const tab = await browser.tabs.get(previous).catch(() => null);
   const url = tab?.url || tab?.pendingUrl || '';
-  if (tab?.pinned !== true || isHhUrl(url) === false)
+  if (tab?.pinned !== true || isBotWorkUrl(url) === false)
     return;
 
   await browser.tabs.update(previous, { pinned: false }).catch(() => {});
@@ -343,5 +364,218 @@ export async function waitTab(tabId: number, timeoutMs = 10_000): Promise<void> 
     }
 
     browser.tabs.onUpdated.addListener(onUpdated);
+  });
+}
+
+async function pinLive(tabId: number): Promise<WorkerCheck> {
+  tracked = tabId;
+  seen.add(tabId);
+  const prev = await snapshotFocus();
+  let id = await liveId(tabId);
+  await browser.tabs.update(id, { autoDiscardable: false }).catch(() => {});
+  id = await liveId(id);
+  const tab = await browser.tabs.get(id).catch(() => null);
+  if (tab === null)
+    return { ok: false, reason: 'вкладка закрыта', tabId: id };
+
+  // Пин выгруженной вкладки Хром снимает. Один раз показываем, пиним живую, потом отдаём фокус.
+  const wake = tab.status !== 'complete' || tab.discarded === true || tab.frozen === true;
+  if (wake) {
+    await browser.tabs.update(id, { active: true });
+    id = await liveId(id);
+    await waitLoaded(id);
+    id = await liveId(id);
+  }
+
+  const current = await browser.tabs.get(id).catch(() => null);
+  if (current !== null && current.discarded !== true && current.frozen !== true) {
+    try {
+      id = await markPinned(id);
+    }
+    catch {
+      return { ok: false, reason: 'вкладка закрыта', tabId: id };
+    }
+  }
+
+  tracked = id;
+  await browser.storage.local.set({ [WORKER_KEY]: id });
+  if (wake && prev !== null && prev.tabId !== id)
+    await restoreFocus(prev);
+
+  return checkWorker();
+}
+
+async function markPinned(tabId: number): Promise<number> {
+  const id = await liveId(tabId);
+  try {
+    await browser.tabs.update(id, { pinned: true, autoDiscardable: false });
+
+    return liveId(id);
+  }
+  catch {
+    const next = await liveId(id);
+    if (next === id)
+      throw new Error('вкладка закрыта');
+
+    await browser.tabs.update(next, { pinned: true, autoDiscardable: false });
+
+    return next;
+  }
+}
+
+async function userPage(tabId: number): Promise<WorkerCheck | null> {
+  const tab = await browser.tabs.get(tabId).catch(() => null);
+  const url = tab?.url || tab?.pendingUrl || '';
+  if (tab === null || isHhUrl(url) === false || userHh(url) === false)
+    return null;
+
+  return { ok: false, reason: 'это твоя страница', url, tabId, pinned: false };
+}
+
+async function shieldOpen<T>(run: () => Promise<T>): Promise<T> {
+  shield += 1;
+  spareFocus(true);
+  try {
+    return await run();
+  }
+  finally {
+    shield -= 1;
+    if (shield === 0) {
+      spareFocus(false);
+      seen.clear();
+    }
+  }
+}
+
+async function liveId(tabId: number): Promise<number> {
+  const direct = await browser.tabs.get(tabId).catch(() => null);
+  if (direct !== null)
+    return tabId;
+
+  if (shield === 0)
+    return tracked ?? tabId;
+
+  const started = Date.now();
+  while (Date.now() - started < 400) {
+    const swapped = await freshId(tabId);
+    if (swapped !== null)
+      return swapped;
+
+    await delay(40);
+    const again = await browser.tabs.get(tabId).catch(() => null);
+    if (again !== null)
+      return tabId;
+  }
+
+  return await freshId(tabId) ?? tabId;
+}
+
+async function swappedId(tabId: number): Promise<number | null> {
+  if (shield === 0)
+    return freshId(tabId);
+
+  const next = await liveId(tabId);
+
+  return next === tabId ? null : next;
+}
+
+async function freshId(gone: number): Promise<number | null> {
+  if (tracked !== null && tracked !== gone) {
+    const tab = await browser.tabs.get(tracked).catch(() => null);
+    if (tab !== null)
+      return tracked;
+  }
+
+  const stored = await getWorkerTabId();
+  if (typeof stored === 'number' && stored !== gone) {
+    const tab = await browser.tabs.get(stored).catch(() => null);
+    if (tab !== null)
+      return stored;
+  }
+
+  return replacement(gone);
+}
+
+async function replacement(gone: number): Promise<number | null> {
+  const tabs = await browser.tabs.query({});
+  let blank: number | null = null;
+  for (const tab of tabs) {
+    if (typeof tab.id !== 'number' || tab.id === gone || seen.has(tab.id) === false)
+      continue;
+
+    const url = tab.url || tab.pendingUrl || '';
+    if (userHh(url))
+      continue;
+
+    if (url.length === 0) {
+      blank = tab.id;
+
+      continue;
+    }
+
+    if (isHhUrl(url) === false)
+      continue;
+
+    return tab.id;
+  }
+
+  return blank;
+}
+
+async function followTab(removed: number, added: number): Promise<void> {
+  const stored = await getWorkerTabId();
+  const ours = removed === stored || removed === tracked || seen.has(removed);
+  if (ours === false)
+    return;
+
+  tracked = added;
+  seen.add(added);
+  await browser.storage.local.set({ [WORKER_KEY]: added });
+  const patch: { autoDiscardable: false; pinned?: boolean } = { autoDiscardable: false };
+  if (shield === 0)
+    patch.pinned = true;
+
+  await browser.tabs.update(added, patch).catch(() => {});
+}
+
+function noteGone(tabId: number): void {
+  if (tabId !== tracked)
+    return;
+
+  tracked = null;
+}
+
+function inWorker(): boolean {
+  return typeof ServiceWorkerGlobalScope !== 'undefined' && globalThis instanceof ServiceWorkerGlobalScope;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+if (inWorker()) {
+  browser.tabs.onReplaced.addListener((added, removed) => {
+    void followTab(removed, added);
+  });
+  browser.tabs.onRemoved.addListener((tabId, info) => {
+    if (info.isWindowClosing || shield === 0)
+      return;
+
+    noteGone(tabId);
+  });
+  browser.tabs.onCreated.addListener((tab) => {
+    if (shield === 0 || typeof tab.id !== 'number')
+      return;
+
+    seen.add(tab.id);
+  });
+  browser.tabs.onUpdated.addListener((tabId, info) => {
+    if (shield === 0 || (info.discarded !== true && info.status !== 'unloaded'))
+      return;
+
+    if (tabId !== tracked)
+      return;
+
+    seen.add(tabId);
   });
 }

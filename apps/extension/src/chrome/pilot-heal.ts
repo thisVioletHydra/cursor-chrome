@@ -3,7 +3,7 @@ import type { Flags } from './flags';
 import { getFlags, setFlags } from './flags';
 import { clearPilotPending, readPilotPending, setPilotPending } from './pilot-link';
 import { pilotStopped } from './pilot-stop';
-import { checkWorker, closePinnedHh, isBotWorkUrl } from './worker-tab';
+import { checkWorker, closePinnedHh, isBotWorkUrl, openingTab } from './worker-tab';
 import { browser } from '../browser-host';
 
 const CAPTCHA_HOLD = 'captchaHold';
@@ -11,18 +11,24 @@ const PAUSED_KEY = 'pausedUntil';
 
 export async function reconcilePilot(): Promise<Flags> {
   const flags = await getFlags();
-  if (flags.autoQueue === true)
+  if (flags.autoQueue === true || openingTab())
     return flags;
 
   if (await botSearchPinned() === false) {
+    if (openingTab() || (await getFlags()).autoQueue === true)
+      return getFlags();
+
     const check = await checkWorker();
-    if (check.ok === true)
+    if (check.ok === true && openingTab() === false)
       await closePinnedHh();
 
     return getFlags();
   }
 
   if (await keepOff()) {
+    if (openingTab() || (await getFlags()).autoQueue === true)
+      return getFlags();
+
     await closePinnedHh();
 
     return getFlags();
