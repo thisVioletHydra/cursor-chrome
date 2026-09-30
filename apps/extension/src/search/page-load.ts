@@ -1,6 +1,8 @@
 export const PAGE_LOAD_MS = 45_000;
 export const FLIP_MIN_MS = 2_000;
 export const FLIP_MAX_MS = 4_000;
+export const HIDE_MIN_MS = 1_000;
+export const HIDE_MAX_MS = 2_000;
 
 const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
 const SEARCH_TICK = /^ищу вакансию, \d+ с$/;
@@ -19,6 +21,26 @@ export function flipWaitMs(roll: number): number {
   const unit = Number.isFinite(roll) ? Math.min(1, Math.max(0, roll)) : 0;
 
   return FLIP_MIN_MS + Math.floor(unit * (FLIP_MAX_MS - FLIP_MIN_MS));
+}
+
+export function hideWaitMs(roll: number): number {
+  const unit = Number.isFinite(roll) ? Math.min(1, Math.max(0, roll)) : 0;
+
+  return HIDE_MIN_MS + Math.floor(unit * (HIDE_MAX_MS - HIDE_MIN_MS));
+}
+
+export function nextPageNumber(page: number): number {
+  if (Number.isInteger(page) === false || page < 0)
+    return 0;
+
+  return page + 1;
+}
+
+export function putSearchPage(url: string, page: number): string {
+  const next = new URL(url);
+  next.searchParams.set('page', String(page));
+
+  return next.toString();
 }
 
 const SERP_CARD = 'data-qa="vacancy-serp__vacancy"';
@@ -47,6 +69,46 @@ export function parsedSearch(html: string): boolean {
 
 export function searchHasNext(html: string): boolean {
   return html.includes(SERP_NEXT);
+}
+
+export function nextListedPage(html: string, page: number): number | null {
+  const nextHref = hrefPages(html, 'pager-next');
+  const higherNext = nextHref.find(item => item > page);
+  if (higherNext !== undefined)
+    return higherNext;
+
+  const higherList = hrefPages(html, 'pager-page').find(item => item > page);
+  if (higherList !== undefined)
+    return higherList;
+
+  if (html.includes(SERP_NEXT) && nextHref.length === 0)
+    return nextPageNumber(page);
+
+  return null;
+}
+
+function hrefPages(html: string, qa: string): number[] {
+  const pages: number[] = [];
+  const marker = `data-qa="${qa}"`;
+  let at = html.indexOf(marker);
+  while (at >= 0) {
+    const start = html.lastIndexOf('<', at);
+    const end = html.indexOf('>', at);
+    const tag = start >= 0 && end > start ? html.slice(start, end + 1) : '';
+    const href = tag.match(/href="([^"]*)"/);
+    const value = href?.[1].match(/(?:^|[?&])(?:amp;)?page=(\d+)/);
+    if (value !== undefined) {
+      const parsed = Number(value[1]);
+      if (Number.isInteger(parsed))
+        pages.push(parsed);
+    }
+
+    at = html.indexOf(marker, at + marker.length);
+  }
+
+  pages.sort((left, right) => left - right);
+
+  return pages;
 }
 
 export function landedPage(url: string, asked: number): number {

@@ -75,6 +75,7 @@ test('closing the pinned tab does not clear on', () => {
 
 test('search walks past page 5 and 20 until hh has no next page', () => {
   const on = freshPilot();
+  assert.equal(pilotStep(on, { type: 'page', page: 0, hasNext: true }).page, 1);
   assert.equal(pilotStep(on, { type: 'page', page: 4, hasNext: true }).page, 5);
   assert.equal(pilotStep(on, { type: 'page', page: 5, hasNext: true }).page, 6);
   assert.equal(pilotStep(on, { type: 'page', page: 19, hasNext: true }).page, 20);

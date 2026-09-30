@@ -1,4 +1,4 @@
-import { FLIP_MAX_MS, FLIP_MIN_MS, PAGE_LOAD_MS, endedAfter, flipWaitMs, foldLiveLine, landedPage, pageLoadMiss, parsedSearch, searchHasNext, searchStep } from './src/search/page-load.ts';
+import { FLIP_MAX_MS, FLIP_MIN_MS, HIDE_MAX_MS, HIDE_MIN_MS, PAGE_LOAD_MS, endedAfter, flipWaitMs, foldLiveLine, hideWaitMs, landedPage, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchHasNext, searchStep } from './src/search/page-load.ts';
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -46,6 +46,34 @@ test('a live serp is read from cards and the next control', () => {
   assert.equal(searchStep({ saved: 0, hasNext: searchHasNext(next) }), 'more');
   assert.equal(parsedSearch(empty), true);
   assert.equal(searchHasNext(empty), false);
+});
+
+test('the search url page goes from 0 to the next hh page', () => {
+  assert.equal(nextPageNumber(0), 1);
+  assert.equal(nextPageNumber(1), 2);
+  const pager = [
+    '<a data-qa="pager-page" href="/search/vacancy?text=vue&amp;page=0">1</a>',
+    '<a data-qa="pager-page" href="/search/vacancy?text=vue&amp;page=1">2</a>',
+  ].join('');
+  assert.equal(nextListedPage(pager, 0), 1);
+  assert.equal(nextListedPage(pager, 1), null);
+  assert.equal(nextListedPage('<a data-qa="pager-next" href="/search/vacancy?text=vue&page=0"></a>', 0), null);
+  assert.equal(nextListedPage('<a data-qa="pager-next"></a>', 0), 1);
+  const first = putSearchPage('https://hh.ru/search/vacancy?text=vue&search_period=3&order_by=publication_time', 0);
+  const second = putSearchPage(first, nextPageNumber(0));
+  assert.equal(new URL(first).searchParams.get('page'), '0');
+  assert.equal(new URL(second).searchParams.get('page'), '1');
+  assert.notEqual(first, second);
+  assert.equal(searchStep({ saved: 0, hasNext: nextListedPage(pager, 0) !== null }), 'more');
+  assert.equal(searchStep({ saved: 0, hasNext: nextListedPage(pager, 1) !== null }), 'end');
+});
+
+test('a seen card is hidden after about a second', () => {
+  assert.equal(hideWaitMs(0), HIDE_MIN_MS);
+  assert.equal(hideWaitMs(1), HIDE_MAX_MS);
+  assert.equal(HIDE_MIN_MS, 1_000);
+  assert.equal(HIDE_MAX_MS, 2_000);
+  assert.equal(hideWaitMs(0.5) < 10_000, true);
 });
 
 test('hh clamps a deep cursor onto the page it actually opened', () => {

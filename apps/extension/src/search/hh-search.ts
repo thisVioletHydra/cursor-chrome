@@ -2,7 +2,7 @@ import { getFlags } from '../pilot/flags';
 import { freshPilot, pilotStep } from '../chrome/pilot';
 import { tabShowsCaptcha } from '../tab/hh-captcha';
 import { hangHalted, loadWithin, tellPage, whileSearching } from '../pilot/page-log';
-import { PAGE_LOAD_MS, endedAfter, flipWaitMs, landedPage, pageLoadMiss, parsedSearch, searchHasNext, searchStep } from './page-load';
+import { PAGE_LOAD_MS, endedAfter, flipWaitMs, hideWaitMs, landedPage, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchStep } from './page-load';
 import { getWorkerTabId, isBotWorkUrl, isHhUrl, openBotSearch, requireWorkerTab, wakeWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
@@ -87,12 +87,13 @@ export async function collectVacancies(
     }
 
     let seenPage = FIRST_PAGE;
+    const listedNext = new Map<string, number>();
 
     async function harvest(query: string, page: number, hold: number | null, gap: boolean): Promise<PageHit> {
       if (gap)
         await flipPause();
 
-      const pulled = await pull(tabId, searchUrl(query, page));
+      const pulled = await pull(tabId, searchUrl(query, page), page);
       if (sawCaptcha)
         return 'fail';
 
@@ -115,9 +116,18 @@ export async function collectVacancies(
       }
 
       const here = landedPage(pulled.url, page);
+      if (here !== page)
+        return 'miss';
+
       seenPage = here;
       const batch = cardsOf(serpHtml(pulled.html));
-      const more = searchHasNext(pulled.html);
+      const nextPage = await listedAfter(tabId, pulled.html, here, batch.length);
+      if (nextPage === null)
+        listedNext.delete(query);
+      else
+        listedNext.set(query, nextPage);
+
+      const more = nextPage !== null;
       if (batch.length === 0)
         return finish(query, searchStep({ saved: 0, hasNext: more }), more);
 
@@ -134,9 +144,12 @@ export async function collectVacancies(
         return 'fail';
       }
 
-      const known = batch.filter(card => marks.seen.has(card.id)).length;
-      if (known > 0)
-        await tellPage(`уже видели, ${known}`);
+      const knownIds = batch.filter(card => marks.seen.has(card.id)).map(card => card.id);
+      if (knownIds.length > 0)
+        await tellPage(`уже видели, ${knownIds.length}`);
+
+      const fresh = new Set(marks.saved);
+      await hideKnown(tabId, pulled.url, knownIds.filter(id => fresh.has(id) === false));
 
       const step = searchStep({ saved: marks.saved.length, hasNext: more });
       if (step === 'saved') {
@@ -192,8 +205,10 @@ export async function collectVacancies(
         continue;
 
       let page = storedPage(pages[query]);
-      if (page === FIRST_PAGE && openedFirst.has(query))
-        page = 1;
+      if (page === FIRST_PAGE && openedFirst.has(query)) {
+        const listed = listedNext.get(query);
+        page = listed === undefined ? nextPageNumber(page) : listed;
+      }
 
       let gap = openedFirst.has(query);
       while (true) {
@@ -208,11 +223,12 @@ export async function collectVacancies(
           return false;
 
         if (hit === 'more') {
-          const next = pilotStep(freshPilot(), { type: 'page', page: seenPage, hasNext: true }).page;
-          if (next === null)
+          const listed = listedNext.get(query);
+          const next = pilotStep(freshPilot(), { type: 'page', page: seenPage, hasNext: listed !== undefined }).page;
+          if (next === null || listed === undefined || listed === seenPage)
             break;
 
-          page = next;
+          page = listed;
           gap = true;
           continue;
         }
@@ -302,9 +318,145 @@ function searchUrl(query: string, page: number): string {
   url.searchParams.set('text', query);
   url.searchParams.set('search_period', '3');
   url.searchParams.set('order_by', 'publication_time');
-  url.searchParams.set('page', String(page));
 
-  return url.toString();
+  return putSearchPage(url.toString(), page);
+}
+
+async function listedAfter(tabId: number, html: string, page: number, cards: number): Promise<number | null> {
+  const listed = nextListedPage(html, page);
+  if (listed !== null || cards === 0)
+    return listed;
+
+  if (await revealPager(tabId) === false)
+    return null;
+
+  const again = await readTab(tabId);
+  if (again === null || landedPage(again.url, -1) !== page)
+    return null;
+
+  return nextListedPage(again.html, page);
+}
+
+async function revealPager(tabId: number): Promise<boolean> {
+  const tab = await browser.tabs.get(tabId).catch(() => null);
+  const url = tab?.url || tab?.pendingUrl || '';
+  if (resumePath(url))
+    return false;
+
+  try {
+    await browser.scripting.executeScript({
+      target: { tabId },
+      func: scrollPager,
+    });
+  }
+  catch {
+    return false;
+  }
+
+  await pause(400, 700);
+
+  return true;
+}
+
+function scrollPager(): void {
+  if (/\/resume(?:_converter|_print)?(?:\/|$)/i.test(location.pathname))
+    return;
+
+  const pager = document.querySelector('[data-qa="pager-page"], [data-qa="pager-next"]');
+  if (pager instanceof HTMLElement) {
+    pager.scrollIntoView({ block: 'end' });
+
+    return;
+  }
+
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+async function hideKnown(tabId: number, url: string, ids: readonly string[]): Promise<void> {
+  if (resumePath(url) || ids.length === 0)
+    return;
+
+  let gap = false;
+  for (const id of ids) {
+    if (hangHalted())
+      return;
+
+    if (gap)
+      await hidePause();
+
+    gap = true;
+    await clickHide(tabId, id);
+  }
+}
+
+function hidePause(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, hideWaitMs(Math.random())));
+}
+
+async function clickHide(tabId: number, id: string): Promise<void> {
+  if (/^\d+$/.test(id) === false)
+    return;
+
+  try {
+    await browser.scripting.executeScript({
+      target: { tabId },
+      func: hideVacancy,
+      args: [id],
+    });
+  }
+  catch {
+    return;
+  }
+}
+
+async function hideVacancy(id: string): Promise<boolean> {
+  if (/\/resume(?:_converter|_print)?(?:\/|$)/i.test(location.pathname))
+    return false;
+
+  if (/^\d+$/.test(id) === false)
+    return false;
+
+  const link = document.querySelector(`a[href*="/vacancy/${id}"]`);
+  const card = link?.closest('[data-qa="vacancy-serp__vacancy"]');
+  const button = card?.querySelector('button[aria-label="Скрыть"], button[data-qa="vacancy__blacklist-show-add_narrow-card"]');
+  if ((button instanceof HTMLElement) === false)
+    return false;
+
+  button.scrollIntoView({ block: 'center' });
+  button.click();
+  const menu = await new Promise<HTMLElement | null>((resolve) => {
+    const start = Date.now();
+    const timer = window.setInterval(() => {
+      const found = document.querySelector('button[data-qa="vacancy__blacklist-menu-add-vacancy"], button[data-qa*="blacklist-menu-add-vacancy"]');
+      const labeled = found instanceof HTMLElement ? found : hideMenuLabel();
+      if (labeled !== null || Date.now() - start > 700) {
+        window.clearInterval(timer);
+        resolve(labeled);
+      }
+    }, 40);
+  });
+  if (menu !== null)
+    menu.click();
+
+  return true;
+
+  function hideMenuLabel(): HTMLElement | null {
+    for (const node of document.querySelectorAll('button')) {
+      if (node instanceof HTMLElement && (node.textContent ?? '').includes('Скрыть эту вакансию'))
+        return node;
+    }
+
+    return null;
+  }
+}
+
+function resumePath(url: string): boolean {
+  try {
+    return /\/resume(?:_converter|_print)?(?:\/|$)/i.test(new URL(url).pathname);
+  }
+  catch {
+    return false;
+  }
 }
 
 const FRONT_QUERY = /frontend|front[\s-]?end|фронтенд|фронтэнд|vue|react/i;
@@ -376,13 +528,13 @@ function onHhRoot(url: string): boolean {
 }
 
 // Карточки читаются из открытой вкладки. Ответ без выдачи не значит, что страницы кончились.
-async function pull(tabId: number, url: string): Promise<{ url: string; html: string } | null> {
+async function pull(tabId: number, url: string, page: number): Promise<{ url: string; html: string } | null> {
   if (hangHalted())
     return null;
 
   const started = Date.now();
   const until = started + PAGE_LOAD_MS;
-  const loaded = await loadWithin(readSearchPage(tabId, url, until), until - started);
+  const loaded = await loadWithin(readSearchPage(tabId, url, until, page), until - started);
   if (sawCaptcha || hangHalted())
     return null;
 
@@ -392,7 +544,7 @@ async function pull(tabId: number, url: string): Promise<{ url: string; html: st
   return loaded;
 }
 
-async function readSearchPage(tabId: number, url: string, until: number): Promise<{ url: string; html: string } | null> {
+async function readSearchPage(tabId: number, url: string, until: number, page: number): Promise<{ url: string; html: string } | null> {
   if (late(until))
     return null;
 
@@ -404,16 +556,16 @@ async function readSearchPage(tabId: number, url: string, until: number): Promis
   if (sawCaptcha || await blocked(tabId, until))
     return null;
 
-  return readUntilSerp(tabId, until);
+  return readUntilSerp(tabId, until, page);
 }
 
-async function readUntilSerp(tabId: number, until: number): Promise<{ url: string; html: string } | null> {
+async function readUntilSerp(tabId: number, until: number, want: number): Promise<{ url: string; html: string } | null> {
   while (late(until) === false && hangHalted() === false) {
     if (await captchaNow(tabId, until))
       return null;
 
     const page = await readTab(tabId, until);
-    if (livePage(page))
+    if (openedAsk(page, want))
       return page;
 
     if (await waitBit(until) === false)
@@ -423,14 +575,17 @@ async function readUntilSerp(tabId: number, until: number): Promise<{ url: strin
   return null;
 }
 
-function livePage(page: { url: string; html: string } | null): page is { url: string; html: string } {
+function openedAsk(page: { url: string; html: string } | null, want: number): page is { url: string; html: string } {
   if (page === null)
     return false;
 
   if (isLogin(page.url, page.html))
     return true;
 
-  return parsedSearch(page.html);
+  if (parsedSearch(page.html) === false)
+    return false;
+
+  return landedPage(page.url, -1) === want;
 }
 
 async function waitBit(until: number): Promise<boolean> {
