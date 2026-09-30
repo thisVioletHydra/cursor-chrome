@@ -1,7 +1,7 @@
-import type { Model, Vacancy } from './rules.ts';
+import type { Model, Vacancy } from '../scan/rules.ts';
 
-import { judge } from './judge.ts';
-import { NO_META } from './rules.ts';
+import { judge } from '../scan/judge.ts';
+import { NO_META } from '../scan/rules.ts';
 
 import process from 'node:process';
 

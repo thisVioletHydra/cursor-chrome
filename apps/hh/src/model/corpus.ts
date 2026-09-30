@@ -1,10 +1,10 @@
 import type { Provider } from './model.ts';
-import type { Vacancy } from './rules.ts';
+import type { Vacancy } from '../scan/rules.ts';
 
 import { FACTS } from './copy.ts';
 import { askChain } from './model.ts';
-import { storePath } from './memory.ts';
-import { parseJsonLoose, writeJsonAtomic } from './store.ts';
+import { storePath } from '../diary/memory.ts';
+import { parseJsonLoose, writeJsonAtomic } from '../diary/store.ts';
 
 import { createHash } from 'node:crypto';
 import fsPromises from 'node:fs/promises';

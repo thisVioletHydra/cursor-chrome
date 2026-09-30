@@ -1,7 +1,7 @@
-import { PRESETS, probeProvider } from './model.ts';
+import { PRESETS, probeProvider } from '../model/model.ts';
 import { ping } from './ping.ts';
 import { preflight } from './preflight.ts';
-import { scan } from './scan.ts';
+import { scan } from '../scan/scan.ts';
 
 import process from 'node:process';
 

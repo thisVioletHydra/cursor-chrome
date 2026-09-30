@@ -1,6 +1,6 @@
 import type { Model, Report, Vacancy, Verdict } from './rules.ts';
 
-import { FACTS } from './copy.ts';
+import { FACTS } from '../model/copy.ts';
 import { hardSkip, lineOf } from './rules.ts';
 
 export type JudgeOpts = {

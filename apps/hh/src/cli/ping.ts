@@ -1,6 +1,6 @@
-import { appToken, vacancyPing } from './hh-token.ts';
-import { PING_MS } from './limits.ts';
-import { chainFromEnv, pingChain } from './model.ts';
+import { appToken, vacancyPing } from '../scan/hh-token.ts';
+import { PING_MS } from '../limits.ts';
+import { chainFromEnv, pingChain } from '../model/model.ts';
 
 import process from 'node:process';
 

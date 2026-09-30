@@ -1,8 +1,8 @@
-import type { Memory } from './memory.ts';
-import type { State } from './state.ts';
+import type { Memory } from '../diary/memory.ts';
+import type { State } from '../diary/state.ts';
 
-import { QUEUE_TARGET, SCAN_EVERY_MS } from './limits.ts';
-import { dayOpen, workHours } from './memory.ts';
+import { QUEUE_TARGET, SCAN_EVERY_MS } from '../limits.ts';
+import { dayOpen, workHours } from '../diary/memory.ts';
 
 export type TickInput = {
   state: State;

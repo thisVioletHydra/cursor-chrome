@@ -1,4 +1,4 @@
-import { HH_API, HH_USER_AGENT, PING_MS } from './limits.ts';
+import { HH_API, HH_USER_AGENT, PING_MS } from '../limits.ts';
 
 import process from 'node:process';
 

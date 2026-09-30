@@ -1,8 +1,8 @@
-import type { Provider } from './model.ts';
+import type { Provider } from '../model/model.ts';
 
-import { FACTS } from './copy.ts';
-import { PING_MS } from './limits.ts';
-import { askChain, chainFromEnv } from './model.ts';
+import { FACTS } from '../model/copy.ts';
+import { PING_MS } from '../limits.ts';
+import { askChain, chainFromEnv } from '../model/model.ts';
 
 export type FormQuestion = {
   entry: string;

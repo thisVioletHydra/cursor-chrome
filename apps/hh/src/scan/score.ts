@@ -1,6 +1,6 @@
 import type { Vacancy } from './rules.ts';
 
-import { roleJunk } from './mix.ts';
+import { roleJunk } from '../mix/mix.ts';
 import { hardSkip, NO_META } from './rules.ts';
 
 import process from 'node:process';

@@ -1,7 +1,7 @@
-import type { Provider } from './model.ts';
+import type { Provider } from '../model/model.ts';
 
-import { FACTS } from './copy.ts';
-import { askChain } from './model.ts';
+import { FACTS } from '../model/copy.ts';
+import { askChain } from '../model/model.ts';
 
 const MAX_QUERIES = 5;
 const SUGGEST_TRY_MS = 9_000;

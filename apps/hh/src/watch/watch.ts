@@ -1,6 +1,6 @@
-import { storePath, workHours } from './memory.ts';
-import { readState, writeState } from './state.ts';
-import { parseJsonLoose, writeJsonAtomic } from './store.ts';
+import { storePath, workHours } from '../diary/memory.ts';
+import { readState, writeState } from '../diary/state.ts';
+import { parseJsonLoose, writeJsonAtomic } from '../diary/store.ts';
 
 import path from 'node:path';
 import process from 'node:process';

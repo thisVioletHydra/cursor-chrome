@@ -1,4 +1,4 @@
-import { SEND_PER_DAY } from './limits.ts';
+import { SEND_PER_DAY } from '../limits.ts';
 import { parseJsonLoose } from './store.ts';
 
 import fsPromises from 'node:fs/promises';

@@ -1,7 +1,7 @@
-import { MAX_ATTEMPTS } from './limits.ts';
-import { storePath } from './memory.ts';
-import { mixBatch, taste } from './mix.ts';
-import { parseJsonLoose, writeJsonAtomic } from './store.ts';
+import { MAX_ATTEMPTS } from '../limits.ts';
+import { storePath } from '../diary/memory.ts';
+import { mixBatch, taste } from '../mix/mix.ts';
+import { parseJsonLoose, writeJsonAtomic } from '../diary/store.ts';
 
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';

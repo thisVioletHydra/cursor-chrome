@@ -1,5 +1,5 @@
 import { deleteLinks, insertLinks, listLinks, lookupHeld } from './links-db.ts';
-import { SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from './limits.ts';
+import { SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from '../limits.ts';
 import { bumpDay, clearSearchPages, countSeen, insertSeen, lookupSeen, openStore, readDay, readSearchPages, storePath, writeDay, writeSearchPage } from './seen-db.ts';
 
 export type { HeldLink } from './links-db.ts';
@@ -51,7 +51,7 @@ export function heldAmong(ids: readonly string[]): Promise<string[]> {
 
 export function keepLinks(rows: readonly { id: string; url: string; title: string }[]): Promise<string[]> {
   return turn(async () => {
-    const { busyAmong } = await import('./queue.ts');
+    const { busyAmong } = await import('../queue/queue.ts');
     const busy = new Set(await busyAmong(rows.map(row => row.id)));
 
     return insertLinks(rows.filter(row => busy.has(row.id) === false), Date.now());

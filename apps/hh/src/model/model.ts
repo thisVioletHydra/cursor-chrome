@@ -1,7 +1,7 @@
-import type { Model, Verdict } from './rules.ts';
+import type { Model, Verdict } from '../scan/rules.ts';
 
-import { modelPrompt } from './judge.ts';
-import { PING_MS } from './limits.ts';
+import { modelPrompt } from '../scan/judge.ts';
+import { PING_MS } from '../limits.ts';
 import { noteProbe } from './probe-log.ts';
 
 import process from 'node:process';

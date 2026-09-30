@@ -1,5 +1,5 @@
-import { storePath } from './memory.ts';
-import { writeJsonAtomic } from './store.ts';
+import { storePath } from '../diary/memory.ts';
+import { writeJsonAtomic } from '../diary/store.ts';
 
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';

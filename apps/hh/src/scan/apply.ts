@@ -1,6 +1,6 @@
 import type { Vacancy } from './rules.ts';
 
-import { enqueue } from './queue.ts';
+import { enqueue } from '../queue/queue.ts';
 
 import process from 'node:process';
 

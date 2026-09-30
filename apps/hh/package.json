@@ -6,10 +6,10 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "scan": "tsx src/cli.ts scan",
-    "preflight": "tsx src/cli.ts preflight",
-    "ping": "tsx src/cli.ts ping",
-    "probe": "tsx src/cli.ts probe"
+    "scan": "tsx src/cli/cli.ts scan",
+    "preflight": "tsx src/cli/cli.ts preflight",
+    "ping": "tsx src/cli/cli.ts ping",
+    "probe": "tsx src/cli/cli.ts probe"
   },
   "devDependencies": {
     "@types/node": "catalog:",

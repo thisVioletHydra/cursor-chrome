@@ -1,8 +1,8 @@
 import type { Vacancy } from './rules.ts';
 
 import { appToken } from './hh-token.ts';
-import { HH_API, HH_USER_AGENT, PING_MS } from './limits.ts';
-import { splitQueries } from './queries.ts';
+import { HH_API, HH_USER_AGENT, PING_MS } from '../limits.ts';
+import { splitQueries } from '../mix/queries.ts';
 
 type SearchItem = {
   id: string;

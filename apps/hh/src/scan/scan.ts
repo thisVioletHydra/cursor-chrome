@@ -1,18 +1,18 @@
-import type { Buckets, Slot } from './mix.ts';
-import type { Memory } from './memory.ts';
+import type { Buckets, Slot } from '../mix/mix.ts';
+import type { Memory } from '../diary/memory.ts';
 import type { Model, Report, Vacancy } from './rules.ts';
 import type { Rules } from './score.ts';
 
 import { sendApply } from './apply.ts';
-import { keepVacancy } from './corpus.ts';
+import { keepVacancy } from '../model/corpus.ts';
 import { fillKnownForm } from './form.ts';
 import { judge, packReport } from './judge.ts';
 import { searchVacancies } from './hh-api.ts';
-import { LOOK_PER_START, MODEL_PER_START, QUEUE_TARGET } from './limits.ts';
-import { knownAmong, readMemory, remember } from './memory.ts';
-import { FRONT_TAKE, hasSlot, roleJunk, stepSlot, takeSlot, taste } from './mix.ts';
-import { modelFromEnv, modelsDown } from './model.ts';
-import { pendingCount } from './queue.ts';
+import { LOOK_PER_START, MODEL_PER_START, QUEUE_TARGET } from '../limits.ts';
+import { knownAmong, readMemory, remember } from '../diary/memory.ts';
+import { FRONT_TAKE, hasSlot, roleJunk, stepSlot, takeSlot, taste } from '../mix/mix.ts';
+import { modelFromEnv, modelsDown } from '../model/model.ts';
+import { pendingCount } from '../queue/queue.ts';
 import { hardSkip } from './rules.ts';
 import { byScore, ruleSkip, rulesFromEnv, scoreOf } from './score.ts';
 
