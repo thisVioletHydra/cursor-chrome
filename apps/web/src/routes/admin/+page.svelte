@@ -17,6 +17,8 @@ let hoursOn = $state(data.hours !== false);
 let hoursSaving = $state(false);
 let hoursNote = $state('');
 let hoursOk = $state(false);
+let liveBusy = $state(false);
+let liveNote = $state('');
 const COPY_LABEL = 'Скопировать';
 let copyNote = $state(COPY_LABEL);
 let copyTone = $state<'idle' | 'ok' | 'fail'>('idle');
@@ -90,7 +92,7 @@ async function refresh(mine: number): Promise<void> {
     return;
 
   const list = watchList;
-  const mark = applied.dropped > 0 && list !== undefined && logPlace.follow === false
+  const mark = list !== undefined && logPlace.follow === false
     ? holdLine(list)
     : null;
 
@@ -103,7 +105,7 @@ async function refresh(mine: number): Promise<void> {
     return;
 
   if (logPlace.follow) {
-    nextList.scrollTop = nextList.scrollHeight;
+    nextList.scrollTop = 0;
     return;
   }
 
@@ -152,6 +154,8 @@ const liveStep = $derived.by(() => {
 
   return '';
 });
+
+const journalRows = $derived([...logSnap.rows].reverse());
 
 function clock(at: number): string {
   return new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(at);
@@ -217,13 +221,13 @@ function onLogScroll(): void {
   rememberLog(watchList);
 }
 
-function nearBottom(node: HTMLElement): boolean {
-  return node.scrollHeight - node.scrollTop - node.clientHeight < 40;
+function nearTop(node: HTMLElement): boolean {
+  return node.scrollTop < 8;
 }
 
 function rememberLog(node: HTMLUListElement): void {
   logPlace.scrollTop = node.scrollTop;
-  logPlace.follow = nearBottom(node);
+  logPlace.follow = nearTop(node);
   const mark = holdLine(node);
   if (mark === null)
     return;
@@ -389,10 +393,56 @@ function hoursAnswer(payload: unknown): { ok: boolean; detail: string; hours: bo
 
   return { ok, detail, hours };
 }
+
+function liveAnswer(result: { type: string; data?: unknown; error?: { message?: string } }): { ok: boolean; detail: string } {
+  if (result.type === 'success' || result.type === 'failure')
+    return restartDetail(result.data);
+
+  const message = result.error?.message ?? '';
+
+  return { ok: false, detail: message.length > 0 ? message : 'не вышло' };
+}
 </script>
 
 <section class="mb-8 rounded-2xl border border-white/8 bg-[#151922] px-5 {allGreen ? 'py-3' : 'py-4'}">
-  <h2 class="text-base font-semibold">До старта</h2>
+  <div class="flex items-center justify-between gap-3">
+    <h2 class="text-base font-semibold">До старта</h2>
+    <form
+      method="POST"
+      action="?/live"
+      use:enhance={() => {
+        liveBusy = true;
+        liveNote = '';
+        return async ({ result, update }) => {
+          const parsed = liveAnswer(result);
+          let note = parsed.ok ? '' : parsed.detail;
+          try {
+            if (parsed.ok)
+              await update();
+          }
+          catch (error) {
+            const message = error instanceof Error ? error.message : '';
+            note = message.length > 0 ? message : 'не вышло';
+          }
+          finally {
+            liveBusy = false;
+            liveNote = note;
+          }
+        };
+      }}
+    >
+      <input name="hhLive" type="hidden" value={data.ready.live ? '' : '1'} />
+      <button
+        class="inline-flex shrink-0 cursor-pointer items-center rounded-lg border bg-[#10131a] px-2.5 py-1 text-xs font-medium whitespace-nowrap transition hover:border-white/30 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-[0.98] disabled:cursor-wait disabled:opacity-60 {liveNote.length > 0 ? 'border-rose-400/50 text-rose-300' : 'border-white/15 text-zinc-100'}"
+        type="submit"
+        disabled={liveBusy}
+        aria-live="polite"
+        aria-busy={liveBusy}
+      >
+        {liveBusy ? 'Меняю…' : liveNote.length > 0 ? liveNote : data.ready.live ? 'Выключить боевой режим' : 'Включить боевой режим'}
+      </button>
+    </form>
+  </div>
   {#if allGreen}
     <p class="mt-2 text-xs text-zinc-500">С 9:00 до 22:00 МСК.</p>
   {/if}
@@ -414,22 +464,6 @@ function hoursAnswer(payload: unknown): { ok: boolean; detail: string; hours: bo
       </li>
     {/each}
   </ul>
-  <form
-    class="mt-3"
-    method="POST"
-    action="?/live"
-    use:enhance={() => {
-      return async ({ result, update }) => {
-        if (result.type === 'success')
-          await update();
-      };
-    }}
-  >
-    <input name="hhLive" type="hidden" value={data.ready.live ? '' : '1'} />
-    <button class="btn btn-ghost h-11 min-h-11 px-4" type="submit">
-      {data.ready.live ? 'Выключить боевой режим' : 'Включить боевой режим'}
-    </button>
-  </form>
 </section>
 
 <section class="mb-8">
