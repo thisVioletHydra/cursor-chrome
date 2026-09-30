@@ -17,6 +17,7 @@ let hoursOn = $state(data.hours !== false);
 let hoursSaving = $state(false);
 let hoursNote = $state('');
 let hoursOk = $state(false);
+let copyNote = $state('Скопировать');
 
 const whoName: Record<string, string> = {
   extension: 'расширение',
@@ -143,6 +144,57 @@ const liveStep = $derived.by(() => {
 
 function clock(at: number): string {
   return new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(at);
+}
+
+function journalLine(at: number, who: string, text: string): string {
+  return `${clock(at)} ${whoName[who] ?? who} ${text}`;
+}
+
+function visibleJournal(): string {
+  const rows = logSnap.rows;
+  const list = watchList;
+  if (rows.length === 0)
+    return '';
+
+  if (list === undefined)
+    return rows.map(row => journalLine(row.at, row.who, row.text)).join('\n');
+
+  const box = list.getBoundingClientRect();
+  const lines: string[] = [];
+  for (const row of rows) {
+    const item = list.querySelector<HTMLElement>(`:scope > li[data-k="${CSS.escape(logKey(row))}"]`);
+    if (item === null)
+      continue;
+
+    const rect = item.getBoundingClientRect();
+    if (rect.bottom <= box.top || rect.top >= box.bottom)
+      continue;
+
+    lines.push(journalLine(row.at, row.who, row.text));
+  }
+
+  if (lines.length > 0)
+    return lines.join('\n');
+
+  return rows.map(row => journalLine(row.at, row.who, row.text)).join('\n');
+}
+
+async function copyJournal(): Promise<void> {
+  const text = visibleJournal();
+  if (text.length === 0) {
+    copyNote = 'в журнале пусто';
+
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    copyNote = 'Скопировано';
+  }
+  catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    copyNote = message.length > 0 ? message : 'не скопировалось';
+  }
 }
 
 function onLogScroll(): void {
@@ -368,7 +420,10 @@ function hoursAnswer(payload: unknown): { ok: boolean; detail: string; hours: bo
 </section>
 
 <section class="mb-8">
-  <h2 class="mb-3 text-base font-semibold">Логирование</h2>
+  <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <h2 class="text-base font-semibold">Логирование</h2>
+    <button class="btn btn-ghost btn-sm h-8 min-h-8 px-3" type="button" onclick={copyJournal}>{copyNote}</button>
+  </div>
   <div class="overflow-hidden rounded-lg border border-white/10 bg-[#07080c] font-mono text-[13px] leading-snug">
     <p class="flex min-w-0 items-center gap-2 overflow-hidden border-b border-white/10 px-3 py-2 whitespace-nowrap">
       <span class="shrink-0 text-zinc-500">&gt;</span>

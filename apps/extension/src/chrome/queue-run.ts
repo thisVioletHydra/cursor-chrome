@@ -1,6 +1,6 @@
 import type { Hunt, QueueItem } from './admin-api';
 
-import { dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, postFound, rememberPage, resetSearchPages, seenAmong } from './admin-api';
+import { dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, postFound, rememberPage, seenAmong } from './admin-api';
 import { getSyncKey, getSyncUrl } from './apply-log';
 import { getFlags, setFlags } from './flags';
 import { pinnedCaptcha, tabShowsCaptcha } from './hh-captcha';
@@ -285,7 +285,6 @@ async function drain(): Promise<QueueRun> {
     }
 
     advance = true;
-    await resetSearchPages(base, key, hunt.queries);
     if (await restCycle() === false)
       break;
   }

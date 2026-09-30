@@ -112,24 +112,6 @@ export async function rememberPage(base: string, key: string, cursor: { query: s
   }
 }
 
-export async function resetSearchPages(base: string, key: string, queries: readonly string[]): Promise<boolean> {
-  if (queries.length === 0)
-    return true;
-
-  try {
-    const res = await fetch(`${base}/api/queue`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-      body: JSON.stringify({ resetPages: queries }),
-    });
-
-    return res.ok;
-  }
-  catch {
-    return false;
-  }
-}
-
 export async function dropLinks(base: string, key: string, ids: readonly string[]): Promise<boolean> {
   if (ids.length === 0)
     return true;

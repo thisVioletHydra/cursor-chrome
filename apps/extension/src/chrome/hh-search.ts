@@ -68,12 +68,24 @@ export async function collectVacancies(
   let unread = false;
   let done = true;
   let checkFailed = false;
+  let opened = false;
   const login = await whileSearching(async () => {
+    async function keep(query: string, next: number): Promise<boolean> {
+      if (await rememberPage({ query, page: next }))
+        return true;
+
+      checkFailed = true;
+      done = false;
+
+      return false;
+    }
+
     for (const query of queries) {
       let page = storedPage(pages[query]);
       if (page >= PAGE_CAP)
         continue;
 
+      opened = true;
       while (page < PAGE_CAP) {
         const pulled = await pull(tabId, searchUrl(query, page));
         if (sawCaptcha)
@@ -93,12 +105,8 @@ export async function collectVacancies(
         const batch = cardsOf(serpHtml(pulled.html));
         if (batch.length === 0) {
           const next = pulled.html.includes('data-qa="pager-next"') && page + 1 < PAGE_CAP ? page + 1 : PAGE_CAP;
-          if (await rememberPage({ query, page: next }) === false) {
-            checkFailed = true;
-            done = false;
-
+          if (await keep(query, next) === false)
             return false;
-          }
 
           if (next >= PAGE_CAP)
             break;
@@ -108,14 +116,15 @@ export async function collectVacancies(
         }
 
         if (landedEarlier(pulled.url, page)) {
-          if (await rememberPage({ query, page: PAGE_CAP }) === false) {
-            checkFailed = true;
-            done = false;
-
+          const next = page + 1 < PAGE_CAP ? page + 1 : PAGE_CAP;
+          if (await keep(query, next) === false)
             return false;
-          }
 
-          break;
+          if (next >= PAGE_CAP)
+            break;
+
+          page = next;
+          continue;
         }
 
         sawCards = true;
@@ -168,8 +177,12 @@ export async function collectVacancies(
     return miss(false, false, 'сервер не сверил вакансии');
   }
 
-  if (saved === 0 && sawCards === false)
+  if (saved === 0 && sawCards === false) {
+    if (opened === false)
+      return { login: false, captcha: false, saved: 0, more: false, done: true, reason: '' };
+
     return { login: false, captcha: false, saved: 0, more: false, done, reason: 'пустая выдача' };
+  }
 
   return { login: false, captcha: false, saved, more: false, done, reason: '' };
 }
