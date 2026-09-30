@@ -7,6 +7,7 @@ import { pinnedCaptcha, tabShowsCaptcha } from '../tab/hh-captcha';
 import { loadPace, rare, waitMs } from './pace';
 import { markTeaWork, maybeTea, noteTeaSession } from './tea';
 import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage, waitBeforeLoad } from '../pilot/page-log';
+import { budgetSec, waitMark } from '../pilot/wait-pulse';
 import { isPilotLinkText, readPilotLink } from '../pilot/pilot-link';
 import { applyPilot } from '../pilot/pilot-apply';
 import { markPilotStop } from '../pilot/pilot-stop';
@@ -547,8 +548,15 @@ async function noteReply(base: string, key: string, run: QueueRun, item: QueueIt
   const stop = stopReason(status, reply);
   if (stop.length > 0)
     await tellPage(stop);
-  else if (shown === 'sent')
-    await tickPage('отвлёкся', await distractWait());
+  else if (shown === 'sent') {
+    const ms = await distractWait();
+    await tickPage('отвлёкся', ms, '', waitMark({
+      id: 'apply.distract',
+      human: 'отвлёкся',
+      budget: budgetSec(ms),
+      next: 'queue.next',
+    }));
+  }
   else
     await tellPage(landed ? describe(status, reply) : 'админка не приняла отклик');
 
@@ -651,7 +659,13 @@ const REST_MAX_SEC = 60;
 export async function paceBeforeHunt(): Promise<void> {
   const span = REST_MAX_SEC - REST_MIN_SEC + 1;
   const sec = REST_MIN_SEC + Math.floor(Math.random() * span);
-  await tickPage('жду', sec * 1000);
+  await tickPage('жду', sec * 1000, '', waitMark({
+    id: 'cycle.rest',
+    human: 'отдых круга',
+    budget: sec,
+    next: 'search.hunt',
+    hold: true,
+  }));
 }
 
 async function restCycle(): Promise<boolean> {
@@ -677,7 +691,13 @@ async function sendFound(base: string, key: string, cards: unknown[]): Promise<{
     return posted;
 
   await tellPage(posted.reason);
-  await tickPage('жду', RETRY_MS);
+  await tickPage('жду', RETRY_MS, '', waitMark({
+    id: 'server.retry',
+    human: 'сервер',
+    budget: budgetSec(RETRY_MS),
+    next: 'server.send',
+    hold: true,
+  }));
   if (hangHalted())
     return posted;
 
@@ -1017,7 +1037,12 @@ async function pacedWait(): Promise<void> {
   const wait = fast
     ? waitMs(pace.fastMin, pace.fastMax)
     : waitMs(pace.readMin, pace.readMax);
-  await tickPage(fast ? 'быстро' : 'читаю', wait);
+  await tickPage(fast ? 'быстро' : 'читаю', wait, '', waitMark({
+    id: fast ? 'apply.skim' : 'apply.look',
+    human: fast ? 'пролистал' : 'чтение вакансии',
+    budget: budgetSec(wait),
+    next: 'apply.send',
+  }));
 }
 
 async function distractWait(): Promise<number> {

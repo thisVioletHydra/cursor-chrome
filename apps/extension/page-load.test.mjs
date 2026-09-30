@@ -1,4 +1,5 @@
 import { FLIP_MAX_MS, FLIP_MIN_MS, HIDE_MAX_MS, HIDE_MIN_MS, PAGE_LOAD_MS, endedAfter, flipWaitMs, foldLiveLine, hideWaitMs, landedPage, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchHasNext, searchStep } from './src/search/page-load.ts';
+import { pulseLines, waitMark, waitPulse } from './src/pilot/wait-pulse.ts';
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -113,4 +114,41 @@ test('a live wait replaces one line', () => {
     foldLiveLine(['уже видели, 20'], 'жду страницу, 1 с'),
     ['уже видели, 20', 'жду страницу, 1 с'],
   );
+});
+
+test('a named wait replaces the same pulse', () => {
+  const hide = waitMark({
+    id: 'hide.wait',
+    human: 'скрытие',
+    budget: 8,
+    next: 'hide.look',
+    hold: true,
+  });
+  const first = waitPulse(hide, 3);
+  const next = waitPulse(hide, 4);
+  assert.equal(first.length <= 80, true);
+  assert.deepEqual(pulseLines(first), [
+    'hide.wait',
+    'скрытие',
+    'жребий: 8 с',
+    'прошло: 3 с',
+    'дальше: hide.look',
+  ]);
+  assert.deepEqual(foldLiveLine(['жду 29'], first), [first]);
+  assert.deepEqual(foldLiveLine([first], next), [next]);
+  assert.deepEqual(foldLiveLine(['уже видели, 20'], first), ['уже видели, 20', first]);
+  const hunt = waitPulse(waitMark({
+    id: 'search.hunt',
+    human: 'ищу вакансию',
+    budget: null,
+    next: 'search.load',
+    kind: 's',
+  }), 12);
+  assert.deepEqual(pulseLines(hunt), [
+    'search.hunt',
+    'ищу вакансию',
+    'без жребия',
+    'прошло: 12 с',
+    'дальше: search.load',
+  ]);
 });

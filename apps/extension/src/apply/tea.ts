@@ -1,4 +1,5 @@
 import { tickPage } from '../pilot/page-log';
+import { budgetSec, waitMark } from '../pilot/wait-pulse';
 import { waitMs } from './pace';
 import { beatTea, doneTea, rollTea, swayMs } from './tea-clock';
 import { browser } from '../browser-host';
@@ -20,8 +21,14 @@ export async function maybeTea(): Promise<void> {
   if (roll === null)
     return;
 
-  // `чай N` и `жду N` каждую секунду, иначе сторож решит, что бот завис.
-  await tickPage(roll.hit ? 'чай' : 'жду', roll.pause);
+  // Секундный пульс, иначе сторож решит, что бот завис.
+  await tickPage(roll.hit ? 'чай' : 'жду', roll.pause, '', waitMark({
+    id: roll.hit ? 'tea.break' : 'tea.miss',
+    human: roll.hit ? 'чай' : 'чай мимо',
+    budget: budgetSec(roll.pause),
+    next: 'queue.next',
+    hold: roll.hit === false,
+  }));
   await doneTea(roll);
 }
 

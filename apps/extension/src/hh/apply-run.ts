@@ -1,4 +1,5 @@
 import { click } from '../page/actions';
+import { budgetSec, waitMark, waitPulse, type WaitMark } from '../pilot/wait-pulse';
 import { applyMeta, applySucceeded } from './apply-watch';
 import { ctaApplied, findSubmit, formErrors, freshSuccess, pageSkip, planOpen } from './apply-click';
 import { applyBlocker, captchaOnPage, formReady, humanPayload } from './apply-detect';
@@ -25,6 +26,14 @@ export type ApplyResult = {
 
 let running: Promise<ApplyResult> | null = null;
 let hadToast = false;
+
+const ANSWER_WAIT = waitMark({
+  id: 'apply.answer',
+  human: 'ответ hh',
+  budget: 8,
+  next: 'apply.done',
+  hold: true,
+});
 
 export function runApply(resume = false): Promise<ApplyResult> {
   if (running)
@@ -112,13 +121,26 @@ async function clickOpen(plan: ReturnType<typeof planOpen>): Promise<ApplyResult
     return before;
 
   await noteLive('жму откликнуться');
-  await beat('жду', between(700, 2_600), () => employerQuestionnaire() !== null);
+  const pause = between(700, 2_600);
+  await beat(pause, () => employerQuestionnaire() !== null, waitMark({
+    id: 'apply.pause',
+    human: 'перед кликом',
+    budget: budgetSec(pause),
+    next: 'apply.click',
+    hold: true,
+  }));
   const mid = askedResult();
   if (mid)
     return mid;
 
   click(plan.el);
-  const ok = await beat('жду', 8_000, () => employerQuestionnaire() !== null || formReady() || freshSuccess(hadToast));
+  const ok = await beat(8_000, () => employerQuestionnaire() !== null || formReady() || freshSuccess(hadToast), waitMark({
+    id: 'apply.form',
+    human: 'форма отклика',
+    budget: 8,
+    next: 'apply.fill',
+    hold: true,
+  }));
   const after = askedResult();
   if (after)
     return after;
@@ -150,14 +172,21 @@ async function submitStep(): Promise<ApplyResult> {
     return fail('нет кнопки отправки');
 
   await noteLive('отправляю отклик');
-  await beat('жду', between(900, 3_200), () => employerQuestionnaire() !== null);
+  const pause = between(900, 3_200);
+  await beat(pause, () => employerQuestionnaire() !== null, waitMark({
+    id: 'apply.pause',
+    human: 'перед отправкой',
+    budget: budgetSec(pause),
+    next: 'apply.send',
+    hold: true,
+  }));
   const paused = askedResult();
   if (paused)
     return paused;
 
   click(btn);
   await noteLive('жду ответ');
-  await beat('жду', 8_000, () => employerQuestionnaire() !== null || freshSuccess(hadToast) || formErrors().length > 0);
+  await beat(8_000, () => employerQuestionnaire() !== null || freshSuccess(hadToast) || formErrors().length > 0, ANSWER_WAIT);
   const asked = askedResult();
   if (asked)
     return asked;
@@ -171,7 +200,7 @@ async function submitStep(): Promise<ApplyResult> {
     const again = findSubmit();
     if (again !== null) {
       click(again);
-      await beat('жду', 8_000, () => employerQuestionnaire() !== null || freshSuccess(hadToast) || formErrors().length > 0);
+      await beat(8_000, () => employerQuestionnaire() !== null || freshSuccess(hadToast) || formErrors().length > 0, ANSWER_WAIT);
     }
   }
   const afterAgain = askedResult();
@@ -231,7 +260,7 @@ function between(min: number, max: number): number {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
 
-async function beat(label: string, ms: number, done: () => boolean): Promise<boolean> {
+async function beat(ms: number, done: () => boolean, mark: WaitMark): Promise<boolean> {
   const end = Date.now() + ms;
   let sec = 0;
   let next = 0;
@@ -242,7 +271,7 @@ async function beat(label: string, ms: number, done: () => boolean): Promise<boo
     if (Date.now() >= next) {
       sec += 1;
       next = Date.now() + 1000;
-      await noteLive(`${label} ${sec}`);
+      await noteLive(waitPulse(mark, sec));
     }
 
     await sleep(150);

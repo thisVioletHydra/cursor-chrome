@@ -4,6 +4,7 @@ import { getFlags } from '../pilot/flags';
 import { freshPilot, pilotStep } from '../chrome/pilot';
 import { tabShowsCaptcha } from '../tab/hh-captcha';
 import { hangHalted, loadWithin, tellPage, tickPage, whileSearching } from '../pilot/page-log';
+import { budgetSec, waitMark } from '../pilot/wait-pulse';
 import { hideDom } from './hide-dom';
 import { HIDE_POLL_MS, HIDE_POPUP_STUCK, hideBlocks, hideClickOk, hideFaceOf, hideLimit, hideStart, stepHide } from './hide-popup';
 import { PAGE_LOAD_MS, endedAfter, flipWaitMs, hideWaitMs, landedPage, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchStep } from './page-load';
@@ -532,7 +533,15 @@ async function hideCall(tabId: number, op: string, id: string): Promise<unknown>
 }
 
 function hidePause(): Promise<void> {
-  return tickPage('жду', hideWaitMs(Math.random()));
+  const ms = hideWaitMs(Math.random());
+
+  return tickPage('жду', ms, '', waitMark({
+    id: 'hide.wait',
+    human: 'скрытие',
+    budget: budgetSec(ms),
+    next: 'hide.look',
+    hold: true,
+  }));
 }
 
 function hideTick(): Promise<void> {

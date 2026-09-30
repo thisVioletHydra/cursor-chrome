@@ -1,4 +1,5 @@
 import { SERVER_WAIT } from '../chrome/pilot';
+import { pulseLines } from '../pilot/wait-pulse';
 import { browser } from '../browser-host';
 import { ask } from './bridge';
 
@@ -50,18 +51,23 @@ export async function readSnap(): Promise<Snap | null> {
 }
 
 export function statusLines(snap: Snap): string[] {
-  const lines = [snap.link.length > 0 ? snap.link : (snap.auto ? 'вкл' : 'выкл'), pinLine(snap.pinned)];
-  const step = currentStep(snap);
-  if (step.length > 0)
-    lines.push(`шаг: ${step}`);
+  const lines: string[] = [];
+  const detail = pulseLines(waitText(snap));
+  if (detail !== null)
+    lines.push(...detail);
 
-  const stuck = stuckLine(snap);
-  if (stuck.length > 0)
-    lines.push(stuck);
+  lines.push(snap.link.length > 0 ? snap.link : (snap.auto ? 'вкл' : 'выкл'), pinLine(snap.pinned));
+  const step = currentStep(snap);
+  if (detail === null && step.length > 0)
+    lines.push(`шаг: ${step}`);
 
   const flags = flagLine(snap);
   if (flags.length > 0)
     lines.push(flags);
+
+  const stuck = stuckLine(snap);
+  if (stuck.length > 0 && lines.includes(stuck) === false)
+    lines.push(stuck);
 
   return lines;
 }
@@ -74,6 +80,21 @@ function pinLine(pinned: boolean | null): string {
     return 'пин: да';
 
   return 'пин: нет';
+}
+
+function waitText(snap: Snap): string {
+  for (let index = snap.rows.length - 1; index >= 0; index -= 1) {
+    const line = snap.rows[index] ?? '';
+    if (line.length === 0 || hang(line))
+      continue;
+
+    if (pulseLines(line) !== null)
+      return line;
+
+    return '';
+  }
+
+  return '';
 }
 
 function currentStep(snap: Snap): string {

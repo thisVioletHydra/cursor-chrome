@@ -7,6 +7,7 @@ export const HIDE_MAX_MS = 8_000;
 const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
 const SEARCH_TICK = /^ищу вакансию, \d+ с$/;
 const PAGE_TICK = /^жду страницу, \d+ с$/;
+const STATE_PULSE = /^~[a-z][a-z0-9.]*\|[^|]+\|(?:-|\d+)\|\d+\|[a-z][a-z0-9.]*\|[wsp]\|[01]$/;
 
 export type PageStep = 'saved' | 'more' | 'end';
 
@@ -141,7 +142,7 @@ export function endedAfter(quiet: boolean, live: { fresh: boolean; hasNext: bool
 }
 
 export function liveTick(text: string): boolean {
-  return text === 'ищу вакансию' || TICK.test(text) || SEARCH_TICK.test(text) || PAGE_TICK.test(text);
+  return text === 'ищу вакансию' || TICK.test(text) || SEARCH_TICK.test(text) || PAGE_TICK.test(text) || STATE_PULSE.test(text);
 }
 
 export function foldLiveLine(lines: readonly string[], text: string): string[] {

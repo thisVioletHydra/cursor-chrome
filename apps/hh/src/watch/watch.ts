@@ -22,6 +22,7 @@ const HANG_BLIND_MS = 60_000;
 const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
 const SEARCH_TICK = /^ищу вакансию, \d+ с$/;
 const PAGE_TICK = /^жду страницу, \d+ с$/;
+const STATE_PULSE = /^~([a-z][a-z0-9.]*)\|([^|]+)\|(-|\d+)\|(\d+)\|([a-z][a-z0-9.]*)\|([wsp])\|([01])$/;
 const FROZEN_MS = 90_000;
 const STEP_MAX = 80;
 const STEP_PREFIX = /^(открыл|ищу|читаю|в очереди|в список|мимо,|сервер|админка|жду|уже видели)/;
@@ -130,7 +131,7 @@ export async function watchPulse(line: string): Promise<boolean> {
     return pilotStop();
   }
 
-  if (TICK.test(text) || searchTick(text)) {
+  if (tickLine(text)) {
     stepped = true;
     const last = rows[rows.length - 1];
     if (last !== undefined && last.death === false && tickLine(last.text) && last.text !== text) {
@@ -371,7 +372,7 @@ function hangLine(text: string): boolean {
 }
 
 function queueWait(text: string): boolean {
-  return text === 'жду очередь' || /^жду \d+$/.test(text);
+  return text === 'жду очередь' || /^жду \d+$/.test(text) || stateHold(text);
 }
 
 function queueRestHang(text: string): boolean {
@@ -390,11 +391,29 @@ function queueRestHang(text: string): boolean {
 }
 
 function searchTick(text: string): boolean {
-  return SEARCH_TICK.test(text) || PAGE_TICK.test(text);
+  const kind = stateKind(text);
+
+  return SEARCH_TICK.test(text) || PAGE_TICK.test(text) || kind === 's' || kind === 'p';
 }
 
 function tickLine(text: string): boolean {
-  return TICK.test(text) || searchTick(text);
+  return secondTick(text) || searchTick(text);
+}
+
+function secondTick(text: string): boolean {
+  return TICK.test(text) || stateKind(text) === 'w';
+}
+
+function stateKind(text: string): 'w' | 's' | 'p' | '' {
+  const kind = STATE_PULSE.exec(text)?.[6];
+  if (kind === 'w' || kind === 's' || kind === 'p')
+    return kind;
+
+  return '';
+}
+
+function stateHold(text: string): boolean {
+  return STATE_PULSE.exec(text)?.[7] === '1';
 }
 
 function searchHang(text: string): boolean {
@@ -405,7 +424,7 @@ function searchHang(text: string): boolean {
 }
 
 function noteTick(text: string): void {
-  if (TICK.test(text) === false) {
+  if (secondTick(text) === false) {
     if (text !== 'жду очередь' && text.startsWith('я завис') === false) {
       tickText = '';
       tickAt = 0;
@@ -422,11 +441,11 @@ function noteTick(text: string): void {
 }
 
 function tickMoving(): boolean {
-  return tickAt > 0 && Date.now() - tickAt < FROZEN_MS && TICK.test(tickText);
+  return tickAt > 0 && Date.now() - tickAt < FROZEN_MS && secondTick(tickText);
 }
 
 function frozenTick(text: string): boolean {
-  return TICK.test(text) && text === tickText && tickAt > 0 && Date.now() - tickAt >= FROZEN_MS;
+  return secondTick(text) && text === tickText && tickAt > 0 && Date.now() - tickAt >= FROZEN_MS;
 }
 
 function dropHangDeaths(): void {

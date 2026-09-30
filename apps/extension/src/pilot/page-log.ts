@@ -1,5 +1,6 @@
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
-import { foldLiveLine } from '../search/page-load';
+import { foldLiveLine, liveTick, PAGE_LOAD_MS } from '../search/page-load';
+import { budgetSec, pulseHolds, waitMark, waitPulse, type WaitMark } from './wait-pulse';
 import { getFlags } from './flags';
 import { noteHours } from '../apply/hours-flag';
 import { loadPace, waitMs } from '../apply/pace';
@@ -22,9 +23,21 @@ let halted = false;
 let stall: ReturnType<typeof setTimeout> | undefined;
 let onHangClear: (() => Promise<boolean>) | undefined;
 
-const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
-const SEARCH_TICK = /^ищу вакансию, \d+ с$/;
-const PAGE_TICK = /^жду страницу, \d+ с$/;
+const HUNT_MARK = waitMark({
+  id: 'search.hunt',
+  human: 'ищу вакансию',
+  budget: null,
+  next: 'search.load',
+  kind: 's',
+});
+
+const LOAD_MARK = waitMark({
+  id: 'search.load',
+  human: 'страница hh',
+  budget: budgetSec(PAGE_LOAD_MS),
+  next: 'search.read',
+  kind: 'p',
+});
 
 function stallText(text: string): boolean {
   return text === 'сервер молчит' || text.startsWith('я завис');
@@ -100,7 +113,7 @@ export function stalling(): boolean {
 export function stallStep(): string {
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     const line = lines[index] ?? '';
-    if (line.length === 0 || stallText(line) || movingTick(line))
+    if (line.length === 0 || stallText(line) || liveTick(line))
       continue;
 
     return line;
@@ -193,11 +206,11 @@ const STAGE: Record<string, string> = {
   отвлёкся: 'отвлёкся',
 };
 
-export async function tickPage(label: string, ms: number, resume: '' | 'hunt' = ''): Promise<void> {
+export async function tickPage(label: string, ms: number, resume: '' | 'hunt' = '', mark: WaitMark | null = null): Promise<void> {
   if (halted || ms <= 0)
     return;
 
-  const job = await startWait(label, ms, resume);
+  const job = await startWait(label, ms, resume, mark);
   loopOwns = true;
   try {
     while (Date.now() < job.until && halted === false) {
@@ -218,7 +231,14 @@ export async function tickPage(label: string, ms: number, resume: '' | 'hunt' = 
 
 export async function waitBeforeLoad(): Promise<void> {
   const pace = await loadPace();
-  await tickPage('жду', waitMs(pace.readMin, pace.readMax));
+  const ms = waitMs(pace.readMin, pace.readMax);
+  await tickPage('жду', ms, '', waitMark({
+    id: 'apply.read',
+    human: 'чтение вакансии',
+    budget: budgetSec(ms),
+    next: 'apply.open',
+    hold: true,
+  }));
 }
 
 function planStall(): void {
@@ -262,7 +282,7 @@ function stallLimit(): number {
 }
 
 function queueRestStep(step: string): boolean {
-  return step === 'жду очередь' || /^жду \d+$/.test(step);
+  return step === 'жду очередь' || /^жду \d+$/.test(step) || pulseHolds(step);
 }
 
 function repeatedHang(text: string): boolean {
@@ -291,10 +311,6 @@ async function broadcast(rows: string[]): Promise<void> {
 
     void withinMs(browser.tabs.sendMessage(tab.id, { type: 'hh-log', lines: rows }).catch(() => {}), 400);
   }
-}
-
-function movingTick(text: string): boolean {
-  return TICK.test(text) || SEARCH_TICK.test(text) || PAGE_TICK.test(text);
 }
 
 let searchGen = 0;
@@ -333,7 +349,7 @@ async function beatSearch(gen: number, started: number): Promise<void> {
     return;
 
   const sec = Math.max(1, Math.ceil((Date.now() - started) / 1000));
-  await tellPage(`ищу вакансию, ${sec} с`);
+  await tellPage(waitPulse(HUNT_MARK, sec));
 }
 
 export async function loadWithin<T>(work: Promise<T>, ms: number): Promise<T | undefined> {
@@ -358,7 +374,7 @@ export async function loadWithin<T>(work: Promise<T>, ms: number): Promise<T | u
 async function runPageClock(gen: number, started: number): Promise<void> {
   while (gen === pagePulse && halted === false) {
     const sec = Math.max(1, Math.ceil((Date.now() - started) / 1000));
-    await tellPage(`жду страницу, ${sec} с`);
+    await tellPage(waitPulse(LOAD_MARK, sec));
     if (gen !== pagePulse || halted)
       return;
 
@@ -385,6 +401,7 @@ type WaitJob = {
   startedAt: number;
   until: number;
   resume: '' | 'hunt';
+  mark: WaitMark | null;
 };
 
 export function bindPilotWake(fn: () => Promise<void>): void {
@@ -434,7 +451,13 @@ export async function holdQueueWait(): Promise<void> {
     return;
   }
 
-  await startWait('жду', IDLE_MS, '');
+  await startWait('жду', IDLE_MS, '', waitMark({
+    id: 'queue.idle',
+    human: 'очередь',
+    budget: null,
+    next: 'queue.wake',
+    hold: true,
+  }));
 }
 
 function enqueuePulse(line: string): Promise<void> {
@@ -503,9 +526,9 @@ async function finishWait(): Promise<void> {
   }
 }
 
-async function startWait(label: string, ms: number, resume: '' | 'hunt'): Promise<WaitJob> {
+async function startWait(label: string, ms: number, resume: '' | 'hunt', mark: WaitMark | null = null): Promise<WaitJob> {
   const startedAt = Date.now();
-  const job: WaitJob = { label, startedAt, until: startedAt + ms, resume };
+  const job: WaitJob = { label, startedAt, until: startedAt + ms, resume, mark };
   currentWait = job;
   lastSent = 0;
   namedWait = true;
@@ -529,7 +552,8 @@ async function postWaitSecond(): Promise<void> {
     return;
 
   lastSent = sec;
-  await tellPage(`${job.label} ${sec}`);
+  const line = job.mark === null ? `${job.label} ${sec}` : waitPulse(job.mark, sec);
+  await tellPage(line);
 }
 
 async function saveWait(job: WaitJob | null): Promise<void> {
@@ -566,7 +590,61 @@ function waitOf(raw: unknown): WaitJob | null {
 
   const resume = 'resume' in raw && raw.resume === 'hunt' ? 'hunt' : '';
 
-  return { label: raw.label, startedAt: raw.startedAt, until: raw.until, resume };
+  return { label: raw.label, startedAt: raw.startedAt, until: raw.until, resume, mark: storedMark(raw) };
+}
+
+function storedMark(raw: object): WaitMark | null {
+  if (Object.hasOwn(raw, 'mark') === false)
+    return null;
+
+  return markValue(own(raw, 'mark'));
+}
+
+function markValue(raw: unknown): WaitMark | null {
+  if (typeof raw !== 'object' || raw === null)
+    return null;
+
+  const row = new Map(Object.entries(raw));
+  const id = row.get('id');
+  const human = row.get('human');
+  const next = row.get('next');
+  const kind = row.get('kind');
+  if (typeof id !== 'string' || id.length === 0)
+    return null;
+
+  if (typeof human !== 'string' || human.length === 0)
+    return null;
+
+  if (typeof next !== 'string' || next.length === 0)
+    return null;
+
+  if (kind !== 'w' && kind !== 's' && kind !== 'p')
+    return null;
+
+  const budget = row.get('budget');
+  if (budget !== null && budget !== undefined && (typeof budget !== 'number' || Number.isInteger(budget) === false || budget < 0))
+    return null;
+
+  return {
+    id,
+    human,
+    budget: typeof budget === 'number' ? budget : null,
+    next,
+    kind,
+    hold: row.get('hold') === true,
+  };
+}
+
+function own(raw: object, key: string): unknown {
+  if (Object.hasOwn(raw, key) === false)
+    return undefined;
+
+  for (const [name, value] of Object.entries(raw)) {
+    if (name === key)
+      return value;
+  }
+
+  return undefined;
 }
 
 function inWorker(): boolean {
