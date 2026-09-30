@@ -3,10 +3,8 @@ import { tellPage, whileSearching } from './page-log';
 import { getWorkerTabId, isHhUrl, requireWorkerTab, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
 
-const LOOK = 40;
 const PAGE_CAP = 20;
 let sawCaptcha = false;
-const nextPage = new Map<string, number>();
 const PAGE_MS = 45_000;
 const SEARCH = 'https://hh.ru/search/vacancy';
 const HH_ROOT = 'https://hh.ru/';
@@ -20,7 +18,9 @@ export type SearchHit = {
   reason: string;
 };
 
-export type PageLink = { id: string; url: string };
+export type PageLink = { id: string; url: string; title: string };
+
+export type SearchCursor = { query: string; page: number };
 
 export type PageMarks = {
   seen: ReadonlySet<string>;
@@ -41,14 +41,11 @@ export type FoundCard = {
   query: string;
 };
 
-export function rewindSearch(queries: readonly string[]): void {
-  for (const query of queries)
-    nextPage.delete(query);
-}
-
 export async function collectVacancies(
   queries: string[],
-  knownOnPage: (ids: readonly string[], links: readonly PageLink[]) => Promise<PageMarks | null>,
+  pages: Readonly<Record<string, number>>,
+  knownOnPage: (ids: readonly string[], links: readonly PageLink[], cursor: SearchCursor) => Promise<PageMarks | null>,
+  rememberPage: (cursor: SearchCursor) => Promise<boolean>,
 ): Promise<SearchHit> {
   sawCaptcha = false;
   const pinned = await getWorkerTabId();
@@ -69,27 +66,50 @@ export async function collectVacancies(
   let saved = 0;
   let sawCards = false;
   let unread = false;
-  let more = false;
   let done = true;
   let checkFailed = false;
   const login = await whileSearching(async () => {
-    let stop = false;
     for (const query of queries) {
-      if (stop)
-        break;
+      let page = storedPage(pages[query]);
+      if (page >= PAGE_CAP)
+        continue;
 
-      const start = nextPage.get(query) ?? 0;
-      let resume = start;
-      let finished = start >= PAGE_CAP;
-      for (let page = start; page < PAGE_CAP; page += 1) {
-        resume = page;
+      while (page < PAGE_CAP) {
         const pulled = await pull(tabId, searchUrl(query, page));
         if (sawCaptcha)
           return false;
 
         if (pulled === null) {
-          if (sawCards === false && saved === 0) {
+          done = false;
+          if (sawCards === false && saved === 0)
             unread = true;
+
+          return false;
+        }
+
+        if (isLogin(pulled.url, pulled.html))
+          return true;
+
+        const batch = cardsOf(serpHtml(pulled.html));
+        if (batch.length === 0) {
+          const next = pulled.html.includes('data-qa="pager-next"') && page + 1 < PAGE_CAP ? page + 1 : PAGE_CAP;
+          if (await rememberPage({ query, page: next }) === false) {
+            checkFailed = true;
+            done = false;
+
+            return false;
+          }
+
+          if (next >= PAGE_CAP)
+            break;
+
+          page = next;
+          continue;
+        }
+
+        if (landedEarlier(pulled.url, page)) {
+          if (await rememberPage({ query, page: PAGE_CAP }) === false) {
+            checkFailed = true;
             done = false;
 
             return false;
@@ -98,57 +118,33 @@ export async function collectVacancies(
           break;
         }
 
-        if (isLogin(pulled.url, pulled.html))
-          return true;
-
-        const batch = cardsOf(serpHtml(pulled.html));
-        if (batch.length === 0) {
-          finished = true;
-          break;
-        }
-
         sawCards = true;
+        const next = page + 1 >= PAGE_CAP ? PAGE_CAP : page + 1;
         const fitting = batch.filter(card => fitsTitle(card.title, queries));
         const marks = await knownOnPage(
           batch.map(card => card.id),
-          fitting.map(card => ({ id: card.id, url: card.url })),
+          fitting.map(card => ({ id: card.id, url: card.url, title: card.title })),
+          { query, page: next },
         );
         if (marks === null) {
           checkFailed = true;
           done = false;
-          stop = true;
-          break;
+
+          return false;
         }
 
-        if (batch.every(card => marks.seen.has(card.id))) {
+        page = next;
+        if (batch.every(card => marks.seen.has(card.id)))
           await tellPage(`уже видели, ${batch.length}`);
-          if (page + 1 >= PAGE_CAP)
-            finished = true;
-
-          continue;
-        }
 
         if (marks.saved.length > 0) {
           saved += marks.saved.length;
-          await tellPage(`в список ${marks.saved.length}`);
-        }
-
-        if (saved >= LOOK) {
-          more = true;
           done = false;
-          resume = page + 1;
-          stop = true;
-          break;
+          await tellPage(`в список ${marks.saved.length}`);
+
+          return false;
         }
-
-        if (page + 1 >= PAGE_CAP)
-          finished = true;
       }
-
-      if (stop === false)
-        nextPage.set(query, finished ? PAGE_CAP : resume);
-      else
-        nextPage.set(query, resume);
     }
 
     return false;
@@ -175,7 +171,7 @@ export async function collectVacancies(
   if (saved === 0 && sawCards === false)
     return { login: false, captcha: false, saved: 0, more: false, done, reason: 'пустая выдача' };
 
-  return { login: false, captcha: false, saved, more, done, reason: '' };
+  return { login: false, captcha: false, saved, more: false, done, reason: '' };
 }
 
 export async function readVacancyPage(tabId: number, id: string, url: string): Promise<FoundCard | null> {
@@ -190,6 +186,31 @@ export async function readVacancyPage(tabId: number, id: string, url: string): P
     return null;
 
   return vacancyFromHtml(pulled.html, id, url);
+}
+
+function storedPage(page: number | undefined): number {
+  if (page === undefined || Number.isInteger(page) === false || page < 0)
+    return 0;
+
+  if (page > PAGE_CAP)
+    return PAGE_CAP;
+
+  return page;
+}
+
+function landedEarlier(url: string, asked: number): boolean {
+  try {
+    const value = new URL(url).searchParams.get('page');
+    if (value === null)
+      return false;
+
+    const landed = Number(value);
+
+    return Number.isInteger(landed) && landed >= 0 && landed < asked;
+  }
+  catch {
+    return false;
+  }
 }
 
 function miss(captcha: boolean, login: boolean, reason: string): SearchHit {

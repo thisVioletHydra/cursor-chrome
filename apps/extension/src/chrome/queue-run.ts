@@ -1,6 +1,6 @@
 import type { Hunt, QueueItem } from './admin-api';
 
-import { dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, postFound, seenAmong } from './admin-api';
+import { dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, postFound, rememberPage, resetSearchPages, seenAmong } from './admin-api';
 import { getSyncKey, getSyncUrl } from './apply-log';
 import { getFlags, setFlags } from './flags';
 import { pinnedCaptcha, tabShowsCaptcha } from './hh-captcha';
@@ -8,7 +8,7 @@ import { loadPace, rare, waitMs } from './pace';
 import { maybeTea, noteTeaSession } from './tea';
 import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage } from './page-log';
 import { runHhApply } from './hh-apply-cmd';
-import { collectVacancies, readVacancyPage, rewindSearch } from './hh-search';
+import { collectVacancies, readVacancyPage } from './hh-search';
 import { requireTabId } from './inject';
 import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
@@ -258,21 +258,34 @@ async function drain(): Promise<QueueRun> {
     if (filled.note.length > 0 && run.lines.includes(filled.note) === false)
       run.lines.push(filled.note);
 
-    if (filled.saved > 0 || filled.more) {
+    if (filled.saved > 0) {
       advance = false;
       continue;
     }
 
     if (filled.done === false) {
       advance = false;
+      if (filled.retry && await restCycle() === false)
+        break;
+
+      continue;
+    }
+
+    const pending = await fetchLinks(base, key);
+    if (pending === null) {
       if (await restCycle() === false)
         break;
 
       continue;
     }
 
+    if (pending.length > 0) {
+      advance = false;
+      continue;
+    }
+
     advance = true;
-    rewindSearch(hunt.queries);
+    await resetSearchPages(base, key, hunt.queries);
     if (await restCycle() === false)
       break;
   }
@@ -517,20 +530,20 @@ function blank(reason: string): QueueRun {
   return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason, lines: [] };
 }
 
-async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: string } | { note: string; saved: number; more: boolean; done: boolean }> {
+async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: string } | { note: string; saved: number; more: boolean; done: boolean; retry: boolean }> {
   if (hunt.want === false)
-    return { note: 'сервер не просит поиск', saved: 0, more: false, done: false };
+    return { note: 'сервер не просит поиск', saved: 0, more: false, done: false, retry: true };
 
   if (hunt.queries.length === 0)
-    return { note: 'сервер не прислал запрос', saved: 0, more: false, done: false };
+    return { note: 'сервер не прислал запрос', saved: 0, more: false, done: false, retry: true };
 
-  const found = await collectVacancies(hunt.queries, async (ids, links) => {
-    const marks = await seenAmong(base, key, ids, links);
+  const found = await collectVacancies(hunt.queries, hunt.pages, async (ids, links, cursor) => {
+    const marks = await seenAmong(base, key, ids, links, cursor);
     if (marks === null)
       return null;
 
     return { seen: new Set(marks.seen), saved: marks.saved };
-  });
+  }, cursor => rememberPage(base, key, cursor));
   if (hangHalted())
     return { stop: 'расширение зависло' };
 
@@ -547,7 +560,9 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
     return { stop: 'hh.ru просит войти (login)' };
   }
 
-  return { note: found.reason, saved: found.saved, more: found.more, done: found.done };
+  const retry = found.reason === 'не прочиталась страница hh' || found.reason === 'сервер не сверил вакансии';
+
+  return { note: found.reason, saved: found.saved, more: found.more, done: found.done, retry };
 }
 
 const DOWN = 'все модели недоступны';

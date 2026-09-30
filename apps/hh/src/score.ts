@@ -1,5 +1,8 @@
 import type { Vacancy } from './rules.ts';
 
+import { roleJunk } from './mix.ts';
+import { hardSkip, NO_META } from './rules.ts';
+
 import process from 'node:process';
 
 export type Rules = {
@@ -50,6 +53,29 @@ export function rulesFromEnv(): Rules {
   }
 }
 
+export function keepSearchTitle(title: string, stopWords: readonly string[]): boolean {
+  const text = title.trim();
+  if (text.length === 0)
+    return false;
+
+  if (roleJunk(text))
+    return false;
+
+  if (hasStop(text, stopWords))
+    return false;
+
+  return hardSkip({
+    id: '0',
+    title: text,
+    company: '',
+    url: 'https://hh.ru/vacancy/0',
+    text,
+    formUrl: '',
+    formBlocked: false,
+    ...NO_META,
+  }) === null;
+}
+
 export function ruleSkip(vacancy: Vacancy, rules: Rules): string | null {
   const blob = `${vacancy.title}\n${vacancy.text}`.toLowerCase();
   const company = vacancy.company.toLowerCase();
@@ -84,6 +110,12 @@ export function scoreOf(vacancy: Vacancy, rules: Rules): number {
 
 export function byScore(rules: Rules): (left: Vacancy, right: Vacancy) => number {
   return (left, right) => scoreOf(right, rules) - scoreOf(left, rules);
+}
+
+function hasStop(title: string, stopWords: readonly string[]): boolean {
+  const hay = title.toLowerCase();
+
+  return stopWords.some(word => word.length > 0 && hay.includes(word.toLowerCase()));
 }
 
 function salaryTop(vacancy: Vacancy): number | null {

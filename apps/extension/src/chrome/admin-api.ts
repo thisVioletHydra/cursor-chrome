@@ -9,7 +9,7 @@ export type SavedLink = { id: string; url: string };
 
 export type PageMarks = { seen: string[]; saved: string[] };
 
-export type Hunt = { items: QueueItem[]; queries: string[]; want: boolean };
+export type Hunt = { items: QueueItem[]; queries: string[]; want: boolean; pages: Record<string, number> };
 
 export { keepWorkHours } from './hours-flag';
 
@@ -22,6 +22,7 @@ export async function fetchHunt(base: string, key: string, advance = false): Pro
     items: Array.isArray(body.items) ? body.items.filter(isItem) : [],
     queries: stringsOf(body.queries),
     want: body.want === true,
+    pages: pagesOf(body.pages),
   };
 }
 
@@ -68,15 +69,13 @@ export async function seenAmong(
   key: string,
   ids: readonly string[],
   links: readonly SavedLink[],
+  cursor: { query: string; page: number },
 ): Promise<PageMarks | null> {
-  if (ids.length === 0)
-    return { seen: [], saved: [] };
-
   try {
     const res = await fetch(`${base}/api/queue`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-      body: JSON.stringify({ ids, links }),
+      body: JSON.stringify({ ids, links, cursor }),
     });
     if (res.ok === false)
       return null;
@@ -98,6 +97,39 @@ export async function fetchLinks(base: string, key: string): Promise<SavedLink[]
   return linksOf(body.links);
 }
 
+export async function rememberPage(base: string, key: string, cursor: { query: string; page: number }): Promise<boolean> {
+  try {
+    const res = await fetch(`${base}/api/queue`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ cursor }),
+    });
+
+    return res.ok;
+  }
+  catch {
+    return false;
+  }
+}
+
+export async function resetSearchPages(base: string, key: string, queries: readonly string[]): Promise<boolean> {
+  if (queries.length === 0)
+    return true;
+
+  try {
+    const res = await fetch(`${base}/api/queue`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ resetPages: queries }),
+    });
+
+    return res.ok;
+  }
+  catch {
+    return false;
+  }
+}
+
 export async function dropLinks(base: string, key: string, ids: readonly string[]): Promise<boolean> {
   if (ids.length === 0)
     return true;
@@ -116,7 +148,7 @@ export async function dropLinks(base: string, key: string, ids: readonly string[
   }
 }
 
-async function getQueue(base: string, key: string, advance = false): Promise<{ items?: unknown; links?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; hours?: unknown } | null> {
+async function getQueue(base: string, key: string, advance = false): Promise<{ items?: unknown; links?: unknown; pages?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; hours?: unknown } | null> {
   const stamp = pilotStamp();
   try {
     const path = advance ? '/api/queue?cycle=1' : '/api/queue';
@@ -192,6 +224,33 @@ function linksOf(value: unknown): SavedLink[] {
   }
 
   return links;
+}
+
+function pageNumber(raw: unknown): number | null {
+  if (typeof raw !== 'number' || Number.isInteger(raw) === false)
+    return null;
+
+  if (raw < 0 || raw > 20)
+    return null;
+
+  return raw;
+}
+
+function pagesOf(value: unknown): Record<string, number> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return {};
+
+  const pages: Record<string, number> = {};
+  for (const [query, raw] of Object.entries(value)) {
+    const text = query.trim();
+    const page = pageNumber(raw);
+    if (text.length === 0 || page === null)
+      continue;
+
+    pages[text] = page;
+  }
+
+  return pages;
 }
 
 function savedLink(value: unknown): SavedLink | null {

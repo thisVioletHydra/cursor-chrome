@@ -1,6 +1,6 @@
 import { deleteLinks, insertLinks, listLinks, lookupHeld } from './links-db.ts';
 import { SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from './limits.ts';
-import { bumpDay, countSeen, insertSeen, lookupSeen, openStore, readDay, storePath, writeDay } from './seen-db.ts';
+import { bumpDay, clearSearchPages, countSeen, insertSeen, lookupSeen, openStore, readDay, readSearchPages, storePath, writeDay, writeSearchPage } from './seen-db.ts';
 
 export type { HeldLink } from './links-db.ts';
 
@@ -49,12 +49,28 @@ export function heldAmong(ids: readonly string[]): Promise<string[]> {
   return turn(async () => lookupHeld(ids));
 }
 
-export function keepLinks(rows: readonly { id: string; url: string }[]): Promise<string[]> {
+export function keepLinks(rows: readonly { id: string; url: string; title: string }[]): Promise<string[]> {
   return turn(async () => insertLinks(rows, Date.now()));
 }
 
-export function readLinks(limit: number): Promise<{ id: string; url: string }[]> {
+export function readLinks(limit: number): Promise<{ id: string; url: string; title: string }[]> {
   return turn(async () => listLinks(limit));
+}
+
+export function searchPages(queries: readonly string[]): Promise<Record<string, number>> {
+  return turn(async () => readSearchPages(queries));
+}
+
+export function rememberSearchPage(query: string, page: number): Promise<void> {
+  return turn(async () => {
+    writeSearchPage(query, page);
+  });
+}
+
+export function forgetSearchPages(queries: readonly string[]): Promise<void> {
+  return turn(async () => {
+    clearSearchPages(queries);
+  });
 }
 
 export function forgetLinks(ids: readonly string[]): Promise<void> {

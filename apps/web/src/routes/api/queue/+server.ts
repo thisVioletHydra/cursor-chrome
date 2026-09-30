@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 
-import { COVER_LETTER, dayOpen, forgetLinks, heldAmong, keepLinks, knownAmong, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readQueue, readState, serveQueries, splitQueries, takePilotStart, workHours, writeState } from '@cursor-chrome/hh';
+import { COVER_LETTER, dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, keepSearchTitle, knownAmong, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readQueue, readState, rememberSearchPage, searchPages, serveQueries, splitQueries, takePilotStart, workHours, writeState } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { DEFAULT_QUERY, readAccount } from '$lib/server/secrets';
@@ -26,11 +26,12 @@ export const GET: RequestHandler = async ({ request, url }) => {
   const want = account.hhLive === '1' && state.auto && queued < QUEUE_TARGET;
   const cycle = url.searchParams.get('cycle') === '1';
   const queries = want && listen === false ? await shownPass(saved, state, cycle) : saved;
-  const [items, links] = await Promise.all([pending(10), readLinks(10)]);
+  const [items, links, pages] = await Promise.all([pending(10), keptLinks(account.hhRules), searchPages(queries)]);
 
   return json({
     items: items.map(row => ({ id: row.id, company: row.company, title: row.title, url: row.url })),
     links,
+    pages,
     letter,
     queries,
     want,
@@ -49,27 +50,108 @@ export const POST: RequestHandler = async ({ request }) => {
   if (login === null)
     return json({ error: 'нет' }, { status: 401 });
 
-  const body = await request.json().catch(() => null) as { ids?: unknown; links?: unknown; drop?: unknown } | null;
+  const body = await request.json().catch(() => null) as { ids?: unknown; links?: unknown; drop?: unknown; cursor?: unknown; resetPages?: unknown } | null;
   if (body === null)
     return json({ error: 'пустое тело' }, { status: 400 });
 
+  const cursor = cursorOf(body.cursor);
   if (body.ids === undefined && body.links === undefined) {
-    await forgetLinks(pageIds(body.drop));
+    if (cursor !== null)
+      await rememberSearchPage(cursor.query, cursor.page);
+
+    if (body.resetPages !== undefined)
+      await forgetSearchPages(pageQueries(body.resetPages));
+
+    if (body.drop !== undefined)
+      await forgetLinks(pageIds(body.drop));
 
     return json({ ok: true });
   }
 
+  const account = await readAccount(login);
   const ids = pageIds(body.ids);
-  const links = pageLinks(body.links);
+  const links = pageLinks(body.links).filter(link => keepSearchTitle(link.title, rulesOf(account.hhRules).stopWords));
   const asked = ids.length > 0 ? ids : links.map(link => link.id);
   const seen = await seenOnPage(asked);
   const seenSet = new Set(seen);
   const held = new Set(await heldAmong(links.map(link => link.id)));
   const fresh = links.filter(link => seenSet.has(link.id) === false && held.has(link.id) === false);
   const saved = await keepLinks(fresh);
+  if (cursor !== null)
+    await rememberSearchPage(cursor.query, cursor.page);
 
   return json({ seen, saved });
-};
+}
+
+async function keptLinks(rawRules: string): Promise<{ id: string; url: string }[]> {
+  const stopWords = rulesOf(rawRules).stopWords;
+  const rows = await readLinks(40);
+  const junk = rows.filter(row => row.title.length > 0 && keepSearchTitle(row.title, stopWords) === false);
+  if (junk.length > 0)
+    await forgetLinks(junk.map(row => row.id));
+
+  const dropped = new Set(junk.map(row => row.id));
+
+  return rows.filter(row => dropped.has(row.id) === false).slice(0, 10).map(row => ({ id: row.id, url: row.url }));
+}
+
+function rulesOf(raw: string): { stopWords: string[] } {
+  if (raw.trim().length === 0)
+    return parseRules(null);
+
+  try {
+    return parseRules(JSON.parse(raw));
+  }
+  catch {
+    return parseRules(null);
+  }
+}
+
+function cursorOf(value: unknown): { query: string; page: number } | null {
+  if (typeof value !== 'object' || value === null)
+    return null;
+
+  const query = 'query' in value && typeof value.query === 'string' ? value.query.trim() : '';
+  const page = 'page' in value && typeof value.page === 'number' ? value.page : -1;
+  if (query.length === 0 || query.length > 80)
+    return null;
+
+  if (storedPage(page) === null)
+    return null;
+
+  return { query, page };
+}
+
+function storedPage(page: number): number | null {
+  if (Number.isInteger(page) === false)
+    return null;
+
+  if (page < 0 || page > 20)
+    return null;
+
+  return page;
+}
+
+function pageQueries(value: unknown): string[] {
+  if (Array.isArray(value) === false)
+    return [];
+
+  const queries: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string')
+      continue;
+
+    const query = item.trim();
+    if (query.length === 0 || query.length > 80)
+      continue;
+
+    queries.push(query);
+    if (queries.length >= 20)
+      break;
+  }
+
+  return queries;
+}
 
 async function seenOnPage(ids: string[]): Promise<string[]> {
   const [known, queue] = await Promise.all([knownAmong(ids), readQueue()]);
@@ -83,11 +165,11 @@ async function seenOnPage(ids: string[]): Promise<string[]> {
   return ids.filter(id => hit.has(id));
 }
 
-function pageLinks(value: unknown): { id: string; url: string }[] {
+function pageLinks(value: unknown): { id: string; url: string; title: string }[] {
   if (Array.isArray(value) === false)
     return [];
 
-  const links: { id: string; url: string }[] = [];
+  const links: { id: string; url: string; title: string }[] = [];
   for (const item of value) {
     const link = linkOf(item);
     if (link === null)
@@ -101,19 +183,20 @@ function pageLinks(value: unknown): { id: string; url: string }[] {
   return links;
 }
 
-function linkOf(value: unknown): { id: string; url: string } | null {
+function linkOf(value: unknown): { id: string; url: string; title: string } | null {
   if (typeof value !== 'object' || value === null)
     return null;
 
   const id = 'id' in value && typeof value.id === 'string' ? value.id : '';
   const url = 'url' in value && typeof value.url === 'string' ? value.url : '';
-  if (/^\d+$/.test(id) === false)
+  const title = 'title' in value && typeof value.title === 'string' ? value.title.trim().slice(0, 200) : '';
+  if (/^\d+$/.test(id) === false || title.length === 0)
     return null;
 
   if (url !== `https://hh.ru/vacancy/${id}`)
     return null;
 
-  return { id, url };
+  return { id, url, title };
 }
 
 function pageIds(value: unknown): string[] {

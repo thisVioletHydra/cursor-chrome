@@ -36,9 +36,15 @@ export async function openStore(): Promise<void> {
       CREATE TABLE IF NOT EXISTS links (
         id INTEGER PRIMARY KEY,
         url TEXT NOT NULL,
+        title TEXT NOT NULL DEFAULT '',
         added INTEGER NOT NULL
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS search_page (
+        query TEXT PRIMARY KEY,
+        page INTEGER NOT NULL
+      ) STRICT;
     `);
+    ensureLinkTitle(opened);
     database = opened;
   }
 
@@ -89,6 +95,44 @@ export function insertSeen(ids: readonly string[], at: number): Promise<void> {
   return insertNums(uniqueNums(ids), at);
 }
 
+const SEARCH_PAGE_CAP = 20;
+
+export function readSearchPages(queries: readonly string[]): Record<string, number> {
+  const select = openDatabase().prepare('SELECT page FROM search_page WHERE query = ?');
+  const pages: Record<string, number> = {};
+  for (const query of queries) {
+    if (query.length === 0)
+      continue;
+
+    pages[query] = pageValue(select.get(query));
+  }
+
+  return pages;
+}
+
+export function writeSearchPage(query: string, page: number): void {
+  const text = query.trim();
+  const next = clampPage(page);
+  if (text.length === 0 || next === null)
+    return;
+
+  openDatabase().prepare(`
+    INSERT INTO search_page (query, page) VALUES (?, ?)
+    ON CONFLICT(query) DO UPDATE SET page = excluded.page
+  `).run(text, next);
+}
+
+export function clearSearchPages(queries: readonly string[]): void {
+  const drop = openDatabase().prepare('DELETE FROM search_page WHERE query = ?');
+  for (const query of queries) {
+    const text = query.trim();
+    if (text.length === 0)
+      continue;
+
+    drop.run(text);
+  }
+}
+
 function capOf(value: unknown): number | null {
   if (typeof value !== 'number' || Number.isInteger(value) === false)
     return null;
@@ -101,6 +145,34 @@ function capOf(value: unknown): number | null {
 
 let database: sqlite.DatabaseSync | null = null;
 let migrated = false;
+
+function ensureLinkTitle(opened: sqlite.DatabaseSync): void {
+  const names = opened.prepare('PRAGMA table_info(links)').all().flatMap(row => typeof row.name === 'string' ? [row.name] : []);
+  if (names.includes('title'))
+    return;
+
+  opened.exec(`ALTER TABLE links ADD COLUMN title TEXT NOT NULL DEFAULT ''`);
+}
+
+function pageValue(row: Record<string, sqlite.SQLOutputValue> | undefined): number {
+  if (row === undefined)
+    return 0;
+
+  const page = clampPage(row.page);
+
+  return page === null ? 0 : page;
+}
+
+function clampPage(value: unknown): number | null {
+  const page = typeof value === 'bigint' ? Number(value) : value;
+  if (typeof page !== 'number' || Number.isInteger(page) === false)
+    return null;
+
+  if (page < 0 || page > SEARCH_PAGE_CAP)
+    return null;
+
+  return page;
+}
 
 function dataDir(): string {
   if (process.env.HH_STORE)

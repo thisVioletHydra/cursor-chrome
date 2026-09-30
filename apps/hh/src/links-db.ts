@@ -1,6 +1,6 @@
 import { hhDatabase } from './seen-db.ts';
 
-export type HeldLink = { id: string; url: string };
+export type HeldLink = { id: string; url: string; title: string };
 
 export function lookupHeld(ids: readonly string[]): string[] {
   const nums = uniqueNums(ids);
@@ -20,7 +20,7 @@ export function lookupHeld(ids: readonly string[]): string[] {
 
 export function listLinks(limit: number): HeldLink[] {
   const cap = Math.min(40, Math.max(1, limit));
-  const rows = hhDatabase().prepare('SELECT id, url FROM links ORDER BY added ASC LIMIT ?').all(cap);
+  const rows = hhDatabase().prepare('SELECT id, url, title FROM links ORDER BY added ASC LIMIT ?').all(cap);
   const out: HeldLink[] = [];
   for (const row of rows) {
     const id = textId(row.id);
@@ -28,7 +28,8 @@ export function listLinks(limit: number): HeldLink[] {
     if (id === null || url.length === 0)
       continue;
 
-    out.push({ id, url });
+    const title = typeof row.title === 'string' ? row.title : '';
+    out.push({ id, url, title });
   }
 
   return out;
@@ -42,7 +43,7 @@ export function insertLinks(rows: readonly HeldLink[], at: number): string[] {
   const opened = hhDatabase();
   const inSeen = opened.prepare('SELECT 1 AS hit FROM seen WHERE id = ?');
   const inLinks = opened.prepare('SELECT 1 AS hit FROM links WHERE id = ?');
-  const insert = opened.prepare('INSERT OR IGNORE INTO links (id, url, added) VALUES (?, ?, ?)');
+  const insert = opened.prepare('INSERT OR IGNORE INTO links (id, url, title, added) VALUES (?, ?, ?, ?)');
   const saved: string[] = [];
   opened.exec('BEGIN');
   try {
@@ -54,7 +55,7 @@ export function insertLinks(rows: readonly HeldLink[], at: number): string[] {
       if (inSeen.get(id) !== undefined || inLinks.get(id) !== undefined)
         continue;
 
-      insert.run(id, row.url, at);
+      insert.run(id, row.url, row.title.slice(0, 200), at);
       saved.push(row.id);
     }
 
