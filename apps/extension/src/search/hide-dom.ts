@@ -98,65 +98,31 @@ export function hideDom(op: string, id: string): HideDom {
 
   function clickWrong(): boolean {
     const root = reasonDialog();
-    if (root === null)
-      return false;
-
-    const radio = root.querySelector('input[name="blacklistReason"][value="WRONG_PROFESSION"]')
-      ?? document.querySelector('input[name="blacklistReason"][value="WRONG_PROFESSION"]');
-    if (radio instanceof HTMLInputElement) {
-      const host = radio.closest('label');
-      const text = host?.textContent ?? '';
-      if (text.length === 0 || text.includes('Не подходит профессия')) {
-        radio.click();
-        radio.checked = true;
-        radio.dispatchEvent(new Event('input', { bubbles: true }));
-        radio.dispatchEvent(new Event('change', { bubbles: true }));
-        host?.click();
-
-        return true;
-      }
-    }
-
-    const label = smallest(root, 'Не подходит профессия');
+    const label = root === null ? null : professionLabel(root);
     if (label === null)
       return false;
 
-    const owned = (label.closest('label') ?? label).querySelector('input[name="blacklistReason"]');
-    if (owned instanceof HTMLInputElement && owned.value !== 'WRONG_PROFESSION')
-      return false;
-
-    (label.closest('label') ?? label).click();
+    label.click();
 
     return true;
   }
 
+  function professionLabel(root: HTMLElement): HTMLElement | null {
+    const fromText = textLabel(root, 'Не подходит профессия');
+    const owned = fromText?.querySelector('input[name="blacklistReason"]') ?? null;
+    if (fromText !== null && (!(owned instanceof HTMLInputElement) || owned.value === 'WRONG_PROFESSION'))
+      return fromText;
+
+    return inputLabel(wrongRadio(root));
+  }
+
   function clickAsk(): boolean {
     const root = reasonDialog();
-    if (root === null)
-      return false;
-
-    const label = smallest(root, 'Больше не спрашивать меня');
+    const label = root === null ? null : textLabel(root, 'Больше не спрашивать меня');
     if (label === null)
       return false;
 
-    const host = label.closest('label') ?? label;
-    const box = host.querySelector('input[type="checkbox"]');
-    if (box instanceof HTMLInputElement) {
-      if (box.checked === false)
-        box.click();
-
-      return true;
-    }
-
-    const role = host.closest('[role="checkbox"]') ?? host.querySelector('[role="checkbox"]');
-    if (role instanceof HTMLElement) {
-      if (role.getAttribute('aria-checked') !== 'true')
-        role.click();
-
-      return true;
-    }
-
-    host.click();
+    label.click();
 
     return true;
   }
@@ -231,28 +197,69 @@ export function hideDom(op: string, id: string): HideDom {
     return `${node.textContent ?? ''} ${fromId} ${node.getAttribute('aria-label') ?? ''}`;
   }
 
-  function wrongOn(root: HTMLElement): boolean {
+  function wrongRadio(root: HTMLElement): HTMLInputElement | null {
     const radio = root.querySelector('input[name="blacklistReason"][value="WRONG_PROFESSION"]')
       ?? document.querySelector('input[name="blacklistReason"][value="WRONG_PROFESSION"]');
 
-    return radio instanceof HTMLInputElement && radio.checked;
+    return radio instanceof HTMLInputElement ? radio : null;
+  }
+
+  function wrongOn(root: HTMLElement): boolean {
+    return wrongRadio(root)?.checked === true;
   }
 
   function askOn(root: HTMLElement): boolean {
-    const label = smallest(root, 'Больше не спрашивать меня');
+    const label = textLabel(root, 'Больше не спрашивать меня');
     if (label === null)
-      return false;
+      return true;
 
-    const host = label.closest('label') ?? label;
-    const box = host.querySelector('input[type="checkbox"]');
-    if (box instanceof HTMLInputElement)
+    const box = askBox(label);
+    if (box !== null)
       return box.checked;
 
-    const role = host.closest('[role="checkbox"]') ?? host.querySelector('[role="checkbox"]');
+    const role = label.closest('[role="checkbox"]') ?? label.querySelector('[role="checkbox"]');
     if (role instanceof HTMLElement)
       return role.getAttribute('aria-checked') === 'true';
 
     return false;
+  }
+
+  function inputLabel(node: HTMLInputElement | null): HTMLElement | null {
+    if (node === null)
+      return null;
+
+    if (node.id.length > 0) {
+      const byFor = [...document.querySelectorAll('label')].find(label => label.htmlFor === node.id);
+      if (byFor !== undefined)
+        return byFor;
+    }
+
+    const host = node.closest('label');
+
+    return host instanceof HTMLElement ? host : null;
+  }
+
+  function textLabel(root: ParentNode, text: string): HTMLElement | null {
+    const node = smallest(root, text);
+    if (node === null)
+      return null;
+
+    const host = node.closest('label');
+
+    return host instanceof HTMLElement ? host : node;
+  }
+
+  function askBox(label: HTMLElement): HTMLInputElement | null {
+    const inner = label.querySelector('input[type="checkbox"]');
+    if (inner instanceof HTMLInputElement)
+      return inner;
+
+    if (!(label instanceof HTMLLabelElement) || label.htmlFor.length === 0)
+      return null;
+
+    const linked = document.getElementById(label.htmlFor);
+
+    return linked instanceof HTMLInputElement && linked.type === 'checkbox' ? linked : null;
   }
 
   function submitButton(root: HTMLElement): HTMLElement | null {

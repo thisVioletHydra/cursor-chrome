@@ -130,14 +130,34 @@ function formHide(step: HideStep, face: HideFace, waited: boolean): { step: Hide
     return { step, action: null };
   }
 
-  if (step.form === 0)
-    return next(step, { form: 1 }, 'wrong');
+  if (face.wrong === false)
+    return wrongHide(step, waited);
 
-  if (step.form === 1)
-    return next(step, { form: 2 }, 'ask');
+  if (face.ask === false)
+    return askHide(step, waited);
 
   if (face.submit)
     return next(step, { phase: 'close', form: 0 }, 'submit');
+
+  if (waited)
+    return giveUp(step);
+
+  return { step, action: null };
+}
+
+function wrongHide(step: HideStep, waited: boolean): { step: HideStep; action: HideAction | null } {
+  if (step.form === 0)
+    return next(step, { form: 1 }, 'wrong');
+
+  if (waited)
+    return giveUp(step);
+
+  return { step, action: null };
+}
+
+function askHide(step: HideStep, waited: boolean): { step: HideStep; action: HideAction | null } {
+  if (step.form < 2)
+    return next(step, { form: 2 }, 'ask');
 
   if (waited)
     return giveUp(step);

@@ -48,8 +48,12 @@ test('the reason dialog is wrong profession, then do not ask, then submit', () =
   assert.equal(open.step.phase, 'form');
   const wrong = stepHide(open.step, face({ dialog: true, submit: true }), false);
   assert.equal(wrong.action, 'wrong');
-  const ask = stepHide(wrong.step, face({ dialog: true, submit: true }), false);
+  const still = stepHide(wrong.step, face({ dialog: true, submit: true }), false);
+  assert.equal(still.action, null);
+  const ask = stepHide(wrong.step, face({ dialog: true, wrong: true, submit: true }), false);
   assert.equal(ask.action, 'ask');
+  const unchecked = stepHide(ask.step, face({ dialog: true, wrong: true, submit: true }), false);
+  assert.equal(unchecked.action, null);
   const submit = stepHide(ask.step, face({ dialog: true, wrong: true, ask: true, submit: true }), false);
   assert.equal(submit.action, 'submit');
   assert.equal(submit.step.phase, 'close');
@@ -60,11 +64,11 @@ test('the reason dialog is wrong profession, then do not ask, then submit', () =
 test('submit stays put until the reason button is enabled', () => {
   let step = stepHide(hideStart(), face({ dialog: true }), false).step;
   step = stepHide(step, face({ dialog: true }), false).step;
-  step = stepHide(step, face({ dialog: true }), false).step;
-  const held = stepHide(step, face({ dialog: true, submit: false }), false);
+  step = stepHide(step, face({ dialog: true, wrong: true }), false).step;
+  const held = stepHide(step, face({ dialog: true, wrong: true, ask: true, submit: false }), false);
   assert.equal(held.action, null);
   assert.equal(held.step.phase, 'form');
-  const armed = stepHide(held.step, face({ dialog: true, submit: true }), false);
+  const armed = stepHide(held.step, face({ dialog: true, wrong: true, ask: true, submit: true }), false);
   assert.equal(armed.action, 'submit');
 });
 
@@ -73,8 +77,8 @@ test('an open dialog blocks the next card until it is gone', () => {
     face({ menuVacancy: true, menuEmployer: true }),
     face({ dialog: true }),
     face({ dialog: true }),
-    face({ dialog: true }),
-    face({ dialog: true, submit: true }),
+    face({ dialog: true, wrong: true }),
+    face({ dialog: true, wrong: true, ask: true, submit: true }),
     face({ dialog: true }),
   ]);
   assert.deepEqual(submitted.actions, ['vacancy', 'wrong', 'ask', 'submit']);
@@ -84,9 +88,9 @@ test('an open dialog blocks the next card until it is gone', () => {
   assert.equal(retry.action, null);
   const again = stepHide(retry.step, face({ dialog: true, submit: true }), false);
   assert.equal(again.action, 'wrong');
-  const asked = stepHide(again.step, face({ dialog: true, submit: true }), false);
+  const asked = stepHide(again.step, face({ dialog: true, wrong: true, submit: true }), false);
   assert.equal(asked.action, 'ask');
-  const sent = stepHide(asked.step, face({ dialog: true, submit: true }), false);
+  const sent = stepHide(asked.step, face({ dialog: true, wrong: true, ask: true, submit: true }), false);
   assert.equal(sent.action, 'submit');
   assert.equal(sent.step.phase, 'close');
   const stuck = stepHide(sent.step, face({ dialog: true }), true);

@@ -140,30 +140,23 @@ export async function closePinnedHh(): Promise<void> {
 
   const workerId = await getWorkerTabId();
   const prev = await snapshotFocus().catch(() => null);
-  let drop = true;
   try {
+    const rows = await listJobTabs();
+    for (const row of rows) {
+      if (dropWorkerTab(row, workerId) === false)
+        continue;
+
+      await browser.tabs.remove(row.id).catch(() => {});
+    }
+
     if (typeof workerId !== 'number')
       return;
 
     const tab = await browser.tabs.get(workerId).catch(() => null);
     if (tab === null)
-      return;
-
-    const url = tab.url || tab.pendingUrl || '';
-    if (isBotWorkUrl(url)) {
-      await browser.tabs.remove(workerId).catch(() => {});
-      drop = await browser.tabs.get(workerId).catch(() => null) === null;
-
-      return;
-    }
-
-    if (tab.pinned === true && isHhUrl(url))
-      await browser.tabs.update(workerId, { pinned: false }).catch(() => {});
+      await browser.storage.local.remove(WORKER_KEY);
   }
   finally {
-    if (drop)
-      await browser.storage.local.remove(WORKER_KEY);
-
     await restoreFocus(prev);
   }
 }
@@ -298,7 +291,8 @@ async function openOnlyHh(url: string): Promise<WorkerCheck> {
 
   return shieldOpen(async () => {
     const pinned = await pinWorker(tabId);
-    await releaseOldPin(previous, typeof pinned.tabId === 'number' ? pinned.tabId : tabId);
+    if (pinned.ok)
+      await releaseOldPin(previous, typeof pinned.tabId === 'number' ? pinned.tabId : tabId);
 
     return pinned;
   });
@@ -323,19 +317,53 @@ async function resumeHh(tabId: number, url?: string): Promise<WorkerCheck> {
 }
 
 async function releaseOldPin(previous: number | null, nextId: number): Promise<void> {
-  if (typeof previous !== 'number' || previous === nextId)
-    return;
+  const rows = await listJobTabs();
+  for (const row of rows) {
+    if (spareWorkerPin(row, previous, nextId) === false)
+      continue;
 
-  const tab = await browser.tabs.get(previous).catch(() => null);
-  const url = tab?.url || tab?.pendingUrl || '';
-  if (tab?.pinned !== true || isBotWorkUrl(url) === false)
-    return;
+    await browser.tabs.update(row.id, { pinned: false }).catch(() => {});
+  }
+}
 
-  await browser.tabs.update(previous, { pinned: false }).catch(() => {});
+function spareWorkerPin(row: TabRow, previous: number | null, nextId: number): boolean {
+  if (row.id === nextId || row.pinned !== true)
+    return false;
+
+  if (isBotWorkUrl(row.url))
+    return true;
+
+  if (row.id !== previous)
+    return false;
+
+  return isHhUrl(row.url) && userHh(row.url) === false;
+}
+
+function dropWorkerTab(row: TabRow, workerId: number | null): boolean {
+  if (row.hh === false || userHh(row.url))
+    return false;
+
+  if (row.pinned && isBotWorkUrl(row.url))
+    return true;
+
+  if (row.id !== workerId)
+    return false;
+
+  return row.pinned || isBotWorkUrl(row.url);
 }
 
 function ownWorkTab(rows: TabRow[], workerId: number | null): TabRow | undefined {
-  if (workerId === null)
+  const pins = rows.filter(row => row.pinned && isBotWorkUrl(row.url));
+  if (typeof workerId === 'number') {
+    const stored = pins.find(row => row.id === workerId);
+    if (stored !== undefined)
+      return stored;
+  }
+
+  if (pins[0] !== undefined)
+    return pins[0];
+
+  if (typeof workerId !== 'number')
     return undefined;
 
   const row = rows.find(item => item.id === workerId);
@@ -420,6 +448,11 @@ async function pinLive(tabId: number): Promise<WorkerCheck> {
 
   tracked = id;
   await browser.storage.local.set({ [WORKER_KEY]: id });
+  const held = await browser.tabs.get(id).catch(() => null);
+  const heldUrl = held?.url || held?.pendingUrl || '';
+  if (isHhUrl(heldUrl) && userHh(heldUrl) === false)
+    await releaseOldPin(null, id);
+
   if (wake && prev !== null && prev.tabId !== id)
     await restoreFocus(prev);
 
