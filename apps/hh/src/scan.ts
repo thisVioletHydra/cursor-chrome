@@ -8,7 +8,7 @@ import { keepVacancy } from './corpus.ts';
 import { fillKnownForm } from './form.ts';
 import { judge, packReport } from './judge.ts';
 import { searchVacancies } from './hh-api.ts';
-import { LOOK_PER_START, MODEL_PER_START, QUEUE_TARGET, SEND_PER_DAY } from './limits.ts';
+import { LOOK_PER_START, MODEL_PER_START, QUEUE_TARGET } from './limits.ts';
 import { readMemory, remember, writeMemory } from './memory.ts';
 import { FRONT_TAKE, hasSlot, roleJunk, stepSlot, takeSlot, taste } from './mix.ts';
 import { modelFromEnv, modelsDown } from './model.ts';
@@ -67,7 +67,7 @@ export async function scan(opts: ScanOpts): Promise<ScanRun> {
     if (room <= 0) {
       const held = takeSlot(buckets, prefer);
       if (held !== undefined) {
-        const why = memory !== null && memory.sent >= SEND_PER_DAY ? 'потолок на сегодня' : 'очередь полная';
+        const why = memory !== null && memory.sent >= memory.cap ? 'потолок на сегодня' : 'очередь полная';
         reports.push(packReport(held, 'human', why, dry));
       }
 
@@ -125,7 +125,7 @@ export async function scan(opts: ScanOpts): Promise<ScanRun> {
 async function queueRoom(memory: Memory): Promise<number> {
   const queued = await pendingCount();
 
-  return Math.min(QUEUE_TARGET - queued, SEND_PER_DAY - memory.sent - queued);
+  return Math.min(QUEUE_TARGET - queued, memory.cap - memory.sent - queued);
 }
 
 async function finish(vacancy: Vacancy, report: Report, score: number): Promise<Report> {

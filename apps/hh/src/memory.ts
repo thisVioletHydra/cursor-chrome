@@ -5,10 +5,15 @@ import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
+const SWAY = 0.16;
+const DAY_LOW = Math.floor(SEND_PER_DAY * (1 - SWAY));
+const DAY_HIGH = Math.ceil(SEND_PER_DAY * (1 + SWAY));
+
 export type Memory = {
   seen: string[];
   day: string;
   sent: number;
+  cap: number;
 };
 
 export function storePath(): string {
@@ -30,27 +35,14 @@ export function moscowDay(now = new Date()): string {
   }).format(now);
 }
 
-export async function readMemory(): Promise<Memory> {
-  const day = moscowDay();
-  let text: string;
-  try {
-    text = await fsPromises.readFile(storePath(), 'utf8');
-  }
-  catch {
-    return { seen: [], day, sent: 0 };
-  }
+let tail: Promise<void> = Promise.resolve();
 
-  const parsed = parseJsonLoose(text);
-  const raw = parsed && typeof parsed.value === 'object' && parsed.value !== null ? parsed.value as Partial<Memory> : {};
-  const seen = Array.isArray(raw.seen) ? raw.seen.filter((id): id is string => typeof id === 'string') : [];
-  if (raw.day !== day)
-    return { seen, day, sent: 0 };
-
-  return { seen, day, sent: typeof raw.sent === 'number' ? raw.sent : 0 };
+export function readMemory(): Promise<Memory> {
+  return turn(loadMemory);
 }
 
-export async function writeMemory(memory: Memory): Promise<void> {
-  await writeJsonAtomic(storePath(), memory);
+export function writeMemory(memory: Memory): Promise<void> {
+  return turn(() => save(memory));
 }
 
 export function moscowHour(now = new Date()): number {
@@ -66,11 +58,11 @@ export function workHours(now = new Date()): boolean {
 }
 
 export function dayOpen(memory: Memory): boolean {
-  return memory.sent < SEND_PER_DAY;
+  return memory.sent < memory.cap;
 }
 
 export function roomToday(memory: Memory, pendingCount: number): boolean {
-  return memory.sent + pendingCount < SEND_PER_DAY;
+  return memory.sent + pendingCount < memory.cap;
 }
 
 export function countSent(memory: Memory): Memory {
@@ -98,4 +90,74 @@ export function diaryIds(seen: readonly string[], queued: readonly string[]): st
   }
 
   return [...ids];
+}
+
+function turn<T>(job: () => Promise<T>): Promise<T> {
+  const run = tail.then(job);
+  tail = run.then(() => undefined, () => undefined);
+
+  return run;
+}
+
+async function loadMemory(): Promise<Memory> {
+  const day = moscowDay();
+  const raw = await readRaw();
+  const seen = Array.isArray(raw.seen) ? raw.seen.filter((id): id is string => typeof id === 'string') : [];
+  const sameDay = raw.day === day;
+  const sent = sameDay && typeof raw.sent === 'number' ? raw.sent : 0;
+  const kept = sameDay ? capOf(raw.cap) : null;
+  if (kept !== null)
+    return { seen, day, sent, cap: kept };
+
+  const memory = { seen, day, sent, cap: drawDayCap() };
+  await save(memory);
+
+  return memory;
+}
+
+async function readRaw(): Promise<Partial<Memory>> {
+  let text: string;
+  try {
+    text = await fsPromises.readFile(storePath(), 'utf8');
+  }
+  catch {
+    return {};
+  }
+
+  const parsed = parseJsonLoose(text);
+  if (parsed === null || typeof parsed.value !== 'object' || parsed.value === null)
+    return {};
+
+  return parsed.value as Partial<Memory>;
+}
+
+async function save(memory: Memory): Promise<void> {
+  await writeJsonAtomic(storePath(), memory);
+}
+
+function drawDayCap(): number {
+  const whole = Math.round(sway(SEND_PER_DAY));
+  if (whole < DAY_LOW)
+    return DAY_LOW;
+
+  if (whole > DAY_HIGH)
+    return DAY_HIGH;
+
+  return whole;
+}
+
+function sway(base: number): number {
+  const p = Math.random() * (SWAY * 2) - SWAY;
+
+  return base * (1 + Math.min(SWAY, Math.max(-SWAY, p)));
+}
+
+function capOf(value: unknown): number | null {
+  if (typeof value !== 'number' || Number.isInteger(value) === false)
+    return null;
+
+  if (value < DAY_LOW || value > DAY_HIGH)
+    return null;
+
+  return value;
 }

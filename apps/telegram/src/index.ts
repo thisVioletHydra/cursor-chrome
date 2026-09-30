@@ -1,4 +1,4 @@
-import { SEND_PER_DAY, storePath, watchDeath, WORK_FROM_HOUR, WORK_TO_HOUR, writeJsonAtomic, writeState } from '@cursor-chrome/hh';
+import { readMemory, storePath, watchDeath, WORK_FROM_HOUR, WORK_TO_HOUR, writeJsonAtomic, writeState } from '@cursor-chrome/hh';
 
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -274,7 +274,8 @@ async function onUpdate(update: Update): Promise<void> {
     return;
 
   await writeState({ auto: true });
-  await send(message.chat.id, `Автопилот включён. Вакансии принесёт Chrome, пока открыта вкладка hh и включён автопилот расширения. С ${WORK_FROM_HOUR}:00 до ${WORK_TO_HOUR}:00 МСК, до ${SEND_PER_DAY} откликов в день.`);
+  const memory = await readMemory();
+  await send(message.chat.id, `Автопилот включён. Вакансии принесёт Chrome, пока открыта вкладка hh и включён автопилот расширения. С ${WORK_FROM_HOUR}:00 до ${WORK_TO_HOUR}:00 МСК, до ${memory.cap} откликов в день.`);
 }
 
 export function startAutopilot(): void {
