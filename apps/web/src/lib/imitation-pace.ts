@@ -1,5 +1,6 @@
 // Секунды пауз берутся из кода, не из догадки.
-// Чтение, чай, быстрое и отвлечение: apps/extension/src/chrome/pace.ts, waitMs и rare.
+// Чтение, быстрое и отвлечение: apps/extension/src/chrome/pace.ts, waitMs и rare.
+// Чай: apps/extension/src/chrome/tea.ts, один бросок раз в 45 минут.
 // Отдых круга: apps/extension/src/chrome/queue-run.ts, REST_MIN_SEC / REST_MAX_SEC, один раз в restCycle.
 // Паузы перед кликом: apps/extension/src/hh/apply-run.ts, between() в clickOpen и submitStep.
 // Потолок дня: apps/hh/src/limits.ts, SEND_PER_DAY.
@@ -10,9 +11,6 @@ export type Pace = {
   readMax: number;
   distractMin: number;
   distractMax: number;
-  teaEvery: number;
-  teaMin: number;
-  teaMax: number;
   fastEvery: number;
   fastMin: number;
   fastMax: number;
@@ -61,45 +59,43 @@ const REST_MIN_SEC = 0;
 const REST_MAX_SEC = 60;
 const TWO_HOURS = 2 * 3600;
 const EIGHT_HOURS = 8 * 3600;
+const TEA_EVERY_SEC = 45 * 60;
+const TEA_MIN_SEC = 300;
+const TEA_MAX_SEC = 600;
+const TEA_MEAN_SEC = (TEA_MIN_SEC + TEA_MAX_SEC) / 2;
+const TEA_MISS_SEC = 15;
+const TEA_NOTE = 'раз в 45 мин, шанс 33%: чай 5–10 мин, иначе 15 с';
 
 type Span = { min: number; max: number; mean: number };
+type TeaKind = 'mid' | 'slow' | 'fast';
+type TeaBill = { rolls: number; added: number; total: number };
 
 export function imitationPicture(pace: Pace): PacePicture {
   const read = spanSec(pace.readMin, pace.readMax);
   const distract = spanSec(pace.distractMin, pace.distractMax);
-  const tea = spanSec(pace.teaMin, pace.teaMax);
   const fast = spanSec(pace.fastMin, pace.fastMax);
   const open = spanMs(OPEN_MIN_MS, OPEN_MAX_MS);
   const send = spanMs(SEND_MIN_MS, SEND_MAX_MS);
   const rest = spanSec(REST_MIN_SEC, REST_MAX_SEC);
-  const teaEvery = everyOf(pace.teaEvery);
   const fastEvery = everyOf(pace.fastEvery);
-  const pTea = teaEvery > 0 ? 1 / teaEvery : 0;
   const pFast = fastEvery > 0 ? 1 / fastEvery : 0;
   const readBranch = pFast < 1;
   const fastBranch = pFast > 0;
-  const teaAlways = pTea >= 1;
-  const teaSometimes = pTea > 0 && teaAlways === false;
   const fastAlways = pFast >= 1;
   const fastSometimes = fastBranch && fastAlways === false;
   const slotMean = (readBranch ? (1 - pFast) * read.mean : 0) + (fastBranch ? pFast * fast.mean : 0);
-  const teaMean = pTea * tea.mean;
   const slowSlot = edgeSlot(read, fast, readBranch, fastBranch, 'max');
   const quickSlot = edgeSlot(read, fast, readBranch, fastBranch, 'min');
-  const teaOnFast = teaAlways ? tea.min : 0;
   const slotName = readBranch ? 'чтение' : 'быстро';
-  const perFast = quickSlot + open.min + send.min + distract.min + teaOnFast;
-  const perMid = slotMean + teaMean + distract.mean + open.mean + send.mean;
+  const perFast = quickSlot + open.min + send.min + distract.min;
+  const perMid = slotMean + distract.mean + open.mean + send.mean;
   const slowBody = slowSlot + open.max + send.max + distract.max;
-  const teaShare = teaEvery > 0 ? tea.max / teaEvery : 0;
-  const perSlow = slowBody + teaShare;
-  const teaHits = teaEvery > 0 ? Math.floor(DAY_CAP / teaEvery) : 0;
-  const idleFast = DAY_CAP * perFast;
-  const idleMid = DAY_CAP * perMid;
-  const idleSlow = DAY_CAP * slowBody + teaHits * tea.max;
+  const teaExpect = rollExpect();
+  const teaFast = withTea(DAY_CAP * perFast, TEA_MISS_SEC);
+  const teaMid = withTea(DAY_CAP * perMid, teaExpect);
+  const teaSlow = withTea(DAY_CAP * slowBody, TEA_MAX_SEC);
   const midTerms = [
     readExpect(slotName, read, fast, fastEvery, fastSometimes, fastAlways),
-    teaExpect(tea, teaEvery),
     `отвлечение ${secText(distract.mean)}`,
     `клик ${secText(open.mean)}`,
     `отправка ${secText(send.mean)}`,
@@ -109,7 +105,6 @@ export function imitationPicture(pace: Pace): PacePicture {
     ['клик', open.min],
     ['отправка', send.min],
     ['отвлечение', distract.min],
-    ['чай', teaOnFast],
   ]);
   const slowTerms = termList([
     [slotName, slowSlot],
@@ -117,26 +112,17 @@ export function imitationPicture(pace: Pace): PacePicture {
     ['отправка', send.max],
     ['отвлечение', distract.max],
   ]);
-  const slowTea = teaEvery > 0 && tea.max > 0 ? `чай ${secText(tea.max)}/${teaEvery}` : '';
   const midFormula = joinTerms(midTerms);
   const fastFormula = joinTerms(fastTerms);
-  const slowFormula = slowTea.length > 0 ? `${joinTerms(slowTerms)} + ${slowTea}` : joinTerms(slowTerms);
-  const slowDay = teaHits > 0 && tea.max > 0
-    ? `${DAY_CAP} × (${joinTerms(slowTerms)}) с + ${teaHits} × ${secText(tea.max)} с чая = ${secText(idleSlow)} с`
-    : `${DAY_CAP} × (${slowFormula}) с = ${secText(idleSlow)} с`;
-  const fastDay = `${DAY_CAP} × (${fastFormula}) с = ${secText(idleFast)} с${teaOnFast > 0 ? '' : ', без чая'}`;
+  const slowFormula = joinTerms(slowTerms);
   const chainRead = fastAlways ? fast.mean : read.mean;
   const chainLabel = fastAlways ? 'быстро' : 'читаю';
   const chainNote = fastAlways ? rangeNote(fast) : rangeNote(read);
   let cursor = 0;
   const lanes: Lane[] = [
     mark('открыл', 'сразу', '', cursor, false),
+    bar(chainLabel, 'таймер', cursor, chainRead, chainNote, 'timer', false),
   ];
-  if (teaAlways) {
-    lanes.push(bar('чай', 'таймер', cursor, tea.mean, rangeNote(tea), 'timer', false));
-    cursor += tea.mean;
-  }
-  lanes.push(bar(chainLabel, 'таймер', cursor, chainRead, chainNote, 'timer', false));
   cursor += chainRead;
   lanes.push(bar('жму откликнуться', 'таймер', cursor, open.mean, rangeNote(open), 'timer', false));
   cursor += open.mean;
@@ -145,17 +131,17 @@ export function imitationPicture(pace: Pace): PacePicture {
   lanes.push(mark('жду ответ', 'жду', 'пока страница не подтвердит, потолок 8 с', cursor, false));
   lanes.push(mark('откликнулся', 'сразу', '', cursor, false));
   lanes.push(bar('отвлёкся', 'таймер', cursor, distract.mean, rangeNote(distract), 'timer', false));
-  if (teaSometimes)
-    lanes.push(bar('чай', 'иногда', 0, tea.mean, `1 из ${teaEvery}, ${rangeNote(tea)}, до чтения`, 'rare', true));
   if (fastSometimes)
-    lanes.push(bar('быстро', 'иногда', 0, fast.mean, `1 из ${fastEvery}, ${rangeNote(fast)}, вместо чтения`, 'rare', lanes.some(lane => lane.tone === 'rare') === false));
+    lanes.push(bar('быстро', 'иногда', 0, fast.mean, `1 из ${fastEvery}, ${rangeNote(fast)}, вместо чтения`, 'rare', true));
+
+  lanes.push(bar('чай', '45 мин', 0, teaExpect, TEA_NOTE, 'caption', true));
   lanes.push(bar('между кругами', 'отдельно', 0, rest.mean, `${rangeNote(rest)}, один раз на круг`, 'cycle', true));
 
   const longest = Math.max(
     cursor + distract.mean,
-    tea.max,
+    teaExpect,
     rest.max,
-    perSlow,
+    slowBody,
     perMid,
     perFast,
   );
@@ -166,23 +152,23 @@ export function imitationPicture(pace: Pace): PacePicture {
     lanes,
     scenarios: [
       scenario('Средний', perMid, `${midFormula} с`),
-      scenario('Худший', perSlow, `${slowFormula} с`),
+      scenario('Худший', slowBody, `${slowFormula} с`),
       scenario('Самый быстрый', perFast, `${fastFormula} с`),
     ],
     cap: figure('Потолок дня', `${DAY_CAP} в день`, 'лимит откликов за день'),
     windows: [
-      windowFigure(2, TWO_HOURS, perMid, perFast, slowBody, teaEvery, tea.max),
-      windowFigure(8, EIGHT_HOURS, perMid, perFast, slowBody, teaEvery, tea.max),
+      windowFigure(2, TWO_HOURS, perMid, perFast, slowBody),
+      windowFigure(8, EIGHT_HOURS, perMid, perFast, slowBody),
     ],
     hours: [
-      figure('Самый быстрый', clockOf(idleFast), fastDay),
-      figure('Ожидается', clockOf(idleMid), `${DAY_CAP} × (${midFormula}) с = ${secText(idleMid)} с`),
-      figure('Худший', clockOf(idleSlow), slowDay),
+      figure('Самый быстрый', clockOf(teaFast.total), hourLine(fastFormula, DAY_CAP * perFast, teaFast, 'fast')),
+      figure('Ожидается', clockOf(teaMid.total), hourLine(midFormula, DAY_CAP * perMid, teaMid, 'mid')),
+      figure('Худший', clockOf(teaSlow.total), hourLine(slowFormula, DAY_CAP * slowBody, teaSlow, 'slow')),
     ],
     idle: [
-      figure('В среднем', clockOf(idleMid), `${DAY_CAP} × (${midFormula}) с = ${secText(idleMid)} с`),
-      figure('Худший', clockOf(idleSlow), slowDay),
-      figure('Самый быстрый', clockOf(idleFast), fastDay),
+      figure('В среднем', clockOf(teaMid.total), hourLine(midFormula, DAY_CAP * perMid, teaMid, 'mid')),
+      figure('Худший', clockOf(teaSlow.total), hourLine(slowFormula, DAY_CAP * slowBody, teaSlow, 'slow')),
+      figure('Самый быстрый', clockOf(teaFast.total), hourLine(fastFormula, DAY_CAP * perFast, teaFast, 'fast')),
     ],
     rest: figure(
       'Отдых между кругами',
@@ -192,10 +178,10 @@ export function imitationPicture(pace: Pace): PacePicture {
   };
 }
 
-function windowFigure(hours: number, budget: number, perMid: number, perFast: number, slowBody: number, teaEvery: number, teaMax: number): Figure {
-  const mid = wholeVacancies(budget, perMid, 0, 0);
-  const quick = wholeVacancies(budget, perFast, 0, 0);
-  const slow = wholeVacancies(budget, slowBody, teaEvery, teaMax);
+function windowFigure(hours: number, budget: number, perMid: number, perFast: number, slowBody: number): Figure {
+  const mid = fitVacancies(budget, perMid, rollExpect());
+  const quick = fitVacancies(budget, perFast, TEA_MISS_SEC);
+  const slow = fitVacancies(budget, slowBody, TEA_MAX_SEC);
   const low = Math.min(quick, slow, mid);
   const high = Math.max(quick, slow, mid);
   const spread = low !== high;
@@ -206,26 +192,55 @@ function windowFigure(hours: number, budget: number, perMid: number, perFast: nu
   return figure(
     `За ${hours} ч без потолка`,
     value,
-    `${budget} с / ${secText(perMid)} с → ${mid}; быстрый ${quick}; худший ${slow}`,
+    `бюджет ${budget} с, с чаем: средний ${mid}, быстрый ${quick}, худший ${slow}`,
   );
 }
 
-function wholeVacancies(budget: number, per: number, teaEvery: number, teaAdd: number): number {
+function hourLine(formula: string, base: number, roll: TeaBill, kind: TeaKind): string {
+  return `${DAY_CAP} × (${formula}) с = ${secText(base)} с. ${teaArithmetic(roll, kind)} Вместе ${secText(roll.total)} с.`;
+}
+
+function teaArithmetic(roll: TeaBill, kind: TeaKind): string {
+  if (kind === 'mid')
+    return `Чай: ${roll.rolls} × (0.33×${secText(TEA_MEAN_SEC)} + 0.67×${TEA_MISS_SEC}) с = ${secText(roll.added)} с.`;
+
+  if (kind === 'slow')
+    return `Чай: ${roll.rolls} × ${secText(TEA_MAX_SEC)} с = ${secText(roll.added)} с.`;
+
+  return `Чай: ${roll.rolls} × ${TEA_MISS_SEC} с = ${secText(roll.added)} с.`;
+}
+
+function rollExpect(): number {
+  return (33 * TEA_MEAN_SEC + 67 * TEA_MISS_SEC) / 100;
+}
+
+function withTea(base: number, each: number): TeaBill {
+  let total = base;
+  let rolls = 0;
+  for (let step = 0; step < 8; step += 1) {
+    rolls = Math.floor(total / TEA_EVERY_SEC);
+    const next = base + rolls * each;
+    if (Math.abs(next - total) < 1e-6) {
+      total = next;
+
+      break;
+    }
+
+    total = next;
+  }
+
+  return { rolls, added: rolls * each, total };
+}
+
+function fitVacancies(budget: number, per: number, each: number): number {
   if (Number.isFinite(per) === false || per <= 0)
     return 0;
 
   let count = Math.floor(budget / per);
-  while (count > 0 && count * per + teaExtra(count, teaEvery, teaAdd) > budget + 1e-6)
+  while (count > 0 && withTea(count * per, each).total > budget + 1e-6)
     count -= 1;
 
   return count;
-}
-
-function teaExtra(count: number, every: number, add: number): number {
-  if (every < 1 || add <= 0)
-    return 0;
-
-  return Math.floor(count / every) * add;
 }
 
 function edgeSlot(read: Span, fast: Span, readOn: boolean, fastOn: boolean, edge: 'min' | 'max'): number {
@@ -236,24 +251,14 @@ function edgeSlot(read: Span, fast: Span, readOn: boolean, fastOn: boolean, edge
   return span[edge];
 }
 
-function readExpect(name: string, read: Span, fast: Span, every: number, sometimes: boolean, always: boolean): string {
+function readExpect(name: string, read: Span, fast: Span, quota: number, sometimes: boolean, always: boolean): string {
   if (always)
     return `${name} ${secText(fast.mean)}`;
 
   if (sometimes)
-    return `${name} ((${every - 1}/${every})×${secText(read.mean)} + (1/${every})×${secText(fast.mean)})`;
+    return `${name} ((${quota - 1}/${quota})×${secText(read.mean)} + (1/${quota})×${secText(fast.mean)})`;
 
   return `${name} ${secText(read.mean)}`;
-}
-
-function teaExpect(tea: Span, every: number): string {
-  if (every < 1 || tea.mean <= 0)
-    return '';
-
-  if (every === 1)
-    return `чай ${secText(tea.mean)}`;
-
-  return `чай (1/${every})×${secText(tea.mean)}`;
 }
 
 function termList(parts: Array<[string, number]>): string[] {
@@ -304,11 +309,11 @@ function meanToSec(ms: number): number {
 }
 
 function everyOf(value: number): number {
-  const every = Math.floor(finite(value));
-  if (every < 1)
+  const quota = Math.floor(finite(value));
+  if (quota < 1)
     return 0;
 
-  return every;
+  return quota;
 }
 
 function finite(value: number): number {

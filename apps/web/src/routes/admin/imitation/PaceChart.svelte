@@ -26,10 +26,17 @@ const rows = $derived.by(() => {
       seenRare = true;
       y += 22;
     }
+
+    if (lane.tone === 'caption') {
+      caption = lane.note;
+      y += 22;
+    }
+
     if (lane.tone === 'cycle') {
       caption = 'Между кругами, не пауза вакансии';
       y += 28;
     }
+
     list.push({ lane, y, caption });
     y += rowH;
   }
@@ -65,11 +72,11 @@ const plotBottom = $derived(sceneTop - 16);
   <p class="mt-1 text-sm text-zinc-400">Одна вакансия. Ось в секундах, длина полосы — длительность. Янтарная полоса — таймер, засечка — сразу.</p>
   <svg class="mt-4 w-full" viewBox="0 0 {width} {height}" role="img" aria-labelledby="pace-chart-title">
     <line x1={labelW} y1={axisTop} x2={labelW + plotW} y2={axisTop} stroke="#ffffff" stroke-opacity="0.16" />
-    {#each axis as mark}
+    {#each axis as mark (mark)}
       <line x1={xOf(mark)} y1={axisTop} x2={xOf(mark)} y2={plotBottom} stroke="#ffffff" stroke-opacity="0.06" />
       <text x={xOf(mark)} y={axisTop - 8} fill="#a1a1aa" font-size="11" text-anchor="middle">{mark}</text>
     {/each}
-    {#each rows as row}
+    {#each rows as row (row.lane.label)}
       {#if row.caption}
         <text x={labelW} y={row.y - 14} fill="#a1a1aa" font-size="12">{row.caption}</text>
       {/if}
@@ -93,10 +100,12 @@ const plotBottom = $derived(sceneTop - 16);
           <title>{row.lane.label}. {row.lane.note}</title>
         </rect>
       {/if}
-      <text x={xOf(row.lane.start + row.lane.seconds) + 8} y={row.y + 16} fill="#a1a1aa" font-size="12">{row.lane.note}</text>
+      {#if row.lane.tone !== 'caption'}
+        <text x={xOf(row.lane.start + row.lane.seconds) + 8} y={row.y + 16} fill="#a1a1aa" font-size="12">{row.lane.note}</text>
+      {/if}
     {/each}
     <text x="0" y={sceneTop - 6} fill="#e4e4e7" font-size="13">Темп на одну</text>
-    {#each picture.scenarios as scene, index}
+    {#each picture.scenarios as scene, index (scene.title)}
       <text x="0" y={sceneTop + index * 36 + 16} fill="#d4d4d8" font-size="13">{scene.title}</text>
       <rect
         class="fill-[#e0b15a] opacity-80 transition hover:opacity-100"
@@ -119,7 +128,7 @@ const plotBottom = $derived(sceneTop - 16);
       <p class="mt-3 text-xs text-zinc-500">{picture.cap.title}</p>
       <p class="text-lg text-white">{picture.cap.value}</p>
       <p class="text-xs text-zinc-500">{picture.cap.line}</p>
-      {#each picture.windows as item}
+      {#each picture.windows as item (item.title)}
         <p class="mt-3 text-xs text-zinc-500">{item.title}</p>
         <p class="text-lg text-white">{item.value}</p>
         <p class="text-xs leading-snug text-zinc-500">{item.line}</p>
@@ -127,7 +136,7 @@ const plotBottom = $derived(sceneTop - 16);
     </div>
     <div>
       <h3 class="text-sm font-medium text-white">Часов требуется на {picture.dayCap}</h3>
-      {#each picture.hours as item}
+      {#each picture.hours as item (item.title)}
         <p class="mt-3 text-xs text-zinc-500">{item.title}</p>
         <p class="text-lg text-white">{item.value}</p>
         <p class="text-xs leading-snug text-zinc-500">{item.line}</p>
@@ -136,7 +145,7 @@ const plotBottom = $derived(sceneTop - 16);
     </div>
     <div>
       <h3 class="text-sm font-medium text-white">Простой, сумма задержек на {picture.dayCap}</h3>
-      {#each picture.idle as item}
+      {#each picture.idle as item (item.title)}
         <p class="mt-3 text-xs text-zinc-500">{item.title}</p>
         <p class="text-lg text-white">{item.value}</p>
         <p class="text-xs leading-snug text-zinc-500">{item.line}</p>

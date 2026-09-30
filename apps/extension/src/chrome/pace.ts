@@ -5,9 +5,6 @@ export type Pace = {
   readMax: number;
   distractMin: number;
   distractMax: number;
-  teaEvery: number;
-  teaMin: number;
-  teaMax: number;
   fastEvery: number;
   fastMin: number;
   fastMax: number;
@@ -22,9 +19,6 @@ export const PACE_DEFAULT: Pace = {
   readMax: 40,
   distractMin: 5,
   distractMax: 55,
-  teaEvery: 12,
-  teaMin: 120,
-  teaMax: 180,
   fastEvery: 12,
   fastMin: 1,
   fastMax: 4,
@@ -40,11 +34,11 @@ export async function loadPace(): Promise<Pace> {
   return paceOf(stored[PACE_KEY]);
 }
 
-export function rare(every: number): boolean {
-  if (every < 1)
+export function rare(quota: number): boolean {
+  if (quota < 1)
     return false;
 
-  return Math.floor(Math.random() * every) === 0;
+  return Math.floor(Math.random() * quota) === 0;
 }
 
 export function waitMs(min: number, max: number): number {
@@ -60,7 +54,6 @@ function paceOf(raw: unknown): Pace {
   const ranges = [
     ['readMin', 'readMax'],
     ['distractMin', 'distractMax'],
-    ['teaMin', 'teaMax'],
     ['fastMin', 'fastMax'],
   ] as const;
   for (const [minKey, maxKey] of ranges) {
@@ -72,11 +65,10 @@ function paceOf(raw: unknown): Pace {
     pace[minKey] = min;
     pace[maxKey] = max;
   }
-  for (const key of ['teaEvery', 'fastEvery'] as const) {
-    const every = whole(row[key], 1, EVERY_MAX);
-    if (every !== null)
-      pace[key] = every;
-  }
+
+  const quota = whole(row.fastEvery, 1, EVERY_MAX);
+  if (quota !== null)
+    pace.fastEvery = quota;
 
   return pace;
 }

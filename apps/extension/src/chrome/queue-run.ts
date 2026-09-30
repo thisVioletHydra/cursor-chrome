@@ -5,6 +5,7 @@ import { getSyncKey, getSyncUrl } from './apply-log';
 import { getFlags, setFlags } from './flags';
 import { pinnedCaptcha, tabShowsCaptcha } from './hh-captcha';
 import { loadPace, rare, waitMs } from './pace';
+import { maybeTea, noteTeaSession } from './tea';
 import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage } from './page-log';
 import { runHhApply } from './hh-apply-cmd';
 import { collectVacancies } from './hh-search';
@@ -188,6 +189,7 @@ async function drain(): Promise<QueueRun> {
   const run: QueueRun = { ok: true, sent: 0, human: 0, skipped: 0, left: 0, reason: '', lines: [] };
   let started = false;
   let advance = false;
+  let teaOpen = false;
 
   while (hoursOpen()) {
     if (await cycleOpen() === false) {
@@ -195,6 +197,11 @@ async function drain(): Promise<QueueRun> {
         run.reason = 'расширение зависло';
 
       break;
+    }
+
+    if (teaOpen === false) {
+      teaOpen = true;
+      await noteTeaSession();
     }
 
     const hunt = await fetchHunt(base, key, advance);
@@ -290,6 +297,19 @@ async function applyPending(base: string, key: string, run: QueueRun): Promise<A
 
       if (hoursOpen() === false)
         return { started, stop: true, reason: 'рабочие часы закрыты' };
+
+      if (await cycleOpen() === false)
+        return { started, stop: false, reason: '' };
+
+      await maybeTea();
+      if (hangHalted())
+        return { started, stop: true, reason: 'расширение зависло' };
+
+      if (hoursOpen() === false)
+        return { started, stop: true, reason: 'рабочие часы закрыты' };
+
+      if (await cycleOpen() === false)
+        return { started, stop: false, reason: '' };
 
       seen.add(item.id);
       started = true;
@@ -418,6 +438,10 @@ async function restCycle(): Promise<boolean> {
     return false;
 
   if (await guardCaptcha())
+    return false;
+
+  await maybeTea();
+  if (await cycleOpen() === false)
     return false;
 
   await paceBeforeHunt();
@@ -708,9 +732,6 @@ function hoursOpen(now = new Date()): boolean {
 
 async function pacedWait(): Promise<void> {
   const pace = await loadPace();
-  if (rare(pace.teaEvery))
-    await tickPage('чай', waitMs(pace.teaMin, pace.teaMax));
-
   const fast = rare(pace.fastEvery);
   const wait = fast
     ? waitMs(pace.fastMin, pace.fastMax)

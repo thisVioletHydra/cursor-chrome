@@ -44,9 +44,6 @@ export type Imitation = {
   readMax: number;
   distractMin: number;
   distractMax: number;
-  teaEvery: number;
-  teaMin: number;
-  teaMax: number;
   fastEvery: number;
   fastMin: number;
   fastMax: number;
@@ -57,9 +54,6 @@ export const IMITATION: Imitation = {
   readMax: 40,
   distractMin: 5,
   distractMax: 55,
-  teaEvery: 12,
-  teaMin: 120,
-  teaMax: 180,
   fastEvery: 12,
   fastMin: 1,
   fastMax: 4,
@@ -375,12 +369,10 @@ const EVERY_MAX = 100;
 const RANGES = [
   ['readMin', 'readMax', 'чтение'],
   ['distractMin', 'distractMax', 'после отклика'],
-  ['teaMin', 'teaMax', 'чай'],
   ['fastMin', 'fastMax', 'быстрая'],
 ] as const;
 
 const EVERIES = [
-  ['teaEvery', 'чай'],
   ['fastEvery', 'быстрая'],
 ] as const;
 

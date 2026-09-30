@@ -1,5 +1,6 @@
 <script lang="ts">
 import { enhance } from '$app/forms';
+
 import PaceChart from './PaceChart.svelte';
 
 let { data } = $props();
@@ -17,7 +18,6 @@ const steps = $derived([
     title: 'Открыть вакансию',
     note: '',
     lines: [] as string[],
-    gap: teaSentence(pace.teaEvery, pace.teaMin, pace.teaMax),
   },
   {
     title: 'Читать',
@@ -26,31 +26,26 @@ const steps = $derived([
       readSentence(pace.readMin, pace.readMax),
       fastSentence(pace.fastEvery, pace.fastMin, pace.fastMax),
     ],
-    gap: '',
   },
   {
     title: 'Нужен человек',
     note: 'Шарады, ребусы или мутная цыганщина в тексте или в форме — не откликаться.',
     lines: [],
-    gap: '',
   },
   {
     title: 'Выбрать резюме',
     note: 'Фронтенд — резюме фронтенда. Бэкенд и фуллстек — фуллстек.',
     lines: [],
-    gap: '',
   },
   {
     title: 'Письмо и отклик',
     note: 'Вставить сопроводительное и откликнуться.',
     lines: [],
-    gap: '',
   },
   {
     title: 'Отвлечься',
     note: 'Перед следующей.',
     lines: [afterSentence(pace.distractMin, pace.distractMax)],
-    gap: '',
   },
 ]);
 
@@ -104,36 +99,12 @@ function readSentence(min: number, max: number): string {
   return `Ничего не нажимает от ${lo} до ${hi} ${ru(hi, 'секунды', 'секунд', 'секунд')}`;
 }
 
-function fastSentence(every: number, min: number, max: number): string {
+function fastSentence(quota: number, min: number, max: number): string {
   const wait = secondsSpan(min, max);
-  if (Number.isInteger(every) === false || every < 1 || wait === null)
+  if (Number.isInteger(quota) === false || quota < 1 || wait === null)
     return '—';
 
-  return `Редко, примерно раз на ${every} ${vacancies(every)}, пролистывает за ${wait} и почти не читает.`;
-}
-
-function teaSpan(min: number, max: number): string | null {
-  const pair = ordered(min, max);
-  if (pair === null)
-    return null;
-
-  const [lo, hi] = pair;
-  if (lo % 60 === 0 && hi % 60 === 0) {
-    const a = lo / 60;
-    const b = hi / 60;
-
-    return span(a, b, ru(b, 'минуту', 'минуты', 'минут'));
-  }
-
-  return secondsSpan(lo, hi);
-}
-
-function teaSentence(every: number, min: number, max: number): string {
-  const wait = teaSpan(min, max);
-  if (Number.isInteger(every) === false || every < 1 || wait === null)
-    return '—';
-
-  return `Редко, примерно раз на ${every} ${vacancies(every)}, уходит на ${wait}.`;
+  return `Редко, примерно раз на ${quota} ${vacancies(quota)}, пролистывает за ${wait} и почти не читает.`;
 }
 
 function afterSentence(min: number, max: number): string {
@@ -184,7 +155,7 @@ function onSave() {
 <section class="rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Маршрут</h2>
   <ol class="mt-4">
-    {#each steps as step, index}
+    {#each steps as step, index (step.title)}
       <li class="grid grid-cols-[1.75rem_1fr] gap-3">
         <div class="flex flex-col items-center">
           <span class="grid size-7 place-items-center rounded-full border border-white/15 bg-white/5 text-xs text-zinc-200">{index + 1}</span>
@@ -197,12 +168,9 @@ function onSave() {
           {#if step.note}
             <p class="mt-1 text-sm text-zinc-400">{step.note}</p>
           {/if}
-          {#each step.lines as line}
+          {#each step.lines as line (line)}
             <p class="mt-1 text-sm leading-snug text-indigo-200">{line}</p>
           {/each}
-          {#if step.gap}
-            <p class="mt-2 text-sm leading-snug text-amber-200/90">{step.gap}</p>
-          {/if}
         </div>
       </li>
     {/each}
@@ -244,21 +212,8 @@ function onSave() {
       </div>
     </fieldset>
     <fieldset class="grid gap-2">
-      <legend class="text-sm text-zinc-300">Уходит</legend>
-      <div class="flex flex-wrap gap-2">
-        <label class="grid gap-1 text-xs text-zinc-500">
-          раз на, вакансий
-          <input class="input input-bordered h-11 w-24 border-white/10 bg-black/30 text-center text-sm text-zinc-100 focus:border-indigo-400 focus:outline-none" name="teaEvery" type="number" min="1" max="100" step="1" inputmode="numeric" autocomplete="off" bind:value={pace.teaEvery} />
-        </label>
-        <label class="grid gap-1 text-xs text-zinc-500">
-          от, секунды
-          <input class="input input-bordered h-11 w-24 border-white/10 bg-black/30 text-center text-sm text-zinc-100 focus:border-indigo-400 focus:outline-none" name="teaMin" type="number" min="0" max="600" step="1" inputmode="numeric" autocomplete="off" bind:value={pace.teaMin} />
-        </label>
-        <label class="grid gap-1 text-xs text-zinc-500">
-          до, секунды
-          <input class="input input-bordered h-11 w-24 border-white/10 bg-black/30 text-center text-sm text-zinc-100 focus:border-indigo-400 focus:outline-none" name="teaMax" type="number" min="0" max="600" step="1" inputmode="numeric" autocomplete="off" bind:value={pace.teaMax} />
-        </label>
-      </div>
+      <legend class="text-sm text-zinc-300">Чай</legend>
+      <p class="text-sm leading-snug text-amber-200/90">раз в 45 мин, шанс 33%: чай 5–10 мин, иначе 15 с</p>
     </fieldset>
     <fieldset class="grid gap-2">
       <legend class="text-sm text-zinc-300">Пролистывает</legend>
