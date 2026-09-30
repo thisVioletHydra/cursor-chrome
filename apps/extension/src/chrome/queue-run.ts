@@ -5,7 +5,7 @@ import { getSyncKey, getSyncUrl } from './apply-log';
 import { getFlags, setFlags } from './flags';
 import { pinnedCaptcha, tabShowsCaptcha } from './hh-captcha';
 import { loadPace, rare, waitMs } from './pace';
-import { maybeTea, noteTeaSession } from './tea';
+import { markTeaWork, maybeTea, noteTeaSession } from './tea';
 import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage, waitBeforeLoad } from './page-log';
 import { isPilotLinkText, readPilotLink } from './pilot-link';
 import { runHhApply } from './hh-apply-cmd';
@@ -70,6 +70,7 @@ export async function runQueue(): Promise<QueueRun> {
   running = true;
   armLiveLog();
   try {
+    markTeaWork(true);
     await browser.storage.local.set({ [BUSY_KEY]: true, [SOON_KEY]: false });
     await browser.runtime.sendMessage({ type: 'queue-busy' }).catch(() => {});
     const run = await drain();
@@ -78,6 +79,7 @@ export async function runQueue(): Promise<QueueRun> {
     return run;
   }
   finally {
+    markTeaWork(false);
     disarmLiveLog();
     running = false;
     noteQueueRunning(false);

@@ -517,6 +517,10 @@ function waitOf(raw: unknown): WaitJob | null {
   if ('label' in raw === false || typeof raw.label !== 'string' || raw.label.length === 0)
     return null;
 
+  // Пауза чая крутится в живом воркере. После рестарта её не поднимаем.
+  if (raw.label === 'чай')
+    return null;
+
   if ('startedAt' in raw === false || typeof raw.startedAt !== 'number')
     return null;
 

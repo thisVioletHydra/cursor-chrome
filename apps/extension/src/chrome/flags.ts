@@ -1,3 +1,4 @@
+import { clearTeaClock, resetTeaClock } from './tea';
 import { browser } from '../browser-host';
 
 export type Flags = {
@@ -27,7 +28,14 @@ export async function getFlags(): Promise<Flags> {
 }
 
 export async function setFlags(patch: Partial<Flags>): Promise<Flags> {
-  const next = { ...await getFlags(), ...patch };
+  const prev = await getFlags();
+  const next = { ...prev, ...patch };
+  if (prev.autoQueue === false && next.autoQueue === true)
+    await resetTeaClock();
+
+  if (prev.autoQueue === true && next.autoQueue === false)
+    await clearTeaClock();
+
   await browser.storage.local.set({ [KEY]: next });
 
   return next;
