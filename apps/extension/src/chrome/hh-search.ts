@@ -4,8 +4,9 @@ import { getWorkerTabId, isHhUrl, requireWorkerTab, waitTab } from './worker-tab
 import { browser } from '../browser-host';
 
 const LOOK = 40;
-const PAGE_CAP = 5;
+const PAGE_CAP = 20;
 let sawCaptcha = false;
+const nextPage = new Map<string, number>();
 const PAGE_MS = 45_000;
 const SEARCH = 'https://hh.ru/search/vacancy';
 const HH_ROOT = 'https://hh.ru/';
@@ -13,9 +14,17 @@ const HH_ROOT = 'https://hh.ru/';
 export type SearchHit = {
   login: boolean;
   captcha: boolean;
-  cards: FoundCard[];
+  saved: number;
   more: boolean;
+  done: boolean;
   reason: string;
+};
+
+export type PageLink = { id: string; url: string };
+
+export type PageMarks = {
+  seen: ReadonlySet<string>;
+  saved: readonly string[];
 };
 
 export type FoundCard = {
@@ -32,9 +41,14 @@ export type FoundCard = {
   query: string;
 };
 
+export function rewindSearch(queries: readonly string[]): void {
+  for (const query of queries)
+    nextPage.delete(query);
+}
+
 export async function collectVacancies(
   queries: string[],
-  knownOnPage: (ids: readonly string[]) => Promise<ReadonlySet<string> | null>,
+  knownOnPage: (ids: readonly string[], links: readonly PageLink[]) => Promise<PageMarks | null>,
 ): Promise<SearchHit> {
   sawCaptcha = false;
   const pinned = await getWorkerTabId();
@@ -50,16 +64,13 @@ export async function collectVacancies(
 
   const here = await browser.tabs.get(tabId).catch(() => null);
   if (here !== null && isLogin(here.url || '', ''))
-    return { login: true, captcha: false, cards: [], more: false, reason: '' };
+    return { login: true, captcha: false, saved: 0, more: false, done: false, reason: '' };
 
-  const cards: FoundCard[] = [];
-  const seen = new Set<string>();
-  const share = Math.max(1, Math.ceil(LOOK / Math.max(queries.length, 1)));
-  let knownHits = 0;
+  let saved = 0;
   let sawCards = false;
   let unread = false;
   let more = false;
-  let toldSeen = false;
+  let done = true;
   let checkFailed = false;
   const login = await whileSearching(async () => {
     let stop = false;
@@ -67,15 +78,19 @@ export async function collectVacancies(
       if (stop)
         break;
 
-      let kept = 0;
-      for (let page = 0; page < PAGE_CAP; page += 1) {
+      const start = nextPage.get(query) ?? 0;
+      let resume = start;
+      let finished = start >= PAGE_CAP;
+      for (let page = start; page < PAGE_CAP; page += 1) {
+        resume = page;
         const pulled = await pull(tabId, searchUrl(query, page));
         if (sawCaptcha)
           return false;
 
         if (pulled === null) {
-          if (sawCards === false && cards.length === 0 && knownHits === 0) {
+          if (sawCards === false && saved === 0) {
             unread = true;
+            done = false;
 
             return false;
           }
@@ -87,69 +102,53 @@ export async function collectVacancies(
           return true;
 
         const batch = cardsOf(serpHtml(pulled.html));
-        if (batch.length === 0)
+        if (batch.length === 0) {
+          finished = true;
           break;
+        }
 
         sawCards = true;
-        const known = await knownOnPage(batch.map(card => card.id));
-        if (known === null) {
+        const fitting = batch.filter(card => fitsTitle(card.title, queries));
+        const marks = await knownOnPage(
+          batch.map(card => card.id),
+          fitting.map(card => ({ id: card.id, url: card.url })),
+        );
+        if (marks === null) {
           checkFailed = true;
+          done = false;
           stop = true;
           break;
         }
 
-        if (toldSeen === false && batch.every(card => known.has(card.id))) {
-          toldSeen = true;
+        if (batch.every(card => marks.seen.has(card.id))) {
           await tellPage(`уже видели, ${batch.length}`);
+          if (page + 1 >= PAGE_CAP)
+            finished = true;
+
+          continue;
         }
 
-        for (const card of batch) {
-          if (fitsTitle(card.title, queries) === false)
-            continue;
+        if (marks.saved.length > 0) {
+          saved += marks.saved.length;
+          await tellPage(`в список ${marks.saved.length}`);
+        }
 
-          if (seen.has(card.id))
-            continue;
-
-          seen.add(card.id);
-          if (known.has(card.id)) {
-            knownHits += 1;
-            continue;
-          }
-
-          if (kept >= share || cards.length >= LOOK) {
-            more = true;
-            continue;
-          }
-
-          card.query = query;
-          cards.push(card);
-          kept += 1;
+        if (saved >= LOOK) {
+          more = true;
+          done = false;
+          resume = page + 1;
+          stop = true;
+          break;
         }
 
         if (page + 1 >= PAGE_CAP)
-          break;
-      }
-    }
-
-    for (const card of cards) {
-      if (sawCaptcha || await tabShowsCaptcha(tabId)) {
-        sawCaptcha = true;
-
-        return false;
+          finished = true;
       }
 
-      await tellPage(`открыл ${cardTitle(card)}`);
-      const pulled = await pull(tabId, card.url);
-      if (sawCaptcha)
-        return false;
-
-      if (pulled !== null && isLogin(pulled.url, pulled.html))
-        return true;
-
-      if (pulled !== null)
-        fillText(card, pulled.html);
-
-      await pause(400, 1200);
+      if (stop === false)
+        nextPage.set(query, finished ? PAGE_CAP : resume);
+      else
+        nextPage.set(query, resume);
     }
 
     return false;
@@ -159,7 +158,7 @@ export async function collectVacancies(
     return miss(true, false, '');
 
   if (login)
-    return { login: true, captcha: false, cards, more: false, reason: '' };
+    return { login: true, captcha: false, saved, more: false, done: false, reason: '' };
 
   if (unread) {
     await tellPage('не прочиталась страница hh');
@@ -167,35 +166,34 @@ export async function collectVacancies(
     return miss(false, false, 'не прочиталась страница hh');
   }
 
-  if (checkFailed && cards.length === 0) {
+  if (checkFailed && saved === 0) {
     await tellPage('сервер не сверил вакансии');
 
     return miss(false, false, 'сервер не сверил вакансии');
   }
 
-  if (cards.length === 0 && knownHits > 0) {
-    if (toldSeen === false)
-      await tellPage(`уже видели, ${knownHits}`);
+  if (saved === 0 && sawCards === false)
+    return { login: false, captcha: false, saved: 0, more: false, done, reason: 'пустая выдача' };
 
-    return miss(false, false, '');
-  }
+  return { login: false, captcha: false, saved, more, done, reason: '' };
+}
 
-  if (cards.length === 0)
-    return miss(false, false, sawCards ? 'нет вакансий по запросу' : 'пустая выдача');
+export async function readVacancyPage(tabId: number, id: string, url: string): Promise<FoundCard | null> {
+  const pulled = await readTab(tabId);
+  if (pulled === null)
+    return null;
 
-  return { login: false, captcha: false, cards, more, reason: '' };
+  if (isLogin(pulled.url, pulled.html))
+    return null;
+
+  if (/\/vacancy\/\d+/i.test(pulled.url) === false)
+    return null;
+
+  return vacancyFromHtml(pulled.html, id, url);
 }
 
 function miss(captcha: boolean, login: boolean, reason: string): SearchHit {
-  return { login, captcha, cards: [], more: false, reason };
-}
-
-function cardTitle(card: FoundCard): string {
-  const title = card.title.trim();
-  if (title.length > 0)
-    return title;
-
-  return card.id;
+  return { login, captcha, saved: 0, more: false, done: false, reason };
 }
 
 function searchUrl(query: string, page: number): string {
@@ -501,6 +499,31 @@ function cardOf(chunk: string): FoundCard | null {
     experience: '',
     query: '',
   };
+}
+
+function vacancyFromHtml(html: string, id: string, url: string): FoundCard | null {
+  const title = textAt(html, 'vacancy-title');
+  if (title.length === 0)
+    return null;
+
+  const company = textAt(html, 'vacancy-company-name');
+  const card: FoundCard = {
+    id,
+    title,
+    company: company.length > 0 ? company : 'без компании',
+    url,
+    text: title,
+    salaryFrom: null,
+    salaryTo: null,
+    currency: '',
+    remote: false,
+    experience: '',
+    query: '',
+  };
+  fillText(card, html);
+  card.remote = /удал[её]н|remote/i.test(card.text);
+
+  return card;
 }
 
 function fillText(card: FoundCard, html: string): void {

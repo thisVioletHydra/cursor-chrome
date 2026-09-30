@@ -33,6 +33,11 @@ export async function openStore(): Promise<void> {
         cap INTEGER NOT NULL,
         sent INTEGER NOT NULL
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS links (
+        id INTEGER PRIMARY KEY,
+        url TEXT NOT NULL,
+        added INTEGER NOT NULL
+      ) STRICT;
     `);
     database = opened;
   }
@@ -109,6 +114,10 @@ function dataDir(): string {
 
 function seenFile(): string {
   return path.join(dataDir(), 'seen.json');
+}
+
+export function hhDatabase(): sqlite.DatabaseSync {
+  return openDatabase();
 }
 
 function openDatabase(): sqlite.DatabaseSync {

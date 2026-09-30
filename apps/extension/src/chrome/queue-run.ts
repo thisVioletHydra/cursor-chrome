@@ -1,6 +1,6 @@
 import type { Hunt, QueueItem } from './admin-api';
 
-import { fetchHunt, fetchQueue, keepWorkHours, postFound, seenAmong } from './admin-api';
+import { dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, postFound, seenAmong } from './admin-api';
 import { getSyncKey, getSyncUrl } from './apply-log';
 import { getFlags, setFlags } from './flags';
 import { pinnedCaptcha, tabShowsCaptcha } from './hh-captcha';
@@ -8,7 +8,7 @@ import { loadPace, rare, waitMs } from './pace';
 import { maybeTea, noteTeaSession } from './tea';
 import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage } from './page-log';
 import { runHhApply } from './hh-apply-cmd';
-import { collectVacancies } from './hh-search';
+import { collectVacancies, readVacancyPage, rewindSearch } from './hh-search';
 import { requireTabId } from './inject';
 import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
@@ -204,6 +204,31 @@ async function drain(): Promise<QueueRun> {
       await noteTeaSession();
     }
 
+    const applied = await applyPending(base, key, run);
+    if (applied.started)
+      started = true;
+
+    if (applied.stop) {
+      run.reason = applied.reason;
+      break;
+    }
+
+    const savedPass = await drainSaved(base, key, run);
+    if (savedPass.started)
+      started = true;
+
+    if (savedPass.stop) {
+      run.reason = savedPass.reason;
+      break;
+    }
+
+    if (savedPass.held === true) {
+      if (await restCycle() === false)
+        break;
+
+      continue;
+    }
+
     const hunt = await fetchHunt(base, key, advance);
     if (hangHalted()) {
       run.reason = 'расширение зависло';
@@ -233,19 +258,21 @@ async function drain(): Promise<QueueRun> {
     if (filled.note.length > 0 && run.lines.includes(filled.note) === false)
       run.lines.push(filled.note);
 
-    const applied = await applyPending(base, key, run);
-    if (applied.started)
-      started = true;
-
-    if (applied.stop) {
-      run.reason = applied.reason;
-      break;
+    if (filled.saved > 0 || filled.more) {
+      advance = false;
+      continue;
     }
 
-    if (filled.more)
-      continue;
+    if (filled.done === false) {
+      advance = false;
+      if (await restCycle() === false)
+        break;
 
-    advance = filled.done;
+      continue;
+    }
+
+    advance = true;
+    rewindSearch(hunt.queries);
     if (await restCycle() === false)
       break;
   }
@@ -265,7 +292,7 @@ async function drain(): Promise<QueueRun> {
   return run;
 }
 
-type ApplyPass = { started: boolean; stop: boolean; reason: string };
+type ApplyPass = { started: boolean; stop: boolean; reason: string; held?: boolean };
 
 async function applyPending(base: string, key: string, run: QueueRun): Promise<ApplyPass> {
   const seen = new Set<string>();
@@ -327,36 +354,154 @@ async function applyPending(base: string, key: string, run: QueueRun): Promise<A
         return { started, stop: true, reason: 'капча, позови человека' };
       }
 
-      run.left -= 1;
-      const status = normStatus(reply.status);
-      const landed = status !== 'sent' || await report(base, key, item, { status: 'sent' });
-      const shown: Status = landed ? status : 'skip';
-      count(run, shown);
-      run.lines.push(`${item.company}: ${landed ? describe(status, reply) : 'мимо, админка не приняла отклик'}`);
-
-      const stop = stopReason(status, reply);
-      if (stop.length > 0)
-        await tellPage(stop);
-      else if (shown === 'sent')
-        await tickPage('отвлёкся', await distractWait());
-      else
-        await tellPage(landed ? describe(status, reply) : 'админка не приняла отклик');
-
-      if (status === 'needsHuman')
-        await report(base, key, item, { status, hints: hintsOf(reply) });
-      else if (status === 'skip')
-        await report(base, key, item, { status: 'failed', reason: reply.reason || '', hints: hintsOf(reply) });
-
-      if (stop.length > 0) {
-        await pauseUntilMorning();
-        await report(base, key, item, { status: 'stop', reason: stop });
-
-        return { started, stop: true, reason: `Стоп до утра: ${stop}` };
-      }
+      const noted = await noteReply(base, key, run, item, reply);
+      if (noted !== null)
+        return { started, stop: true, reason: noted.reason };
     }
   }
 
   return { started, stop: hoursOpen() === false, reason: hoursOpen() ? '' : 'рабочие часы закрыты' };
+}
+
+async function drainSaved(base: string, key: string, run: QueueRun): Promise<ApplyPass> {
+  let started = false;
+
+  while (hoursOpen()) {
+    if (hangHalted())
+      return { started, stop: true, reason: 'расширение зависло' };
+
+    const links = await fetchLinks(base, key);
+    if (links === null)
+      return { started, stop: true, reason: 'админка не отдала очередь' };
+
+    const link = links[0];
+    if (link === undefined)
+      return { started, stop: false, reason: '' };
+
+    const step = await takeLink(base, key, run, link);
+    if (step.started)
+      started = true;
+
+    if (step.stop)
+      return { started, stop: true, reason: step.reason };
+
+    if (step.held === true)
+      return { started, stop: false, reason: '', held: true };
+  }
+
+  return { started, stop: hoursOpen() === false, reason: hoursOpen() ? '' : 'рабочие часы закрыты' };
+}
+
+async function takeLink(base: string, key: string, run: QueueRun, link: { id: string; url: string }): Promise<ApplyPass> {
+  if (await cycleOpen() === false)
+    return { started: false, stop: false, reason: '', held: true };
+
+  await maybeTea();
+  if (hangHalted())
+    return { started: false, stop: true, reason: 'расширение зависло' };
+
+  if (await cycleOpen() === false)
+    return { started: false, stop: false, reason: '', held: true };
+
+  const shown = await showVacancy(link.url);
+  if ('tabId' in shown === false)
+    return stallLink(base, key, shown);
+
+  const card = await readVacancyPage(shown.tabId, link.id, link.url);
+  if (card === null) {
+    await tellPage('вакансия не открылась');
+
+    return { started: false, stop: false, reason: '', held: true };
+  }
+
+  await tellPage(`открыл ${card.title}`);
+  const posted = await sendFound(base, key, [card]);
+  if (holdLink(posted))
+    return { started: false, stop: false, reason: '', held: true };
+
+  const dropped = await dropLinks(base, key, [link.id]);
+  if (dropped === false)
+    return { started: false, stop: false, reason: '', held: true };
+
+  if (posted.added === 0)
+    return { started: false, stop: false, reason: '' };
+
+  const items = await fetchQueue(base, key);
+  const item = items?.find(row => row.id === link.id);
+  if (item === undefined)
+    return { started: false, stop: false, reason: '' };
+
+  run.left += 1;
+  const reply = await applyOne(item, true);
+  if (captchaReply(reply)) {
+    run.left -= 1;
+    await holdCaptcha(false);
+
+    return { started: true, stop: true, reason: 'капча, позови человека' };
+  }
+
+  const noted = await noteReply(base, key, run, item, reply);
+  if (noted !== null)
+    return { started: true, stop: true, reason: noted.reason };
+
+  return { started: true, stop: false, reason: '' };
+}
+
+async function stallLink(base: string, key: string, reply: ApplyReply): Promise<ApplyPass> {
+  if ((reply.reason || '') === 'капча') {
+    await holdCaptcha(false);
+
+    return { started: false, stop: true, reason: 'капча, позови человека' };
+  }
+
+  if (LOGIN.test(reply.reason || '')) {
+    await pauseUntilMorning();
+    await tellStop(base, key, 'hh.ru просит войти (login)');
+
+    return { started: false, stop: true, reason: 'hh.ru просит войти (login)' };
+  }
+
+  return { started: false, stop: false, reason: '', held: true };
+}
+
+function holdLink(posted: { ok: boolean; added: number; reason: string }): boolean {
+  if (posted.ok === false)
+    return true;
+
+  if (posted.added > 0)
+    return false;
+
+  return posted.reason === 'очередь полная' || posted.reason === 'день закрыт';
+}
+
+async function noteReply(base: string, key: string, run: QueueRun, item: QueueItem, reply: ApplyReply): Promise<ApplyPass | null> {
+  run.left -= 1;
+  const status = normStatus(reply.status);
+  const landed = status !== 'sent' || await report(base, key, item, { status: 'sent' });
+  const shown: Status = landed ? status : 'skip';
+  count(run, shown);
+  run.lines.push(`${item.company}: ${landed ? describe(status, reply) : 'мимо, админка не приняла отклик'}`);
+
+  const stop = stopReason(status, reply);
+  if (stop.length > 0)
+    await tellPage(stop);
+  else if (shown === 'sent')
+    await tickPage('отвлёкся', await distractWait());
+  else
+    await tellPage(landed ? describe(status, reply) : 'админка не приняла отклик');
+
+  if (status === 'needsHuman')
+    await report(base, key, item, { status, hints: hintsOf(reply) });
+  else if (status === 'skip')
+    await report(base, key, item, { status: 'failed', reason: reply.reason || '', hints: hintsOf(reply) });
+
+  if (stop.length === 0)
+    return null;
+
+  await pauseUntilMorning();
+  await report(base, key, item, { status: 'stop', reason: stop });
+
+  return { started: true, stop: true, reason: `Стоп до утра: ${stop}` };
 }
 
 async function cycleOpen(): Promise<boolean> {
@@ -372,19 +517,19 @@ function blank(reason: string): QueueRun {
   return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason, lines: [] };
 }
 
-async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: string } | { note: string; more: boolean; done: boolean }> {
+async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: string } | { note: string; saved: number; more: boolean; done: boolean }> {
   if (hunt.want === false)
-    return { note: 'сервер не просит поиск', more: false, done: false };
+    return { note: 'сервер не просит поиск', saved: 0, more: false, done: false };
 
   if (hunt.queries.length === 0)
-    return { note: 'сервер не прислал запрос', more: false, done: false };
+    return { note: 'сервер не прислал запрос', saved: 0, more: false, done: false };
 
-  const found = await collectVacancies(hunt.queries, async (ids) => {
-    const known = await seenAmong(base, key, ids);
-    if (known === null)
+  const found = await collectVacancies(hunt.queries, async (ids, links) => {
+    const marks = await seenAmong(base, key, ids, links);
+    if (marks === null)
       return null;
 
-    return new Set(known);
+    return { seen: new Set(marks.seen), saved: marks.saved };
   });
   if (hangHalted())
     return { stop: 'расширение зависло' };
@@ -402,29 +547,7 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
     return { stop: 'hh.ru просит войти (login)' };
   }
 
-  if (found.cards.length === 0) {
-    const walked = found.reason.length === 0
-      || found.reason === 'нет вакансий по запросу'
-      || found.reason === 'пустая выдача';
-
-    return { note: found.reason, more: false, done: walked };
-  }
-
-  await browser.storage.local.remove(STOP_NOTE_KEY);
-  const posted = await sendFound(base, key, found.cards);
-  if (hangHalted())
-    return { stop: 'расширение зависло' };
-
-  if (posted.ok === false || posted.added === 0) {
-    const note = posted.reason.length > 0 ? posted.reason : 'сервер не принял вакансии';
-    await tellPage(note);
-
-    return { note, more: false, done: false };
-  }
-
-  await tellPage(`в очереди ${posted.added}`);
-
-  return { note: '', more: found.more, done: found.more === false };
+  return { note: found.reason, saved: found.saved, more: found.more, done: found.done };
 }
 
 const DOWN = 'все модели недоступны';
@@ -514,7 +637,7 @@ function runOf(raw: unknown): QueueRun | null {
   return { ok, sent, human, skipped, left, reason, lines };
 }
 
-async function applyOne(item: QueueItem): Promise<ApplyReply> {
+async function showVacancy(url: string): Promise<{ tabId: number } | ApplyReply> {
   if (hangHalted())
     return { status: 'skip', reason: 'расширение зависло' };
 
@@ -523,7 +646,7 @@ async function applyOne(item: QueueItem): Promise<ApplyReply> {
     return { status: 'skip', reason: 'капча' };
 
   const tab = await requireWorkerTab().catch(async () => {
-    await adoptHhWorker(item.url);
+    await adoptHhWorker(url);
 
     return requireWorkerTab();
   });
@@ -535,17 +658,47 @@ async function applyOne(item: QueueItem): Promise<ApplyReply> {
     return { status: 'skip', reason: 'капча' };
 
   const loaded = waitTab(tabId, 15_000);
-  await browser.tabs.update(tabId, { url: item.url, active: false });
+  await browser.tabs.update(tabId, { url, active: false });
   await loaded;
   const here = await browser.tabs.get(tabId).catch(() => null);
   const opened = here?.url || '';
-  if (/\/vacancy\/\d+|vacancy_response/i.test(opened) === false && await tabShowsCaptcha(tabId))
+  if (onVacancy(opened) === false && await tabShowsCaptcha(tabId))
     return { status: 'skip', reason: 'капча' };
 
-  if (/\/vacancy\/\d+|vacancy_response/i.test(opened) === false)
+  if (onVacancy(opened) === false)
     return { status: 'skip', reason: 'вакансия не открылась' };
 
-  await tellPage(`открыл ${item.title.trim() || item.id}`);
+  if (await loginPage(tabId))
+    return { status: 'skip', reason: 'hh.ru просит войти (login)' };
+
+  return { tabId };
+}
+
+function onVacancy(url: string): boolean {
+  return /\/vacancy\/\d+|vacancy_response/i.test(url);
+}
+
+async function applyOne(item: QueueItem, already = false): Promise<ApplyReply> {
+  if (hangHalted())
+    return { status: 'skip', reason: 'расширение зависло' };
+
+  let tabId: number;
+  if (already) {
+    const tab = await requireWorkerTab().catch(() => null);
+    if (tab === null)
+      return { status: 'skip', reason: 'вакансия не открылась' };
+
+    tabId = requireTabId(tab);
+  }
+  else {
+    const shown = await showVacancy(item.url);
+    if ('tabId' in shown === false)
+      return shown;
+
+    tabId = shown.tabId;
+    await tellPage(`открыл ${item.title.trim() || item.id}`);
+  }
+
   if (await tabShowsCaptcha(tabId))
     return { status: 'skip', reason: 'капча' };
 

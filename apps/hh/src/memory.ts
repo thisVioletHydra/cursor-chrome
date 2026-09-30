@@ -1,5 +1,8 @@
+import { deleteLinks, insertLinks, listLinks, lookupHeld } from './links-db.ts';
 import { SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from './limits.ts';
 import { bumpDay, countSeen, insertSeen, lookupSeen, openStore, readDay, storePath, writeDay } from './seen-db.ts';
+
+export type { HeldLink } from './links-db.ts';
 
 const SWAY = 0.16;
 const DAY_LOW = Math.floor(SEND_PER_DAY * (1 - SWAY));
@@ -40,6 +43,24 @@ export function knownAmong(ids: readonly string[]): Promise<string[]> {
 
 export function seenCount(): Promise<number> {
   return turn(async () => countSeen());
+}
+
+export function heldAmong(ids: readonly string[]): Promise<string[]> {
+  return turn(async () => lookupHeld(ids));
+}
+
+export function keepLinks(rows: readonly { id: string; url: string }[]): Promise<string[]> {
+  return turn(async () => insertLinks(rows, Date.now()));
+}
+
+export function readLinks(limit: number): Promise<{ id: string; url: string }[]> {
+  return turn(async () => listLinks(limit));
+}
+
+export function forgetLinks(ids: readonly string[]): Promise<void> {
+  return turn(async () => {
+    deleteLinks(ids);
+  });
 }
 
 export function moscowHour(now = new Date()): number {

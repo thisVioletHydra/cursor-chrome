@@ -5,6 +5,10 @@ import { rememberPace } from './pace';
 
 export type QueueItem = { id: string; company: string; title: string; url: string };
 
+export type SavedLink = { id: string; url: string };
+
+export type PageMarks = { seen: string[]; saved: string[] };
+
 export type Hunt = { items: QueueItem[]; queries: string[]; want: boolean };
 
 export { keepWorkHours } from './hours-flag';
@@ -59,29 +63,60 @@ export async function postFound(base: string, key: string, cards: unknown[]): Pr
   }
 }
 
-export async function seenAmong(base: string, key: string, ids: readonly string[]): Promise<string[] | null> {
+export async function seenAmong(
+  base: string,
+  key: string,
+  ids: readonly string[],
+  links: readonly SavedLink[],
+): Promise<PageMarks | null> {
   if (ids.length === 0)
-    return [];
+    return { seen: [], saved: [] };
 
   try {
     const res = await fetch(`${base}/api/queue`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-      body: JSON.stringify({ ids }),
+      body: JSON.stringify({ ids, links }),
     });
     if (res.ok === false)
       return null;
 
-    const body = await res.json() as { seen?: unknown };
+    const body = await res.json() as { seen?: unknown; saved?: unknown };
 
-    return idsOf(body.seen);
+    return { seen: idsOf(body.seen), saved: idsOf(body.saved) };
   }
   catch {
     return null;
   }
 }
 
-async function getQueue(base: string, key: string, advance = false): Promise<{ items?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; hours?: unknown } | null> {
+export async function fetchLinks(base: string, key: string): Promise<SavedLink[] | null> {
+  const body = await getQueue(base, key);
+  if (body === null)
+    return null;
+
+  return linksOf(body.links);
+}
+
+export async function dropLinks(base: string, key: string, ids: readonly string[]): Promise<boolean> {
+  if (ids.length === 0)
+    return true;
+
+  try {
+    const res = await fetch(`${base}/api/queue`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ drop: ids }),
+    });
+
+    return res.ok;
+  }
+  catch {
+    return false;
+  }
+}
+
+async function getQueue(base: string, key: string, advance = false): Promise<{ items?: unknown; links?: unknown; letter?: unknown; queries?: unknown; want?: unknown; imitation?: unknown; hours?: unknown } | null> {
   const stamp = pilotStamp();
   try {
     const path = advance ? '/api/queue?cycle=1' : '/api/queue';
@@ -141,6 +176,34 @@ export async function postResume(base: string, key: string, id: string, text: st
   catch {
     return { ok: false, reason: 'сервер не ответил' };
   }
+}
+
+function linksOf(value: unknown): SavedLink[] {
+  if (Array.isArray(value) === false)
+    return [];
+
+  const links: SavedLink[] = [];
+  for (const item of value) {
+    const link = savedLink(item);
+    if (link === null)
+      continue;
+
+    links.push(link);
+  }
+
+  return links;
+}
+
+function savedLink(value: unknown): SavedLink | null {
+  if (typeof value !== 'object' || value === null)
+    return null;
+
+  const id = 'id' in value && typeof value.id === 'string' ? value.id : '';
+  const url = 'url' in value && typeof value.url === 'string' ? value.url : '';
+  if (/^\d+$/.test(id) === false || url.length === 0)
+    return null;
+
+  return { id, url };
 }
 
 function idsOf(value: unknown): string[] {
