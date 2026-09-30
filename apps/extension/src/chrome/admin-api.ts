@@ -249,11 +249,13 @@ function linksOf(value: unknown): SavedLink[] {
   return links;
 }
 
+const SEARCH_PAGE_MAX = 1000;
+
 function pageNumber(raw: unknown): number | null {
   if (typeof raw !== 'number' || Number.isInteger(raw) === false)
     return null;
 
-  if (raw < 0 || raw > 20)
+  if (raw < 0 || raw > SEARCH_PAGE_MAX)
     return null;
 
   return raw;

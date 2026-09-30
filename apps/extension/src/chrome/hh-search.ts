@@ -3,9 +3,10 @@ import { hangHalted, tellPage, waitBeforeLoad, whileSearching } from './page-log
 import { getWorkerTabId, isHhUrl, requireWorkerTab, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
 
-const PAGE_CAP = 20;
+const FIRST_PAGE = 0;
+const endedQuery = new Set<string>();
+let saidEnded = false;
 let sawCaptcha = false;
-let peekAfterCap = false;
 const PAGE_MS = 45_000;
 const SEARCH = 'https://hh.ru/search/vacancy';
 const HH_ROOT = 'https://hh.ru/';
@@ -53,14 +54,6 @@ export async function collectVacancies(
   if (pinned !== null && await tabShowsCaptcha(pinned))
     return miss(true, false, '');
 
-  const capped = pagesCapped(queries, pages);
-  if (capped && peekAfterCap === false) {
-    peekAfterCap = true;
-    await tellPage('страницы кончились');
-
-    return { login: false, captcha: false, saved: 0, more: false, done: false, reason: 'страницы кончились' };
-  }
-
   const tabId = await searchTab();
   if (sawCaptcha)
     return miss(true, false, '');
@@ -71,8 +64,6 @@ export async function collectVacancies(
     return miss(false, false, 'нет запиненной вкладки hh');
   }
 
-  const peekOnce = capped && peekAfterCap;
-  peekAfterCap = false;
   const here = await browser.tabs.get(tabId).catch(() => null);
   if (here !== null && isLogin(here.url || '', ''))
     return { login: true, captcha: false, saved: 0, more: false, done: false, reason: '' };
@@ -82,7 +73,6 @@ export async function collectVacancies(
   let unread = false;
   let done = true;
   let checkFailed = false;
-  let opened = false;
   const login = await whileSearching(async () => {
     async function keep(query: string, next: number): Promise<boolean> {
       if (await rememberPage({ query, page: next }))
@@ -94,101 +84,101 @@ export async function collectVacancies(
       return false;
     }
 
-    let forced = false;
-    for (const query of queries) {
-      let page = storedPage(pages[query]);
-      if (page >= PAGE_CAP) {
-        if (peekOnce === false || forced)
-          continue;
+    async function harvest(query: string, page: number, hold: number | null, noteSeen: boolean): Promise<PageHit> {
+      const pulled = await pull(tabId, searchUrl(query, page));
+      if (sawCaptcha)
+        return 'fail';
 
-        page = 0;
-        forced = true;
+      if (pulled === null) {
+        done = false;
+        if (hangHalted())
+          return 'fail';
+
+        if (sawCards === false && saved === 0)
+          unread = true;
+
+        return 'fail';
       }
 
-      opened = true;
-      while (page < PAGE_CAP) {
-        const pulled = await pull(tabId, searchUrl(query, page));
-        if (sawCaptcha)
-          return false;
+      if (isLogin(pulled.url, pulled.html))
+        return 'login';
 
-        if (pulled === null) {
-          done = false;
-          if (hangHalted())
-            return false;
+      const batch = cardsOf(serpHtml(pulled.html));
+      if (batch.length === 0 || landedEarlier(pulled.url, page))
+        return 'empty';
 
-          if (sawCards === false && saved === 0)
-            unread = true;
+      sawCards = true;
+      const more = pulled.html.includes('data-qa="pager-next"');
+      const fitting = batch.filter(card => fitsTitle(card.title, queries));
+      const marks = await knownOnPage(
+        batch.map(card => card.id),
+        fitting.map(card => ({ id: card.id, url: card.url, title: card.title })),
+        { query, page: heldPage(hold, page, more) },
+      );
+      if (marks === null) {
+        checkFailed = true;
+        done = false;
 
-          return false;
-        }
+        return 'fail';
+      }
 
-        if (isLogin(pulled.url, pulled.html))
+      if (noteSeen && batch.every(card => marks.seen.has(card.id)))
+        await tellPage(`уже видели, ${batch.length}`);
+
+      if (marks.saved.length > 0) {
+        saved += marks.saved.length;
+        done = false;
+        await tellPage(`в список ${marks.saved.length}`);
+        if (hold === null && more === false)
+          await noteEnded(query);
+
+        return 'saved';
+      }
+
+      if (more)
+        return 'more';
+
+      return 'end';
+    }
+
+    for (const query of queries) {
+      const deep = storedPage(pages[query]);
+      if (deep === FIRST_PAGE && endedQuery.has(query) === false)
+        continue;
+
+      const hit = await harvest(query, FIRST_PAGE, deep, false);
+      if (hit === 'login')
+        return true;
+
+      if (hit === 'fail' || hit === 'saved')
+        return false;
+    }
+
+    for (const query of queries) {
+      if (endedQuery.has(query))
+        continue;
+
+      let page = storedPage(pages[query]);
+      while (true) {
+        const hit = await harvest(query, page, null, true);
+        if (hit === 'login')
           return true;
 
-        const batch = cardsOf(serpHtml(pulled.html));
-        if (batch.length === 0) {
-          if (forced)
-            return false;
+        if (hit === 'fail' || hit === 'saved')
+          return false;
 
-          const next = pulled.html.includes('data-qa="pager-next"') && page + 1 < PAGE_CAP ? page + 1 : PAGE_CAP;
-          if (await keep(query, next) === false)
-            return false;
-
-          if (next >= PAGE_CAP)
-            break;
-
-          page = next;
+        if (hit === 'more') {
+          page += 1;
           continue;
         }
 
-        if (landedEarlier(pulled.url, page)) {
-          if (forced)
-            return false;
-
-          const next = page + 1 < PAGE_CAP ? page + 1 : PAGE_CAP;
-          if (await keep(query, next) === false)
-            return false;
-
-          if (next >= PAGE_CAP)
-            break;
-
-          page = next;
-          continue;
-        }
-
-        sawCards = true;
-        const next = page + 1 >= PAGE_CAP ? PAGE_CAP : page + 1;
-        const fitting = batch.filter(card => fitsTitle(card.title, queries));
-        const marks = await knownOnPage(
-          batch.map(card => card.id),
-          fitting.map(card => ({ id: card.id, url: card.url, title: card.title })),
-          { query, page: forced ? PAGE_CAP : next },
-        );
-        if (marks === null) {
-          checkFailed = true;
-          done = false;
-
+        if (hit === 'empty' && await keep(query, page) === false)
           return false;
-        }
 
-        page = next;
-        if (batch.every(card => marks.seen.has(card.id)))
-          await tellPage(`уже видели, ${batch.length}`);
+        await noteEnded(query);
 
-        if (marks.saved.length > 0) {
-          saved += marks.saved.length;
-          done = false;
-          await tellPage(`в список ${marks.saved.length}`);
-
-          return false;
-        }
-
-        if (forced)
-          return false;
+        break;
       }
-
-      if (forced)
-        return false;
     }
 
     return false;
@@ -212,19 +202,6 @@ export async function collectVacancies(
     return miss(false, false, 'сервер не сверил вакансии');
   }
 
-  if (saved === 0 && sawCards === false) {
-    if (opened === false) {
-      peekAfterCap = true;
-      await tellPage('страницы кончились');
-
-      return { login: false, captcha: false, saved: 0, more: false, done: false, reason: 'страницы кончились' };
-    }
-
-    await tellPage('пустая выдача');
-
-    return { login: false, captcha: false, saved: 0, more: false, done, reason: 'пустая выдача' };
-  }
-
   return { login: false, captcha: false, saved, more: false, done, reason: '' };
 }
 
@@ -242,16 +219,30 @@ export async function readVacancyPage(tabId: number, id: string, url: string): P
   return vacancyFromHtml(pulled.html, id, url);
 }
 
-function pagesCapped(queries: string[], pages: Readonly<Record<string, number>>): boolean {
-  return queries.length > 0 && queries.every(query => storedPage(pages[query]) >= PAGE_CAP);
+type PageHit = 'login' | 'fail' | 'saved' | 'empty' | 'end' | 'more';
+
+function heldPage(hold: number | null, page: number, more: boolean): number {
+  if (hold !== null)
+    return hold;
+
+  if (more)
+    return page + 1;
+
+  return page;
+}
+
+async function noteEnded(query: string): Promise<void> {
+  endedQuery.add(query);
+  if (saidEnded)
+    return;
+
+  saidEnded = true;
+  await tellPage('страницы кончились');
 }
 
 function storedPage(page: number | undefined): number {
   if (page === undefined || Number.isInteger(page) === false || page < 0)
     return 0;
-
-  if (page > PAGE_CAP)
-    return PAGE_CAP;
 
   return page;
 }

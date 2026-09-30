@@ -5,7 +5,7 @@ export type { Answer, Question } from './answer.ts';
 export { corpusOn, corpusState, distillCorpus, keepVacancy } from './corpus.ts';
 export { COVER_LETTER, FACTS } from './copy.ts';
 export { LOOK_PER_START, MAX_ATTEMPTS, QUEUE_TARGET, SCAN_EVERY_MS, SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from './limits.ts';
-export { dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, markSent, moscowDay, moscowHour, readLinks, readMemory, remember, rememberSearchPage, roomToday, searchPages, seenCount, storePath, workHours } from './memory.ts';
+export { dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, markSent, moscowDay, moscowHour, readLinks, readMemory, remember, rememberSearchPage, roomToday, SEARCH_PAGE_MAX, searchPages, seenCount, storePath, workHours } from './memory.ts';
 export type { HeldLink } from './memory.ts';
 export type { Memory } from './memory.ts';
 export { asProvider, askChain, chainFromEnv, modelsDown, parseChain, pingChain, PRESETS, presetOf, probeProvider, providerName } from './model.ts';

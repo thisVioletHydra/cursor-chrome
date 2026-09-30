@@ -95,7 +95,7 @@ export function insertSeen(ids: readonly string[], at: number): Promise<void> {
   return insertNums(uniqueNums(ids), at);
 }
 
-const SEARCH_PAGE_CAP = 20;
+export const SEARCH_PAGE_MAX = 1000;
 
 export function readSearchPages(queries: readonly string[]): Record<string, number> {
   const select = openDatabase().prepare('SELECT page FROM search_page WHERE query = ?');
@@ -168,7 +168,7 @@ function clampPage(value: unknown): number | null {
   if (typeof page !== 'number' || Number.isInteger(page) === false)
     return null;
 
-  if (page < 0 || page > SEARCH_PAGE_CAP)
+  if (page < 0 || page > SEARCH_PAGE_MAX)
     return null;
 
   return page;

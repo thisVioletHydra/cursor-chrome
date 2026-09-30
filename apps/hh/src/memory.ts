@@ -1,6 +1,6 @@
 import { deleteLinks, insertLinks, listLinks, lookupHeld } from './links-db.ts';
 import { SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from './limits.ts';
-import { bumpDay, clearSearchPages, countSeen, insertSeen, lookupSeen, openStore, readDay, readSearchPages, storePath, writeDay, writeSearchPage } from './seen-db.ts';
+import { bumpDay, clearSearchPages, countSeen, insertSeen, lookupSeen, openStore, readDay, readSearchPages, SEARCH_PAGE_MAX, storePath, writeDay, writeSearchPage } from './seen-db.ts';
 
 export type { HeldLink } from './links-db.ts';
 
@@ -14,7 +14,7 @@ export type Memory = {
   cap: number;
 };
 
-export { storePath };
+export { SEARCH_PAGE_MAX, storePath };
 
 export function moscowDay(now = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', {
