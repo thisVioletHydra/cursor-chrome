@@ -8,6 +8,7 @@ import { loadPace, rare, waitMs } from './pace';
 import { markTeaWork, maybeTea, noteTeaSession } from './tea';
 import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage, waitBeforeLoad } from './page-log';
 import { isPilotLinkText, readPilotLink } from './pilot-link';
+import { markPilotStop } from './pilot-stop';
 import { runHhApply } from './hh-apply-cmd';
 import { collectVacancies, readVacancyPage } from './hh-search';
 import { requireTabId } from './inject';
@@ -882,6 +883,7 @@ export async function guardCaptcha(again = false): Promise<boolean> {
   }
 
   if (seen === null && await captchaHolding()) {
+    await markPilotStop();
     await pauseUntilMorning();
     await setFlags({ autoQueue: false });
 
@@ -909,6 +911,7 @@ async function clearCaptchaHold(): Promise<void> {
 }
 
 async function holdCaptcha(again: boolean): Promise<void> {
+  await markPilotStop();
   await pauseUntilMorning();
   await setFlags({ autoQueue: false });
   await browser.storage.local.set({ [CAPTCHA_HOLD]: true });

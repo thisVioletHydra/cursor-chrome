@@ -4,7 +4,9 @@ import { getFlags, setFlags } from './flags';
 import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from './human-review';
 import { syncNegotiations } from './negotiations';
 import { bindPilotSettle, clearStuckHang, forgetStuckHang, liveLines, stallStep, stalling, tellPage } from './page-log';
+import { reconcilePilot } from './pilot-heal';
 import { clearPilotLink, clearPilotPending, notePilotLink, setPilotPending } from './pilot-link';
+import { markPilotStop } from './pilot-stop';
 import { pushPilot, retryPilotPush } from './pilot-switch';
 import { forgetHangReport, guardCaptcha, queueBusy, readPausedUntil, readQueueReport, runQueue } from './queue-run';
 import { pullSavedResume } from './resume-pull';
@@ -206,7 +208,7 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
     return true;
   },
   'get-flags': (_message, reply) => {
-    replyJob(reply, getFlags());
+    replyJob(reply, reconcilePilot());
 
     return true;
   },
@@ -266,6 +268,7 @@ async function enablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; s
 
 async function disablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean }): Promise<unknown> {
   await setPilotPending('off');
+  await markPilotStop();
   const next = await setFlags(patch);
   await closePinnedHh();
   await clearPilotLink();

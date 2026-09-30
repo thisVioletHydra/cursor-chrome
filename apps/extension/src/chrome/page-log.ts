@@ -2,7 +2,9 @@ import { getSyncKey, getSyncUrl } from './apply-log';
 import { getFlags, setFlags } from './flags';
 import { noteHours } from './hours-flag';
 import { loadPace, waitMs } from './pace';
+import { reconcilePilot } from './pilot-heal';
 import { clearPilotLink, clearPilotPending, noteGateway, notePilotAnswer, noteServerSilent, readPilotPending, remoteStopCounts } from './pilot-link';
+import { markPilotStop } from './pilot-stop';
 import { closePinnedHh } from './worker-tab';
 import { browser } from '../browser-host';
 
@@ -130,10 +132,11 @@ export async function haltHang(): Promise<void> {
     clearTimeout(stall);
 
   stall = undefined;
+  await markPilotStop();
   await setFlags({ autoQueue: false });
+  await closePinnedHh();
   await clearPilotPending();
   await clearPilotLink();
-  await closePinnedHh();
   if (onHangClear !== undefined)
     await onHangClear();
 }
@@ -422,7 +425,16 @@ export async function pulseNow(): Promise<void> {
   if (onPilotSettle !== undefined)
     await onPilotSettle();
 
-  const flags = await getFlags();
+  if (halted)
+    await closePinnedHh();
+
+  let flags = await getFlags();
+  if (halted === false && flags.autoQueue !== true) {
+    flags = await reconcilePilot();
+    if (flags.autoQueue === true && onPilotSettle !== undefined)
+      await onPilotSettle();
+  }
+
   if (halted || flags.autoQueue !== true) {
     await listenPilot();
 
@@ -532,17 +544,24 @@ function waitOf(raw: unknown): WaitJob | null {
   return { label: raw.label, startedAt: raw.startedAt, until: raw.until, resume };
 }
 
-browser.runtime.onConnect.addListener((port) => {
-  if (port.name !== 'keepalive')
-    return;
+function inWorker(): boolean {
+  return typeof ServiceWorkerGlobalScope !== 'undefined' && globalThis instanceof ServiceWorkerGlobalScope;
+}
 
-  port.onMessage.addListener(() => {
-    void pumpWait().then(() => {
-      if (currentWait === null && queueRunning === false && resuming === false)
-        return holdQueueWait();
+// Попап собирался вместе с журналом и сам гасил бота, вкладка при этом оставалась.
+if (inWorker()) {
+  browser.runtime.onConnect.addListener((port) => {
+    if (port.name !== 'keepalive')
+      return;
+
+    port.onMessage.addListener(() => {
+      void pumpWait().then(() => {
+        if (currentWait === null && queueRunning === false && resuming === false)
+          return holdQueueWait();
+      });
     });
   });
-});
+}
 
 async function postPulse(line: string): Promise<void> {
   if (halted || line.trim().length === 0)
@@ -695,6 +714,8 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-setInterval(() => {
-  void pulseNow();
-}, 60_000);
+if (inWorker()) {
+  setInterval(() => {
+    void pulseNow();
+  }, 60_000);
+}

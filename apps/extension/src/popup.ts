@@ -1,4 +1,5 @@
-import { PILOT_LINK_KEY, readPilotLink, SERVER_SILENT } from './chrome/pilot-link';
+import { PILOT_LINK_KEY, readPilotLink, SERVER_SILENT, SERVER_WAIT } from './chrome/pilot-link';
+import { WORKER_KEY } from './chrome/worker-tab';
 import { labeledApplies, paintApplyGroup, readWaitingKey } from './hh/history-list';
 import { openWorkerUrl, pinHere, refreshWorkerPanel } from './popup-pin';
 import { browser } from './browser-host';
@@ -163,6 +164,9 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (linkChange !== undefined && autoOn)
     paintPilotLink(linkChange.newValue);
 
+  if (changes[WORKER_KEY] !== undefined)
+    void refreshWorkerPanel();
+
   if (changes.flags === undefined)
     return;
 
@@ -183,7 +187,7 @@ browser.storage.onChanged.addListener((changes, area) => {
     return;
 
   if (on === false)
-    paintStatus('Выключено');
+    paintOff();
   else
     void paintBootStatus();
 });
@@ -571,6 +575,21 @@ function paintStatus(text: string, kind: 'ok' | 'fail' | 'plain' = 'plain'): voi
   pillEl.textContent = text;
 }
 
+function paintOff(): void {
+  paintStatus('Выключено');
+  void refreshWorkerPanel();
+}
+
+function pilotLine(text: string): string {
+  if (text === SERVER_WAIT || text === SERVER_SILENT)
+    return text;
+
+  if (text.length > 0)
+    return text;
+
+  return SERVER_SILENT;
+}
+
 function isHang(reason: string): boolean {
   return reason === 'расширение зависло' || reason === 'я завис' || reason === 'сервер молчит' || reason.startsWith('замолчало');
 }
@@ -643,7 +662,7 @@ async function syncAuto(): Promise<void> {
 async function paintHang(message: unknown): Promise<void> {
   await syncAuto();
   if (autoOn === false) {
-    paintStatus('Выключено');
+    paintOff();
 
     return;
   }
@@ -666,7 +685,7 @@ async function paintQueue(run: QueueRun | unknown): Promise<void> {
   if (isHang(reason)) {
     await syncAuto();
     if (autoOn === false) {
-      paintStatus('Выключено');
+      paintOff();
 
       return;
     }
@@ -761,7 +780,7 @@ async function reviveHh(kick: boolean): Promise<void> {
 async function paintBootStatus(): Promise<void> {
   await syncAuto();
   if (autoOn === false) {
-    paintStatus('Выключено');
+    paintOff();
     await browser.runtime.sendMessage({ type: 'forget-hang' }).catch(() => {});
 
     return;
@@ -769,7 +788,7 @@ async function paintBootStatus(): Promise<void> {
 
   const link = await readPilotLink();
   if (link.length > 0) {
-    paintStatus(link, 'fail');
+    paintStatus(pilotLine(link), 'fail');
 
     return;
   }
@@ -875,7 +894,7 @@ async function togglePower(): Promise<void> {
     const result = await browser.runtime.sendMessage({ type: 'set-flags', autoQueue: next }) as { error?: string; autoQueue?: boolean };
     if (typeof result?.error === 'string' && result.error.length > 0 && result.autoQueue === true) {
       autoOn = true;
-      paintStatus(result.error, 'fail');
+      paintStatus(pilotLine(result.error), 'fail');
 
       return;
     }
@@ -883,7 +902,7 @@ async function togglePower(): Promise<void> {
     if (typeof result?.error === 'string' && result.error.length > 0) {
       powerFail = result.error;
       autoOn = false;
-      paintStatus('Выключено');
+      paintOff();
 
       return;
     }
@@ -892,7 +911,7 @@ async function togglePower(): Promise<void> {
       await syncAuto();
       const link = await readPilotLink();
       if (autoOn && link.length > 0) {
-        paintStatus(link, 'fail');
+        paintStatus(pilotLine(link), 'fail');
 
         return;
       }
@@ -907,7 +926,7 @@ async function togglePower(): Promise<void> {
     autoOn = result.autoQueue;
     paintPower();
     if (autoOn === false) {
-      paintStatus('Выключено');
+      paintOff();
 
       return;
     }
@@ -929,7 +948,7 @@ async function togglePower(): Promise<void> {
     await syncAuto();
     const link = await readPilotLink();
     if (next && autoOn) {
-      paintStatus(link.length > 0 ? link : SERVER_SILENT, 'fail');
+      paintStatus(pilotLine(link), 'fail');
 
       return;
     }

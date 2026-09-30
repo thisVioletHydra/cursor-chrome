@@ -1,4 +1,6 @@
-import { clearTeaClock, resetTeaClock } from './tea';
+import { clearPilotStop, pilotStopped } from './pilot-stop';
+import { clearTeaClock, resetTeaClock } from './tea-clock';
+import { closePinnedHh } from './worker-tab';
 import { browser } from '../browser-host';
 
 export type Flags = {
@@ -30,13 +32,28 @@ export async function getFlags(): Promise<Flags> {
 export async function setFlags(patch: Partial<Flags>): Promise<Flags> {
   const prev = await getFlags();
   const next = { ...prev, ...patch };
-  if (prev.autoQueue === false && next.autoQueue === true)
+  const turningOn = prev.autoQueue === false && next.autoQueue === true;
+  const turningOff = prev.autoQueue === true && next.autoQueue === false;
+  if (turningOn)
     await resetTeaClock();
 
-  if (prev.autoQueue === true && next.autoQueue === false)
+  if (turningOff)
     await clearTeaClock();
 
-  await browser.storage.local.set({ [KEY]: next });
+  const live = await getFlags();
+  if (turningOn && live.autoQueue === false && await pilotStopped())
+    return live;
 
-  return next;
+  if ((turningOn && live.autoQueue === true) || (turningOff && live.autoQueue === false))
+    return live;
+
+  const stored = { ...live, ...patch };
+  if (stored.autoQueue === true && live.autoQueue === false)
+    await clearPilotStop();
+
+  await browser.storage.local.set({ [KEY]: stored });
+  if (live.autoQueue === true && stored.autoQueue === false)
+    await closePinnedHh();
+
+  return stored;
 }

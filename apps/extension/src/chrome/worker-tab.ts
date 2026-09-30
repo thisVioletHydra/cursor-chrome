@@ -2,7 +2,7 @@ import { getFlags } from './flags';
 import { restoreFocus, snapshotFocus, withStayPut } from './focus-lock';
 import { browser } from '../browser-host';
 
-const WORKER_KEY = 'workerTabId';
+export const WORKER_KEY = 'workerTabId';
 const SEARCH = 'https://hh.ru/search/vacancy';
 const USER_PAGE = /\/resume(?:_converter|_print)?(?:\/|$)|\/chat(?:\/|$)/i;
 
@@ -110,16 +110,33 @@ export async function pinWorker(tabId: number): Promise<WorkerCheck> {
 
 export async function closePinnedHh(): Promise<void> {
   const workerId = await getWorkerTabId();
-  const prev = await snapshotFocus();
-  if (typeof workerId === 'number') {
-    const tab = await browser.tabs.get(workerId).catch(() => null);
-    const url = tab?.url || tab?.pendingUrl || '';
-    if (tab !== null && isHhUrl(url))
-      await browser.tabs.remove(workerId).catch(() => {});
-  }
+  const prev = await snapshotFocus().catch(() => null);
+  let drop = true;
+  try {
+    if (typeof workerId !== 'number')
+      return;
 
-  await browser.storage.local.remove(WORKER_KEY);
-  await restoreFocus(prev);
+    const tab = await browser.tabs.get(workerId).catch(() => null);
+    if (tab === null)
+      return;
+
+    const url = tab.url || tab.pendingUrl || '';
+    if (isBotWorkUrl(url)) {
+      await browser.tabs.remove(workerId).catch(() => {});
+      drop = await browser.tabs.get(workerId).catch(() => null) === null;
+
+      return;
+    }
+
+    if (tab.pinned === true && isHhUrl(url))
+      await browser.tabs.update(workerId, { pinned: false }).catch(() => {});
+  }
+  finally {
+    if (drop)
+      await browser.storage.local.remove(WORKER_KEY);
+
+    await restoreFocus(prev);
+  }
 }
 
 // Хром не грузит вкладку, открытую в фоне, пока её один раз не активировать.
