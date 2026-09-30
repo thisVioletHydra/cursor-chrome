@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 
-import { hiddenCount, moscowDay, readQueue, readState, seenCount, watchView } from '@cursor-chrome/hh';
+import { hiddenCount, moscowDay, readPassed, readQueue, readState, seenCount, watchView } from '@cursor-chrome/hh';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { allowedLogins, readSession } from '$lib/server/session';
@@ -12,7 +12,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
   if (session === null || allowedLogins().includes(session.login) === false)
     return json({ error: 'нет' }, { status: 401 });
 
-  const [queue, state, judged, hidden] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount()]);
+  const [queue, state, judged, hidden, passed] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount(), readPassed()]);
   const day = moscowDay();
   const watch = watchView();
 
@@ -34,6 +34,14 @@ export const GET: RequestHandler = async ({ cookies }) => {
       url: row.url,
       status: row.status,
       when: when.format(row.doneAt ?? row.at),
+    })),
+    passed: passed.map(row => ({
+      id: row.id,
+      company: row.company,
+      title: row.title,
+      url: `https://hh.ru/vacancy/${row.id}`,
+      reason: row.reason,
+      when: when.format(row.at),
     })),
     autopilot: { auto: state.auto, lastNote: state.lastNote, runAt: state.auto ? state.runAt : 0 },
     judged,

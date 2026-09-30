@@ -1,6 +1,10 @@
 import { deleteLinks, insertLinks, listLinks, lookupHeld } from './links-db.ts';
 import { SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from '../limits.ts';
-import { bumpDay, clearSearchPages, countHidden, countSeen, insertHidden, insertSeen, lookupSeen, openStore, readDay, readSearchPages, storePath, writeDay, writeSearchPage } from './seen-db.ts';
+import { bumpDay, clearSearchPages, countHidden, countSeen, insertHidden, insertSeen, listPassed, lookupSeen, openStore, readDay, readSearchPages, savePassed, storePath, writeDay, writeSearchPage } from './seen-db.ts';
+import type { PassedNote, PassedRow } from './seen-db.ts';
+
+export type { PassedNote, PassedRow };
+export { HIDE_REASON } from './seen-db.ts';
 
 export type { HeldLink } from './links-db.ts';
 
@@ -35,6 +39,16 @@ export function remember(ids: readonly string[]): Promise<void> {
 
 export function noteHidden(ids: readonly string[]): Promise<void> {
   return turn(() => insertHidden(ids, Date.now()));
+}
+
+export function notePassed(rows: readonly PassedNote[]): Promise<void> {
+  return turn(async () => {
+    savePassed(rows);
+  });
+}
+
+export function readPassed(limit = 80): Promise<PassedRow[]> {
+  return turn(async () => listPassed(limit));
 }
 
 export function markSent(id: string): Promise<void> {

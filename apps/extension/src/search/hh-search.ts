@@ -11,6 +11,7 @@ import { PAGE_LOAD_MS, endedAfter, flipWaitMs, hideWaitMs, landedPage, nextListe
 import { getWorkerTabId, isBotWorkUrl, isHhUrl, openBotSearch, requireWorkerTab, wakeWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
+const HIDE_REASON = 'не подходит профессия';
 const FIRST_PAGE = 0;
 const endedQuery = new Set<string>();
 let endedQuiet = false;
@@ -36,6 +37,13 @@ export type PageMarks = {
   saved: readonly string[];
 };
 
+export type HiddenMark = {
+  id: string;
+  reason: string;
+  title: string;
+  company: string;
+};
+
 export type FoundCard = {
   id: string;
   title: string;
@@ -55,7 +63,7 @@ export async function collectVacancies(
   pages: Readonly<Record<string, number>>,
   knownOnPage: (ids: readonly string[], links: readonly PageLink[], cursor: SearchCursor) => Promise<PageMarks | null>,
   rememberPage: (cursor: SearchCursor) => Promise<boolean>,
-  noteHidden: (id: string) => Promise<void>,
+  noteHidden: (row: HiddenMark) => Promise<void>,
 ): Promise<SearchHit> {
   sawCaptcha = false;
   endedQuery.clear();
@@ -164,7 +172,8 @@ export async function collectVacancies(
         await tellPage(`уже видели, ${knownIds.length}`);
 
       const fresh = new Set(marks.saved);
-      const hidden = await hideKnown(tabId, pulled.url, knownIds.filter(id => fresh.has(id) === false), noteHidden);
+      const cards = new Map(batch.map(card => [card.id, card]));
+      const hidden = await hideKnown(tabId, pulled.url, knownIds.filter(id => fresh.has(id) === false), cards, noteHidden);
       if (hidden === false) {
         hideBlocked = true;
         done = false;
@@ -400,7 +409,8 @@ async function hideKnown(
   tabId: number,
   url: string,
   ids: readonly string[],
-  noteHidden: (id: string) => Promise<void>,
+  cards: ReadonlyMap<string, { title: string; company: string }>,
+  noteHidden: (row: HiddenMark) => Promise<void>,
 ): Promise<boolean> {
   if (resumePath(url) || ids.length === 0)
     return true;
@@ -423,8 +433,16 @@ async function hideKnown(
       return false;
     }
 
-    if (hit === 'done')
-      await noteHidden(id);
+    if (hit === 'done') {
+      const card = cards.get(id);
+      const company = card?.company ?? '';
+      await noteHidden({
+        id,
+        reason: HIDE_REASON,
+        title: card?.title ?? '',
+        company: company === 'без компании' ? '' : company,
+      });
+    }
 
     if (hit === 'done' && index + 1 < ids.length)
       await hidePause();

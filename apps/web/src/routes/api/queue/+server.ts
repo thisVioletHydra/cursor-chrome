@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 
-import { COVER_LETTER, busyAmong, dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, keepSearchTitle, knownAmong, noteHidden, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readState, remember, rememberSearchPage, searchPages, serveQueries, splitQueries, takePilotStart, workHours, writeState } from '@cursor-chrome/hh';
+import { COVER_LETTER, HIDE_REASON, busyAmong, dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readState, remember, rememberSearchPage, searchPages, searchTitleSkip, serveQueries, splitQueries, takePilotStart, workHours, writeState } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { DEFAULT_QUERY, readAccount } from '$lib/server/secrets';
@@ -57,7 +57,9 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ error: 'пустое тело' }, { status: 400 });
 
   if (body.hidden !== undefined) {
-    await noteHidden(pageIds(body.hidden));
+    const hidden = hiddenNotes(body.hidden);
+    await noteHidden(hidden.map(row => row.id));
+    await notePassed(hidden);
 
     return json({ ok: true });
   }
@@ -103,7 +105,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const account = await readAccount(login);
   const ids = pageIds(body.ids);
-  const links = pageLinks(body.links).filter(link => keepSearchTitle(link.title, rulesOf(account.hhRules).stopWords));
+  const links = await keptSearch(pageLinks(body.links), rulesOf(account.hhRules).stopWords);
   const asked = ids.length > 0 ? ids : links.map(link => link.id);
   const seen = await knownIds(asked);
   const seenSet = new Set(seen);
@@ -116,12 +118,37 @@ export const POST: RequestHandler = async ({ request }) => {
   return json({ seen, saved });
 }
 
+async function keptSearch(links: { id: string; url: string; title: string }[], stopWords: string[]): Promise<{ id: string; url: string; title: string }[]> {
+  const kept: { id: string; url: string; title: string }[] = [];
+  const skipped: { id: string; reason: string; title: string }[] = [];
+  for (const link of links) {
+    const reason = searchTitleSkip(link.title, stopWords);
+    if (reason === null)
+      kept.push(link);
+    else
+      skipped.push({ id: link.id, reason, title: link.title });
+  }
+
+  if (skipped.length > 0)
+    await notePassed(skipped);
+
+  return kept;
+}
+
 async function keptLinks(rawRules: string): Promise<{ id: string; url: string }[]> {
   const stopWords = rulesOf(rawRules).stopWords;
   const rows = await readLinks(40);
-  const junk = rows.filter(row => row.title.length > 0 && keepSearchTitle(row.title, stopWords) === false);
-  if (junk.length > 0)
+  const junk = rows.flatMap((row) => {
+    const reason = searchTitleSkip(row.title, stopWords);
+    if (row.title.length === 0 || reason === null)
+      return [];
+
+    return [{ id: row.id, reason, title: row.title }];
+  });
+  if (junk.length > 0) {
     await forgetLinks(junk.map(row => row.id));
+    await notePassed(junk);
+  }
 
   const dropped = new Set(junk.map(row => row.id));
 
@@ -225,6 +252,46 @@ function linkOf(value: unknown): { id: string; url: string; title: string } | nu
     return null;
 
   return { id, url, title };
+}
+
+function hiddenNotes(value: unknown): { id: string; reason: string; company: string; title: string }[] {
+  if (Array.isArray(value) === false)
+    return [];
+
+  const notes: { id: string; reason: string; company: string; title: string }[] = [];
+  for (const item of value) {
+    const note = hiddenNote(item);
+    if (note === null)
+      continue;
+
+    notes.push(note);
+    if (notes.length >= PAGE_IDS)
+      break;
+  }
+
+  return notes;
+}
+
+function hiddenNote(value: unknown): { id: string; reason: string; company: string; title: string } | null {
+  if (typeof value === 'string')
+    return hideNote(value, HIDE_REASON, '', '');
+
+  if (typeof value !== 'object' || value === null)
+    return null;
+
+  const id = 'id' in value && typeof value.id === 'string' ? value.id : '';
+  const reason = 'reason' in value && typeof value.reason === 'string' ? value.reason.trim().slice(0, 200) : '';
+  const company = 'company' in value && typeof value.company === 'string' ? value.company.trim().slice(0, 200) : '';
+  const title = 'title' in value && typeof value.title === 'string' ? value.title.trim().slice(0, 200) : '';
+
+  return hideNote(id, reason.length > 0 ? reason : HIDE_REASON, company, title);
+}
+
+function hideNote(id: string, reason: string, company: string, title: string): { id: string; reason: string; company: string; title: string } | null {
+  if (/^\d+$/.test(id) === false || reason === 'уже видели')
+    return null;
+
+  return { id, reason, company, title };
 }
 
 function pageIds(value: unknown): string[] {

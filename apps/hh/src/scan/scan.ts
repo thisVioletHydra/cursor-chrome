@@ -9,7 +9,7 @@ import { fillKnownForm } from './form.ts';
 import { judge, packReport } from './judge.ts';
 import { searchVacancies } from './hh-api.ts';
 import { LOOK_PER_START, MODEL_PER_START, QUEUE_TARGET } from '../limits.ts';
-import { knownAmong, readMemory, remember } from '../diary/memory.ts';
+import { knownAmong, notePassed, readMemory, remember } from '../diary/memory.ts';
 import { FRONT_TAKE, hasSlot, roleJunk, stepSlot, takeSlot, taste } from '../mix/mix.ts';
 import { modelFromEnv, modelsDown } from '../model/model.ts';
 import { pendingCount } from '../queue/queue.ts';
@@ -54,8 +54,10 @@ export async function scan(opts: ScanOpts): Promise<ScanRun> {
     if (opts.signal?.aborted)
       break;
 
-    if (memory !== null)
+    if (memory !== null) {
       await remember([vacancy.id]);
+      await notePassed([{ id: vacancy.id, reason: 'не та роль', company: vacancy.company, title: vacancy.title }]);
+    }
 
     reports.push(packReport(vacancy, 'skip', 'не та роль', dry));
   }
@@ -101,8 +103,11 @@ export async function scan(opts: ScanOpts): Promise<ScanRun> {
       ? await finish(vacancy, report, scoreOf(vacancy, rules))
       : report;
 
-    if (memory !== null)
+    if (memory !== null) {
       await remember([vacancy.id]);
+      if (final.verdict === 'skip')
+        await notePassed([{ id: vacancy.id, reason: final.reason, company: vacancy.company, title: vacancy.title }]);
+    }
 
     if (final.verdict === 'apply') {
       if (opts.live)

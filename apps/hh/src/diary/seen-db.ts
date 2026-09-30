@@ -11,6 +11,27 @@ const SWAY = 0.16;
 const DAY_LOW = Math.floor(SEND_PER_DAY * (1 - SWAY));
 const DAY_HIGH = Math.ceil(SEND_PER_DAY * (1 + SWAY));
 const INSERT_STEP = 5_000;
+const PASSED_LIMIT = 80;
+
+export const HIDE_REASON = 'не подходит профессия';
+
+const QUIET_REASON = new Set(['', 'уже видели', 'уже в очереди']);
+
+export type PassedNote = {
+  id: string;
+  reason: string;
+  company?: string;
+  title?: string;
+  at?: number;
+};
+
+export type PassedRow = {
+  id: string;
+  at: number;
+  reason: string;
+  company: string;
+  title: string;
+};
 
 export type DayRoll = { cap: number; sent: number };
 
@@ -49,6 +70,7 @@ export async function openStore(): Promise<void> {
       ) STRICT;
     `);
     ensureLinkTitle(opened);
+    ensurePassed(opened);
     database = opened;
   }
 
@@ -103,6 +125,58 @@ export function insertHidden(ids: readonly string[], at: number): Promise<void> 
   return insertNums(uniqueNums(ids), at, 'hidden');
 }
 
+export function savePassed(rows: readonly PassedNote[]): void {
+  if (rows.length === 0)
+    return;
+
+  const opened = openDatabase();
+  const select = opened.prepare('SELECT reason, company, title FROM passed WHERE id = ?');
+  const insert = opened.prepare('INSERT INTO passed (id, at, reason, company, title) VALUES (?, ?, ?, ?, ?)');
+  const fill = opened.prepare('UPDATE passed SET company = ?, title = ? WHERE id = ?');
+  const replace = opened.prepare('UPDATE passed SET at = ?, reason = ?, company = ?, title = ? WHERE id = ?');
+  opened.exec('BEGIN');
+  try {
+    for (const row of rows)
+      writePassed(select, insert, fill, replace, row);
+
+    opened.exec('COMMIT');
+  }
+  catch (error) {
+    opened.exec('ROLLBACK');
+
+    throw error;
+  }
+}
+
+export function listPassed(limit = PASSED_LIMIT): PassedRow[] {
+  const cap = Math.min(PASSED_LIMIT, Math.max(1, Math.floor(limit)));
+  const rows = openDatabase().prepare(`
+    SELECT id, at, reason, company, title
+    FROM passed
+    WHERE reason != '' AND reason != 'уже видели'
+    ORDER BY at DESC
+    LIMIT ?
+  `).all(cap);
+  const out: PassedRow[] = [];
+  for (const row of rows) {
+    const id = textId(row.id);
+    const at = wholeAt(row.at);
+    const reason = sqlText(row.reason);
+    if (id === null || at === null || reason.length === 0 || reason === 'уже видели')
+      continue;
+
+    out.push({
+      id,
+      at,
+      reason,
+      company: sqlText(row.company),
+      title: sqlText(row.title),
+    });
+  }
+
+  return out;
+}
+
 export function readSearchPages(queries: readonly string[]): Record<string, number> {
   const select = openDatabase().prepare('SELECT page FROM search_page WHERE query = ?');
   const pages: Record<string, number> = {};
@@ -151,6 +225,59 @@ function capOf(value: unknown): number | null {
 
 let database: sqlite.DatabaseSync | null = null;
 let migrated = false;
+
+function ensurePassed(opened: sqlite.DatabaseSync): void {
+  opened.exec(`
+    CREATE TABLE IF NOT EXISTS passed (
+      id INTEGER PRIMARY KEY,
+      at INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      company TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL DEFAULT ''
+    ) STRICT;
+  `);
+  opened.prepare(`
+    INSERT OR IGNORE INTO passed (id, at, reason, company, title)
+    SELECT id, at, ?, '', '' FROM hidden
+  `).run(HIDE_REASON);
+}
+
+function writePassed(
+  select: sqlite.StatementSync,
+  insert: sqlite.StatementSync,
+  fill: sqlite.StatementSync,
+  replace: sqlite.StatementSync,
+  row: PassedNote,
+): void {
+  const id = numId(row.id);
+  const reason = row.reason.trim().slice(0, 200);
+  if (id === null || QUIET_REASON.has(reason))
+    return;
+
+  const company = cleanCompany(row.company ?? '');
+  const title = clipText(row.title ?? '');
+  const at = row.at ?? Date.now();
+  const existing = select.get(id);
+  if (existing === undefined) {
+    insert.run(id, at, reason, company, title);
+
+    return;
+  }
+
+  const prior = sqlText(existing.reason);
+  const keptCompany = sqlText(existing.company);
+  const keptTitle = sqlText(existing.title);
+  const nextCompany = keptCompany.length > 0 ? keptCompany : company;
+  const nextTitle = keptTitle.length > 0 ? keptTitle : title;
+  if (prior === HIDE_REASON && reason !== HIDE_REASON) {
+    replace.run(at, reason, nextCompany, nextTitle, id);
+
+    return;
+  }
+
+  if (nextCompany !== keptCompany || nextTitle !== keptTitle)
+    fill.run(nextCompany, nextTitle, id);
+}
 
 function ensureLinkTitle(opened: sqlite.DatabaseSync): void {
   const names = opened.prepare('PRAGMA table_info(links)').all().flatMap(row => typeof row.name === 'string' ? [row.name] : []);
@@ -343,6 +470,30 @@ function numId(id: string): number | null {
     return null;
 
   return value;
+}
+
+function wholeAt(value: sqlite.SQLOutputValue): number | null {
+  const at = typeof value === 'bigint' ? Number(value) : value;
+  if (typeof at !== 'number' || Number.isInteger(at) === false || at < 0)
+    return null;
+
+  return at;
+}
+
+function sqlText(value: sqlite.SQLOutputValue | undefined): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function clipText(value: string): string {
+  return value.trim().slice(0, 200);
+}
+
+function cleanCompany(value: string): string {
+  const text = clipText(value);
+  if (text === 'без компании')
+    return '';
+
+  return text;
 }
 
 function textId(value: sqlite.SQLOutputValue): string | null {

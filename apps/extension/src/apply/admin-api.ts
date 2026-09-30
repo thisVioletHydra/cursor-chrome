@@ -136,15 +136,22 @@ export async function dropKnown(base: string, key: string, ids: readonly string[
   }
 }
 
-export async function postHidden(base: string, key: string, id: string): Promise<boolean> {
-  if (/^\d+$/.test(id) === false)
+export async function postHidden(base: string, key: string, row: { id: string; reason: string; title?: string; company?: string }): Promise<boolean> {
+  if (/^\d+$/.test(row.id) === false)
     return false;
 
   try {
     const res = await fetch(`${base}/api/queue`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-      body: JSON.stringify({ hidden: [id] }),
+      body: JSON.stringify({
+        hidden: [{
+          id: row.id,
+          reason: row.reason,
+          title: row.title ?? '',
+          company: row.company ?? '',
+        }],
+      }),
       signal: AbortSignal.timeout(12_000),
     });
 

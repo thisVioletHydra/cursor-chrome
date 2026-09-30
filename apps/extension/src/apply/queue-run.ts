@@ -623,8 +623,8 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
       return null;
 
     return { seen: new Set(marks.seen), saved: marks.saved };
-  }, cursor => rememberPage(base, key, cursor), async (id) => {
-    await postHidden(base, key, id);
+  }, cursor => rememberPage(base, key, cursor), async (row) => {
+    await postHidden(base, key, row);
   });
   if (hangHalted())
     return { stop: 'расширение зависло' };

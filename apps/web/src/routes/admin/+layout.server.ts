@@ -1,6 +1,6 @@
 import type { LayoutServerLoad } from './$types';
 
-import { COVER_LETTER, hiddenCount, moscowDay, PRESETS, providerName, readQueue, readState, seenCount } from '@cursor-chrome/hh';
+import { COVER_LETTER, hiddenCount, moscowDay, PRESETS, providerName, readPassed, readQueue, readState, seenCount } from '@cursor-chrome/hh';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { redirect } from '@sveltejs/kit';
 import { coolLeft } from '$lib/server/admin-actions';
@@ -21,11 +21,12 @@ async function statsOf(preview: boolean) {
       discards: 0,
       waitingReply: 0,
       hidden: 0,
+      passed: [],
       autopilot: { auto: false, lastNote: '', runAt: 0 },
     };
   }
 
-  const [queue, state, judged, hidden] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount()]);
+  const [queue, state, judged, hidden, passed] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount(), readPassed()]);
   const day = moscowDay();
   const rows = queue.slice(0, 20).map(row => ({
     id: row.id,
@@ -46,6 +47,14 @@ async function statsOf(preview: boolean) {
     discards: queue.filter(row => row.outcome === 'discard').length,
     waitingReply: queue.filter(row => row.outcome === 'response').length,
     hidden,
+    passed: passed.map(row => ({
+      id: row.id,
+      company: row.company,
+      title: row.title,
+      url: `https://hh.ru/vacancy/${row.id}`,
+      reason: row.reason,
+      when: when.format(row.at),
+    })),
     autopilot: { auto: state.auto, lastNote: state.lastNote, runAt: state.auto ? state.runAt : 0 },
   };
 }

@@ -24,6 +24,7 @@ let copyNote = $state(COPY_LABEL);
 let copyTone = $state<'idle' | 'ok' | 'fail'>('idle');
 let copyTimer: ReturnType<typeof setTimeout> | undefined;
 let now = $state(Date.now());
+let board = $state<'accepted' | 'hidden'>('accepted');
 
 const copyClass = $derived(
   copyTone === 'ok'
@@ -76,6 +77,7 @@ async function refresh(mine: number): Promise<void> {
     polling?: boolean;
     figures?: { today: number; queued: number; waiting: number; invitations: number; discards: number; waitingReply: number; hidden: number };
     rows?: typeof stats.rows;
+    passed?: typeof stats.passed;
     autopilot?: { auto: boolean; lastNote: string; runAt: number };
     judged?: number;
     pulse?: { line?: string };
@@ -86,7 +88,7 @@ async function refresh(mine: number): Promise<void> {
 
   if (alive) {
     if (body.figures)
-      stats = { ...stats, ...body.figures, rows: body.rows ?? stats.rows, judged: body.judged ?? stats.judged, autopilot: body.autopilot ?? stats.autopilot };
+      stats = { ...stats, ...body.figures, rows: body.rows ?? stats.rows, passed: body.passed ?? stats.passed, judged: body.judged ?? stats.judged, autopilot: body.autopilot ?? stats.autopilot };
 
     polling = body.polling === true;
   }
@@ -377,6 +379,24 @@ const figures = $derived([
   { label: 'Скрытые', value: stats.hidden },
 ]);
 
+function showBoard(next: 'accepted' | 'hidden'): void {
+  board = next;
+}
+
+function passedName(row: { company: string; title: string; id: string }): string {
+  const company = row.company.trim();
+  const title = row.title.trim();
+  if (company.length > 0 && title.length > 0)
+    return `${company} · ${title}`;
+
+  if (title.length > 0)
+    return title;
+
+  return row.id;
+}
+
+const chipClass = 'inline-flex h-8 min-h-8 cursor-pointer items-center rounded-full border px-3 text-sm font-medium transition hover:border-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-[0.98]';
+
 const statusText: Record<string, string> = {
   pending: 'в очереди',
   sent: 'откликнулся',
@@ -565,30 +585,69 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
 </section>
 
 <section class="mb-8">
-  <div class="max-h-[26rem] overflow-x-auto overflow-y-auto rounded-2xl border border-white/8 bg-[#151922]">
-    {#if stats.rows.length > 0}
+  <div class="mb-3 flex flex-wrap gap-2" role="group" aria-label="Список вакансий">
+    <button
+      class="{chipClass} {board === 'accepted' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
+      type="button"
+      aria-pressed={board === 'accepted'}
+      onclick={() => showBoard('accepted')}
+    >Принятые</button>
+    <button
+      class="{chipClass} {board === 'hidden' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
+      type="button"
+      aria-pressed={board === 'hidden'}
+      onclick={() => showBoard('hidden')}
+    >Скрытые</button>
+  </div>
+  <div class="max-h-[26rem] overflow-x-hidden overflow-y-auto rounded-2xl border border-white/8 bg-[#151922]">
+    {#if board === 'accepted'}
+      {#if stats.rows.length > 0}
+        <table class="table">
+          <thead class="sticky top-0 z-10">
+            <tr class="bg-[#151922] text-xs text-zinc-500">
+              <th>Вакансия</th>
+              <th>Статус</th>
+              <th>Когда</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each stats.rows as row (row.id)}
+              <tr>
+                <td class="max-w-xs truncate">
+                  <a class="text-zinc-200 underline-offset-4 hover:underline" href={row.url} target="_blank" rel="noreferrer">{row.company} · {row.title}</a>
+                </td>
+                <td><span class="badge badge-sm {statusBadge[row.status] ?? 'badge-ghost'}">{statusText[row.status] ?? row.status}</span></td>
+                <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {:else}
+        <p class="px-5 py-8 text-sm text-zinc-500">Очередь пустая.</p>
+      {/if}
+    {:else if stats.passed.length > 0}
       <table class="table">
         <thead class="sticky top-0 z-10">
           <tr class="bg-[#151922] text-xs text-zinc-500">
             <th>Вакансия</th>
-            <th>Статус</th>
             <th>Когда</th>
+            <th>Причина</th>
           </tr>
         </thead>
         <tbody>
-          {#each stats.rows as row (row.id)}
+          {#each stats.passed as row (row.id)}
             <tr>
-              <td class="max-w-xs truncate">
-                <a class="text-zinc-200 underline-offset-4 hover:underline" href={row.url} target="_blank" rel="noreferrer">{row.company} · {row.title}</a>
+              <td class="max-w-xs break-words whitespace-normal">
+                <a class="text-zinc-200 underline-offset-4 hover:underline" href={row.url} target="_blank" rel="noreferrer">{passedName(row)}</a>
               </td>
-              <td><span class="badge badge-sm {statusBadge[row.status] ?? 'badge-ghost'}">{statusText[row.status] ?? row.status}</span></td>
               <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
+              <td class="max-w-xs break-words whitespace-normal text-sm text-zinc-300">{row.reason}</td>
             </tr>
           {/each}
         </tbody>
       </table>
     {:else}
-      <p class="px-5 py-8 text-sm text-zinc-500">Очередь пустая.</p>
+      <p class="px-5 py-8 text-sm text-zinc-500">Скрытых пока нет.</p>
     {/if}
   </div>
 </section>

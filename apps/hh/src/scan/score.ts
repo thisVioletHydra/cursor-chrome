@@ -53,16 +53,17 @@ export function rulesFromEnv(): Rules {
   }
 }
 
-export function keepSearchTitle(title: string, stopWords: readonly string[]): boolean {
+export function searchTitleSkip(title: string, stopWords: readonly string[]): string | null {
   const text = title.trim();
   if (text.length === 0)
-    return false;
+    return null;
 
   if (roleJunk(text))
-    return false;
+    return 'не та роль';
 
-  if (hasStop(text, stopWords))
-    return false;
+  const stop = stopHit(text, stopWords);
+  if (stop !== null)
+    return `стоп-слово «${stop}»`;
 
   return hardSkip({
     id: '0',
@@ -73,7 +74,14 @@ export function keepSearchTitle(title: string, stopWords: readonly string[]): bo
     formUrl: '',
     formBlocked: false,
     ...NO_META,
-  }) === null;
+  });
+}
+
+export function keepSearchTitle(title: string, stopWords: readonly string[]): boolean {
+  if (title.trim().length === 0)
+    return false;
+
+  return searchTitleSkip(title, stopWords) === null;
 }
 
 export function ruleSkip(vacancy: Vacancy, rules: Rules): string | null {
@@ -112,10 +120,10 @@ export function byScore(rules: Rules): (left: Vacancy, right: Vacancy) => number
   return (left, right) => scoreOf(right, rules) - scoreOf(left, rules);
 }
 
-function hasStop(title: string, stopWords: readonly string[]): boolean {
+function stopHit(title: string, stopWords: readonly string[]): string | null {
   const hay = title.toLowerCase();
 
-  return stopWords.some(word => word.length > 0 && hay.includes(word.toLowerCase()));
+  return stopWords.find(word => word.length > 0 && hay.includes(word.toLowerCase())) ?? null;
 }
 
 function salaryTop(vacancy: Vacancy): number | null {
