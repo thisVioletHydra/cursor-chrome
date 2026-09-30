@@ -1,7 +1,7 @@
 import type { Actions, PageServerLoad } from './$types';
 import type { Account } from '$lib/server/secrets';
 
-import { parseRules } from '@cursor-chrome/hh';
+import { COVER_LETTER, parseRules } from '@cursor-chrome/hh';
 import { importSetupAdmin } from '$lib/server/admin-actions';
 import { accountFileStat, chainOf, readAccount } from '$lib/server/secrets';
 import { readSession } from '$lib/server/session';
@@ -66,7 +66,7 @@ function rowsOf(account: Account | null): SavedRow[] {
   const rules = rulesOf(account?.hhRules ?? '');
   const words = rules.stopWords.length + rules.mustWords.length + rules.blacklist.length;
   const rulesOn = words > 0 || rules.salaryMin > 0;
-  const letter = account?.coverLetter.length ?? 0;
+  const letter = (account?.coverLetter || COVER_LETTER).length;
   const live = account?.hhLive === '1';
   const issued = (account?.extToken.length ?? 0) > 0;
 
@@ -132,7 +132,7 @@ function redactedOf(account: Account | null): string {
       salaryMin: rules.salaryMin,
       blacklist: rules.blacklist,
     },
-    coverLetterChars: account?.coverLetter.length ?? 0,
+    coverLetterChars: (account?.coverLetter || COVER_LETTER).length,
     hhLive: account?.hhLive === '1' ? '1' : '',
     extToken: veil(account?.extToken ?? ''),
   };
