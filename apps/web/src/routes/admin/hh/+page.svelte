@@ -11,9 +11,6 @@ let suggesting = $state(false);
 const SUGGEST_WAIT_MS = 35_000;
 const askName = $derived(data.providers[0]?.name ?? 'модель');
 let blackDraft = $state('');
-let corpusMessage = $state('');
-let corpusOk = $state(false);
-let corpusBrief = $state('');
 const savedRaw = $derived(filterRawOf(data.hhQuery, data.stopWords));
 const rulesSame = $derived(
   filterDraft === savedRaw
@@ -34,7 +31,6 @@ function stopLines(raw: string): string[] {
 $effect(() => {
   filterDraft = savedRaw;
   blackDraft = data.blacklist;
-  corpusBrief = data.corpusBrief;
 });
 let phrase = $state('');
 let resumeOpen = $state(false);
@@ -209,57 +205,6 @@ function openResume() {
       </button>
     </div>
   </form>
-</section>
-
-<section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
-  <h2 class="text-base font-semibold text-white">Тексты вакансий</h2>
-  <p class="mt-2 text-sm text-zinc-400">Выключено и на отклики не влияет. Если включить, скан тихо копит до 100 текстов без компании и ссылки. Потом из них можно собрать выжимку под резюме.</p>
-  {#if corpusMessage}
-    <p class="mt-3 font-mono text-xs {corpusOk ? 'text-emerald-300' : 'text-rose-300'}">{corpusMessage}</p>
-  {/if}
-  <form
-    class="mt-4 flex items-center gap-3"
-    method="POST"
-    action="?/corpus"
-    use:enhance={() => {
-      corpusMessage = '';
-      return async ({ result, update }) => {
-        const body = result.type === 'success' ? result.data : null;
-        corpusOk = body?.ok === true;
-        corpusMessage = typeof body?.detail === 'string' ? body.detail : 'не вышло';
-        await update({ reset: false });
-      };
-    }}
-  >
-    <label class="flex cursor-pointer items-center gap-2 text-sm text-zinc-300">
-      <input class="checkbox checkbox-sm checkbox-primary" name="hhCorpus" type="checkbox" value="1" checked={data.corpusOn === true} />
-      Копить тексты
-    </label>
-    <button class="btn btn-ghost h-11 min-h-11 px-4" type="submit">Сохранить</button>
-    <span class="text-xs text-zinc-500">{data.corpusCount} из 100</span>
-  </form>
-  {#if data.corpusOn === true && data.corpusCount >= 100}
-    <form
-      class="mt-3"
-      method="POST"
-      action="?/distill"
-      use:enhance={() => {
-        corpusMessage = 'Собираю выжимку';
-        return async ({ result }) => {
-          const body = result.type === 'success' ? result.data : null;
-          corpusOk = body?.ok === true;
-          corpusMessage = corpusOk ? 'Выжимка готова' : (typeof body?.detail === 'string' ? body.detail : 'не вышло');
-          if (corpusOk && typeof body?.detail === 'string')
-            corpusBrief = body.detail;
-        };
-      }}
-    >
-      <button class="btn btn-primary h-11 min-h-11 px-4" type="submit">Собрать выжимку</button>
-    </form>
-  {/if}
-  {#if corpusBrief.length > 0}
-    <pre class="mt-4 whitespace-pre-wrap text-sm leading-6 text-zinc-200">{corpusBrief}</pre>
-  {/if}
 </section>
 
 {#if openUnlink}
