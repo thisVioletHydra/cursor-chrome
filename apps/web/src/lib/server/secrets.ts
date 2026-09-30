@@ -337,7 +337,7 @@ const envKeys: Record<keyof Secrets, string> = {
   extToken: 'EXT_TOKEN',
 };
 
-export const DEFAULT_QUERY = 'typescript react nestjs';
+export { DEFAULT_QUERY } from '@cursor-chrome/hh';
 
 export function newExtToken(): string {
   return crypto.randomBytes(24).toString('base64url');

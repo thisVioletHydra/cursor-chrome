@@ -3,6 +3,21 @@ import type { Provider } from '../model/model.ts';
 import { FACTS } from '../model/copy.ts';
 import { askChain } from '../model/model.ts';
 
+const DEFAULT_QUERIES = [
+  'Frontend',
+  'Vue.js',
+  'vue',
+  'TypeScript',
+  'JavaScript',
+  'React',
+  'Node.js',
+  'Fullstack',
+  'NestJS',
+  'GraphQL',
+];
+
+export const DEFAULT_QUERY = DEFAULT_QUERIES.join('\n');
+
 const MAX_QUERIES = 5;
 const SUGGEST_TRY_MS = 9_000;
 const SUGGEST_MS = 28_000;

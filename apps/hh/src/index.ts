@@ -2,7 +2,7 @@ export { ping, pingReasons } from './cli/index.ts';
 export { dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, markSent, moscowDay, moscowHour, parseJsonLoose, readLinks, readMemory, readState, remember, rememberSearchPage, roomToday, searchPages, seenCount, storePath, workHours, writeJsonAtomic, writeState } from './diary/index.ts';
 export type { HeldLink, Memory, State } from './diary/index.ts';
 export { LOOK_PER_START, MAX_ATTEMPTS, QUEUE_TARGET, SCAN_EVERY_MS, SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from './limits.ts';
-export { serveQueries, splitQueries, suggestQueries } from './mix/index.ts';
+export { DEFAULT_QUERY, serveQueries, splitQueries, suggestQueries } from './mix/index.ts';
 export type { QueryCursor } from './mix/index.ts';
 export { COVER_LETTER, FACTS, PRESETS, answerQuestion, asAtsFlags, asProvider, asQuestion, askChain, atsFirst, atsSource, chainFromEnv, corpusOn, corpusState, distillCorpus, keepVacancy, modelsDown, parseChain, pingChain, presetOf, probeProvider, providerName, readProbeLog, scoreAts } from './model/index.ts';
 export type { Answer, AtsFlag, Preset, ProbeNote, Provider, ProviderId, Question } from './model/index.ts';

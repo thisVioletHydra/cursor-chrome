@@ -5,7 +5,7 @@ import { dayOpen, fitsTitle, LOOK_PER_START, pendingCount, QUEUE_TARGET, readMem
 import { chargeQueued } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
-import { readAccount } from '$lib/server/secrets';
+import { DEFAULT_QUERY, readAccount } from '$lib/server/secrets';
 
 type Incoming = {
   id?: unknown;
@@ -41,7 +41,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (parsed.length === 0)
     return json({ ok: true, added: 0, reason: 'не те id' });
 
-  const query = account.hhQuery || '';
+  const query = account.hhQuery.trim() || DEFAULT_QUERY;
   const queries = splitQueries(query);
   const list = queries.length === 0 ? parsed : parsed.filter(vacancy => fitsTitle(vacancy.title, queries));
   if (list.length === 0)

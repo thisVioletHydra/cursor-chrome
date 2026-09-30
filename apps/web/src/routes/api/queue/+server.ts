@@ -12,7 +12,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
   const [memory, account, state] = await Promise.all([readMemory(), readAccount(login), readState()]);
   const letter = account.coverLetter || COVER_LETTER;
-  const saved = splitQueries(account.hhQuery || DEFAULT_QUERY);
+  const saved = splitQueries(account.hhQuery.trim() || DEFAULT_QUERY);
   const stop = state.hung === true && state.auto === false;
   const auto = state.auto === true;
   const listen = url.searchParams.get('listen') === '1';

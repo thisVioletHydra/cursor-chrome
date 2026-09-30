@@ -18,7 +18,8 @@ export const FRONT_TAKE = 3;
 export const LESS_TAKE = 2;
 
 const LESS = /(?:^|[^\p{L}\p{N}])(?:backend|back\s*end|бэкенд|бекенд|fullstack|full\s*stack|фул+ст[еэ]к|node(?:\s*js)?|nest(?:\s*js)?|php|python|java|express)(?=$|[^\p{L}\p{N}])/iu;
-const FRONT = /(?:^|[^\p{L}\p{N}])(?:frontend|front\s*end|фронтенд|фронтэнд|vue|react)(?=$|[^\p{L}\p{N}])/iu;
+const ROLE_LESS = /(?:^|[^\p{L}\p{N}])(?:backend|back\s*end|бэкенд|бекенд|fullstack|full\s*stack|фул+ст[еэ]к)(?=$|[^\p{L}\p{N}])/iu;
+const FRONT = /(?:^|[^\p{L}\p{N}])(?:frontend|front\s*end|фронтенд|фронтэнд|vue|react|graphql)(?=$|[^\p{L}\p{N}])/iu;
 const SCRIPT = /(?:^|[^\p{L}\p{N}])(?:javascript|typescript)(?=$|[^\p{L}\p{N}])/iu;
 const JUNK = /(?:^|[^\p{L}\p{N}])(?:qa|aqa|manager|sourcer|analyst|support|саппорт)(?=$|[^\p{L}\p{N}])|(?:^|[^\p{L}\p{N}])(?:quality assurance|тестиров|менеджер|сорсер|аналитик|робототех|robotics|техподдерж)/iu;
 
@@ -30,7 +31,7 @@ export function taste(title: string, foundBy: string): Taste {
   if (roleJunk(title))
     return 'out';
 
-  if (lessHit(title) || lessHit(foundBy))
+  if (lessQuery(title) || lessQuery(foundBy))
     return 'less';
 
   if (frontHit(title) || frontHit(foundBy))
@@ -118,8 +119,8 @@ export function serveQueries(queries: readonly string[], cursor: QueryCursor, ad
 }
 
 function sliceQueries(queries: readonly string[], frontAt: number, lessAt: number): { queries: string[]; frontAt: number; lessAt: number } {
-  const front = queries.filter(query => lessHit(query) === false);
-  const less = queries.filter(query => lessHit(query));
+  const front = queries.filter(query => lessQuery(query) === false);
+  const less = queries.filter(query => lessQuery(query));
   const used = new Set<string>();
   const picked: string[] = [];
   let f = frontAt;
@@ -189,6 +190,17 @@ function positiveMod(value: number, size: number): number {
 
 function lessHit(text: string): boolean {
   return LESS.test(fold(text));
+}
+
+// Слова фронта в той же строке не отдают весь запрос в бэкенд из-за nest или node.
+function lessQuery(text: string): boolean {
+  if (ROLE_LESS.test(fold(text)))
+    return true;
+
+  if (frontHit(text) || scriptHit(text))
+    return false;
+
+  return lessHit(text);
 }
 
 function frontHit(text: string): boolean {

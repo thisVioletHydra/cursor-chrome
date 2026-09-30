@@ -1,3 +1,4 @@
+import { DEFAULT_QUERY } from '../mix/queries.ts';
 import { PRESETS, probeProvider } from '../model/model.ts';
 import { ping } from './ping.ts';
 import { preflight } from './preflight.ts';
@@ -39,7 +40,7 @@ async function probe(): Promise<void> {
 async function dryScan(): Promise<void> {
   const query = process.argv.slice(3).find(part => part !== '--')
     ?? process.env.HH_QUERY
-    ?? 'typescript react nestjs';
+    ?? DEFAULT_QUERY;
   const { reports } = await scan({ query, dry: true, live: false });
   for (const report of reports)
     console.log(report.line);
