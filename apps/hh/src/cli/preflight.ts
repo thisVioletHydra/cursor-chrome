@@ -27,6 +27,17 @@ const PYTHON: Vacancy = {
   ...NO_META,
 };
 
+const HYBRID: Vacancy = {
+  id: '5',
+  title: 'Frontend-разработчик',
+  company: 'Kazdream',
+  url: 'https://hh.ru/vacancy/5',
+  text: 'React, TypeScript. Формат работы: на месте работодателя или гибрид. Астана.',
+  formUrl: '',
+  formBlocked: false,
+  ...NO_META,
+};
+
 const OURS: Vacancy = {
   id: '3',
   title: 'Frontend TypeScript',
@@ -64,15 +75,17 @@ export async function preflight(): Promise<void> {
   const reports = [
     await judge(OFFICE, opts),
     await judge(PYTHON, opts),
+    await judge(HYBRID, opts),
     await judge(OURS, opts),
     await judge(FORM, opts),
   ];
   const lines = reports.map(report => report.line);
-  const ok = calls === 1
+  const ok = calls === 2
     && lines[0] === 'Офисная. Скип, удалёнку запрещают. https://hh.ru/vacancy/1'
     && lines[1] === 'Питон. Скип, Python основной бэк. https://hh.ru/vacancy/2'
-    && lines[2] === 'Рога и копыта. Откликнулся бы. https://hh.ru/vacancy/3'
-    && lines[3] === 'Форма. Застрял, зову человека. https://hh.ru/vacancy/4';
+    && lines[2] === 'Kazdream. Откликнулся бы. https://hh.ru/vacancy/5'
+    && lines[3] === 'Рога и копыта. Откликнулся бы. https://hh.ru/vacancy/3'
+    && lines[4] === 'Форма. Застрял, зову человека. https://hh.ru/vacancy/4';
   if (ok === false) {
     console.error(lines.join('\n'));
     console.error(`model ${calls}`);

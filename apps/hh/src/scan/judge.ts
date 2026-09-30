@@ -48,8 +48,9 @@ export function packReport(vacancy: Vacancy, verdict: Verdict, reason: string, d
 export function modelPrompt(vacancy: Vacancy): string {
   return [
     'Реши по вакансии: apply, skip или human.',
-    'apply — наш стек, удалёнку текст не запретил.',
-    'skip — не наш стек или скам.',
+    'apply — наш стек. Молчание про удалёнку, гибрид и «на месте работодателя» тоже apply: на собесе просится удалёнка.',
+    'skip — не наш стек, скам, или текст прямо запретил удалёнку: только офис, удалёнки нет.',
+    'Город Бишкек сам по себе не причина скипа.',
     'human — гугл-форма, тест, вопрос без факта.',
     'Не выдумывай Python, Kubernetes и английский C1.',
     FACTS,

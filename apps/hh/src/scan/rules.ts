@@ -37,7 +37,7 @@ export type Report = {
 
 export type Model = (vacancy: Vacancy) => Promise<{ verdict: Verdict; reason: string }>;
 
-const OFFICE = /только офис|удалёнки нет|удаленки нет|удалённую не рассматриваем|удаленную не рассматриваем|remote-only не рассматриваем|гибрид\s+\d+\s+дн/i;
+const OFFICE = /только офис|только в офисе|удалёнки нет|удаленки нет|удалёнку не рассматриваем|удаленку не рассматриваем|удалённую не рассматриваем|удаленную не рассматриваем/i;
 const JUNIOR = /\bjunior\b|джуниор|стажёр|стажер/i;
 const JUNIOR_NO = /не\s+(?:ищем\s+)?(?:junior|джуниор|стажёр|стажер)/i;
 const LEGACY = /1[cс]|битрикс|bitrix/i;
