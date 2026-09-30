@@ -10,7 +10,7 @@ import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, do
 import { runHhApply } from './hh-apply-cmd';
 import { collectVacancies, readVacancyPage } from './hh-search';
 import { requireTabId } from './inject';
-import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from './worker-tab';
+import { adoptHhWorker, closePinnedHh, getWorkerTabId, requireWorkerTab, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
 
 type ApplyReply = { status?: string; reason?: string; hints?: unknown };
@@ -714,6 +714,9 @@ async function showVacancy(url: string, read?: { base: string; key: string; id: 
     return { status: 'skip', reason: 'капча' };
 
   const tab = await requireWorkerTab().catch(async () => {
+    if ((await getFlags()).autoQueue !== true)
+      throw new Error('выключено');
+
     await adoptHhWorker(url);
 
     return requireWorkerTab();
@@ -862,6 +865,7 @@ function stopLabel(status: Status, reason: string, text: string): string {
 
 async function pauseUntilMorning(): Promise<void> {
   await browser.storage.local.set({ [PAUSED_KEY]: nextMorning() });
+  await closePinnedHh();
 }
 
 export async function guardCaptcha(again = false): Promise<boolean> {

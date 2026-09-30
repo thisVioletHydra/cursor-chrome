@@ -3,7 +3,8 @@ import { restoreFocus, snapshotFocus, withStayPut } from './focus-lock';
 import { browser } from '../browser-host';
 
 const WORKER_KEY = 'workerTabId';
-const HH_HOME = 'https://hh.ru';
+const SEARCH = 'https://hh.ru/search/vacancy';
+const USER_PAGE = /\/resume(?:_converter|_print)?(?:\/|$)|\/chat(?:\/|$)/i;
 
 export type TabRow = {
   id: number;
@@ -24,6 +25,28 @@ export type WorkerCheck = {
 
 export function isHhUrl(url: string): boolean {
   return hostIs(url, 'hh.ru');
+}
+
+export function isBotWorkUrl(url: string): boolean {
+  if (isHhUrl(url) === false)
+    return false;
+
+  try {
+    const path = new URL(url).pathname;
+    if (USER_PAGE.test(path))
+      return false;
+
+    if (path === '/search/vacancy' || path.startsWith('/search/vacancy/'))
+      return true;
+
+    if (/^\/vacancy\/\d+/.test(path))
+      return true;
+
+    return /vacancy_response/i.test(path);
+  }
+  catch {
+    return false;
+  }
 }
 
 function isWorkerUrl(url: string): boolean {
@@ -78,31 +101,38 @@ export async function listJobTabs(): Promise<TabRow[]> {
 }
 
 export async function pinWorker(tabId: number): Promise<WorkerCheck> {
-  const prev = await snapshotFocus();
-  await browser.tabs.update(tabId, { pinned: true, active: false });
+  await browser.tabs.update(tabId, { pinned: true, autoDiscardable: false });
   await browser.storage.local.set({ [WORKER_KEY]: tabId });
-  await dropExtraHhPins(tabId);
-  await restoreFocus(prev);
+  await wakeWorkerTab(tabId);
 
   return checkWorker();
 }
 
 export async function closePinnedHh(): Promise<void> {
-  const prev = await snapshotFocus();
   const workerId = await getWorkerTabId();
-  const rows = await listJobTabs();
-  for (const row of rows) {
-    if (row.hh === false)
-      continue;
-
-    if (row.pinned === false && row.id !== workerId)
-      continue;
-
-    await browser.tabs.remove(row.id).catch(() => {});
+  const prev = await snapshotFocus();
+  if (typeof workerId === 'number') {
+    const tab = await browser.tabs.get(workerId).catch(() => null);
+    const url = tab?.url || tab?.pendingUrl || '';
+    if (tab !== null && isHhUrl(url))
+      await browser.tabs.remove(workerId).catch(() => {});
   }
 
   await browser.storage.local.remove(WORKER_KEY);
   await restoreFocus(prev);
+}
+
+// Хром не грузит вкладку, открытую в фоне, пока её один раз не активировать.
+export async function wakeWorkerTab(tabId: number, force = false): Promise<void> {
+  await browser.tabs.update(tabId, { autoDiscardable: false }).catch(() => {});
+  const tab = await browser.tabs.get(tabId).catch(() => null);
+  if (tab === null || (force === false && asleep(tab) === false))
+    return;
+
+  const prev = await snapshotFocus();
+  await browser.tabs.update(tabId, { active: true });
+  if (prev !== null && prev.tabId !== tabId)
+    await restoreFocus(prev);
 }
 
 export async function checkWorker(): Promise<WorkerCheck> {
@@ -146,21 +176,34 @@ export async function ensureHhWorker(): Promise<WorkerCheck> {
 
 export async function openOnHhTab(url: string): Promise<WorkerCheck> {
   const href = httpHref(url);
-  const existing = pickHhTab(await listJobTabs(), await getWorkerTabId());
+  const existing = ownWorkTab(await listJobTabs(), await getWorkerTabId());
   if (existing)
     return resumeHh(existing.id, href);
 
   return openOnlyHh(href);
 }
 
+export async function openBotSearch(url: string): Promise<WorkerCheck> {
+  const own = ownWorkTab(await listJobTabs(), await getWorkerTabId());
+  if (own) {
+    const pinned = await resumeHh(own.id, isBotWorkUrl(own.url) ? undefined : url);
+
+    return { ...pinned, status: pinned.ok ? 'Уже открыта' : pinned.reason };
+  }
+
+  const opened = await openOnlyHh(url);
+
+  return { ...opened, status: opened.ok ? 'Открыл и запинил' : opened.reason };
+}
+
 export async function adoptHhWorker(url?: string): Promise<WorkerCheck> {
   const asked = url && isHhUrl(url) ? url : undefined;
   const flags = await getFlags();
-  const existing = pickHhTab(await listJobTabs(), await getWorkerTabId());
+  const existing = ownWorkTab(await listJobTabs(), await getWorkerTabId());
   if (existing === undefined)
-    return openOnlyHh(asked || HH_HOME);
+    return openOnlyHh(asked || SEARCH);
 
-  const next = asked ?? (flags.keepSession ? undefined : HH_HOME);
+  const next = asked ?? (flags.keepSession ? undefined : SEARCH);
 
   return resumeHh(existing.id, next);
 }
@@ -181,24 +224,30 @@ function httpHref(url: string): string {
 }
 
 async function openOnlyHh(url: string): Promise<WorkerCheck> {
-  const raced = pickHhTab(await listJobTabs(), await getWorkerTabId());
+  const raced = ownWorkTab(await listJobTabs(), await getWorkerTabId());
   if (raced)
     return resumeHh(raced.id, url);
 
-  return withStayPut(async () => {
+  const previous = await getWorkerTabId();
+  const tabId = await withStayPut(async () => {
     const created = await browser.tabs.create({ url, active: false });
     if (typeof created.id !== 'number')
       throw new Error('не удалось открыть HH');
 
-    await waitTab(created.id);
-
-    return pinWorker(created.id);
+    return created.id;
   }, { keepSpawned: true });
+
+  await wakeWorkerTab(tabId, true);
+  await waitLoaded(tabId);
+  const pinned = await pinWorker(tabId);
+  await releaseOldPin(previous, tabId);
+
+  return pinned;
 }
 
 async function resumeHh(tabId: number, url?: string): Promise<WorkerCheck> {
   const pinned = await pinWorker(tabId);
-  if (url === undefined)
+  if (url === undefined || pinned.ok === false)
     return pinned;
 
   const here = await browser.tabs.get(tabId).catch(() => null);
@@ -206,28 +255,59 @@ async function resumeHh(tabId: number, url?: string): Promise<WorkerCheck> {
   if (current === url)
     return pinned;
 
+  await wakeWorkerTab(tabId);
+  const loaded = waitTab(tabId);
   await browser.tabs.update(tabId, { url, active: false });
-  await waitTab(tabId);
+  await loaded;
 
   return checkWorker();
 }
 
-async function dropExtraHhPins(keepId: number): Promise<void> {
-  const rows = await listJobTabs();
-  for (const row of rows) {
-    if (row.id === keepId || row.hh === false || row.pinned === false)
-      continue;
+async function releaseOldPin(previous: number | null, nextId: number): Promise<void> {
+  if (typeof previous !== 'number' || previous === nextId)
+    return;
 
-    await browser.tabs.update(row.id, { pinned: false }).catch(() => {});
+  const tab = await browser.tabs.get(previous).catch(() => null);
+  const url = tab?.url || tab?.pendingUrl || '';
+  if (tab?.pinned !== true || isHhUrl(url) === false)
+    return;
+
+  await browser.tabs.update(previous, { pinned: false }).catch(() => {});
+}
+
+function ownWorkTab(rows: TabRow[], workerId: number | null): TabRow | undefined {
+  if (workerId === null)
+    return undefined;
+
+  const row = rows.find(item => item.id === workerId);
+  if (row === undefined || isHhUrl(row.url) === false || userHh(row.url))
+    return undefined;
+
+  return row;
+}
+
+function userHh(url: string): boolean {
+  try {
+    return USER_PAGE.test(new URL(url).pathname);
+  }
+  catch {
+    return false;
   }
 }
 
-function pickHhTab(rows: TabRow[], workerId: number | null): TabRow | undefined {
-  const hh = rows.filter(row => row.hh);
-  const stored = hh.find(row => row.id === workerId);
-  const pinned = hh.find(row => row.pinned);
+function asleep(tab: chrome.tabs.Tab): boolean {
+  if (tab.discarded === true || tab.frozen === true)
+    return true;
 
-  return stored || pinned || hh[0];
+  return tab.status !== 'complete' && tab.status !== 'loading';
+}
+
+async function waitLoaded(tabId: number): Promise<void> {
+  const tab = await browser.tabs.get(tabId).catch(() => null);
+  if (tab !== null && tab.status === 'complete' && tab.discarded !== true && tab.frozen !== true)
+    return;
+
+  await waitTab(tabId);
 }
 
 export async function waitTab(tabId: number, timeoutMs = 10_000): Promise<void> {

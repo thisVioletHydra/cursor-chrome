@@ -7,7 +7,7 @@ import { clearStuckHang, forgetStuckHang, liveLines, stallStep, stalling, tellPa
 import { pushPilot } from './pilot-switch';
 import { forgetHangReport, guardCaptcha, queueBusy, readPausedUntil, readQueueReport, runQueue } from './queue-run';
 import { pullSavedResume } from './resume-pull';
-import { checkWorker, listJobTabs, openHhBackground, openOnHhTab, pinWorker } from './worker-tab';
+import { checkWorker, closePinnedHh, listJobTabs, openHhBackground, openOnHhTab, pinWorker } from './worker-tab';
 import { ensurePinnedHh, openPinnedWorker } from './worker-open';
 
 type Reply = (value?: unknown) => void;
@@ -240,6 +240,9 @@ async function writeFlags(patch: { hideJunk?: boolean; keepSession?: boolean; sh
   }
 
   const next = await setFlags(patch);
+  if (patch.autoQueue === false)
+    await closePinnedHh();
+
   if ('autoQueue' in patch)
     await forgetStuckHang();
 

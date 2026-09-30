@@ -1,6 +1,7 @@
+import { getFlags } from './flags';
 import { tabShowsCaptcha } from './hh-captcha';
 import { hangHalted, tellPage, waitBeforeLoad, whileSearching } from './page-log';
-import { getWorkerTabId, isHhUrl, requireWorkerTab, waitTab } from './worker-tab';
+import { getWorkerTabId, isBotWorkUrl, isHhUrl, openBotSearch, requireWorkerTab, wakeWorkerTab, waitTab } from './worker-tab';
 import { browser } from '../browser-host';
 
 const FIRST_PAGE = 0;
@@ -54,7 +55,7 @@ export async function collectVacancies(
   if (pinned !== null && await tabShowsCaptcha(pinned))
     return miss(true, false, '');
 
-  const tabId = await searchTab();
+  const tabId = await searchTab(queries);
   if (sawCaptcha)
     return miss(true, false, '');
 
@@ -276,28 +277,63 @@ function searchUrl(query: string, page: number): string {
   return url.toString();
 }
 
-async function searchTab(): Promise<number | null> {
-  let tab: chrome.tabs.Tab;
-  try {
-    tab = await requireWorkerTab();
-  }
-  catch {
-    return null;
-  }
+const FRONT_QUERY = /frontend|front[\s-]?end|фронтенд|фронтэнд|vue|react/i;
 
-  if (typeof tab.id !== 'number')
+export function huntSearchUrl(queries: readonly string[]): string {
+  const front = queries.find(query => FRONT_QUERY.test(query));
+  const text = (front ?? queries.find(query => query.trim().length > 0))?.trim();
+  if (text === undefined || text.length === 0)
+    return SEARCH;
+
+  return searchUrl(text, FIRST_PAGE);
+}
+
+async function searchTab(queries: readonly string[]): Promise<number | null> {
+  const live = await liveWorker();
+  const tabId = live ?? await openSearch(queries);
+  if (tabId === null)
     return null;
 
-  const url = tab.url || tab.pendingUrl || '';
+  await wakeWorkerTab(tabId);
+  const tab = await browser.tabs.get(tabId).catch(() => null);
+  const url = tab?.url || tab?.pendingUrl || '';
   if (isHhUrl(url) === false)
     return null;
 
   if (onHhRoot(url))
+    return tabId;
+
+  await showUrl(tabId, HH_ROOT);
+
+  return tabId;
+}
+
+async function liveWorker(): Promise<number | null> {
+  try {
+    const tab = await requireWorkerTab();
+    if (typeof tab.id !== 'number')
+      return null;
+
+    const url = tab.url || tab.pendingUrl || '';
+    if (isBotWorkUrl(url) === false)
+      return null;
+
     return tab.id;
+  }
+  catch {
+    return null;
+  }
+}
 
-  await showUrl(tab.id, HH_ROOT);
+async function openSearch(queries: readonly string[]): Promise<number | null> {
+  if ((await getFlags()).autoQueue !== true)
+    return null;
 
-  return tab.id;
+  const opened = await openBotSearch(huntSearchUrl(queries));
+  if (opened.ok === false || typeof opened.tabId !== 'number')
+    return null;
+
+  return opened.tabId;
 }
 
 function onHhRoot(url: string): boolean {
@@ -311,6 +347,7 @@ function onHhRoot(url: string): boolean {
 
 // Service worker fetch не видит сессию вкладки. Запрос делает сама страница hh.ru.
 async function pull(tabId: number, url: string): Promise<{ url: string; html: string } | null> {
+  await wakeWorkerTab(tabId);
   if (await tabShowsCaptcha(tabId)) {
     sawCaptcha = true;
 
@@ -413,6 +450,7 @@ async function showUrl(tabId: number, url: string, paced = true): Promise<void> 
     return;
   }
 
+  await wakeWorkerTab(tabId);
   const tab = await browser.tabs.get(tabId).catch(() => null);
   const loaded = waitTab(tabId, 15_000);
   await within(browser.tabs.update(tabId, tab?.active === true ? { url } : { url, active: false }), PAGE_MS);

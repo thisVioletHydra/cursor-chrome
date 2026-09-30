@@ -2,6 +2,7 @@ import { getSyncKey, getSyncUrl } from './apply-log';
 import { getFlags, setFlags } from './flags';
 import { noteHours } from './hours-flag';
 import { loadPace, waitMs } from './pace';
+import { closePinnedHh } from './worker-tab';
 import { browser } from '../browser-host';
 
 const MAX_LINES = 12;
@@ -129,6 +130,7 @@ export async function haltHang(): Promise<void> {
 
   stall = undefined;
   await setFlags({ autoQueue: false });
+  await closePinnedHh();
   if (onHangClear !== undefined)
     await onHangClear();
 }

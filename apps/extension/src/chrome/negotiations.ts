@@ -1,4 +1,5 @@
 import { getSyncKey } from './apply-log';
+import { getFlags } from './flags';
 import { tabShowsCaptcha } from './hh-captcha';
 import { requireTabId } from './inject';
 import { captchaHolding, syncBase } from './queue-run';
@@ -59,6 +60,9 @@ export async function syncNegotiations(): Promise<NegotiationsSync> {
 
 async function workerTabId(): Promise<number> {
   const tab = await requireWorkerTab().catch(async () => {
+    if ((await getFlags()).autoQueue !== true)
+      throw new Error('выключено');
+
     await adoptHhWorker(NEGOTIATIONS);
 
     return requireWorkerTab();
