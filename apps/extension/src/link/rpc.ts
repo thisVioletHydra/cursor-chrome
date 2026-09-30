@@ -223,7 +223,7 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
     return true;
   },
   'set-flags': (message, reply) => {
-    const patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean } = {};
+    const patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; showMachine?: boolean; autoQueue?: boolean } = {};
     if ('hideJunk' in message)
       patch.hideJunk = message.hideJunk === true;
 
@@ -232,6 +232,9 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
 
     if ('showPop' in message)
       patch.showPop = message.showPop === true;
+
+    if ('showMachine' in message)
+      patch.showMachine = message.showMachine === true;
 
     if ('autoQueue' in message)
       patch.autoQueue = message.autoQueue === true;
@@ -253,10 +256,10 @@ function touchAction(value: unknown): 'popup' | 'pin' | 'wake' | 'restore' | 'di
 }
 
 async function flagsAfter(
-  patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean },
+  patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; showMachine?: boolean; autoQueue?: boolean },
   on: boolean,
-): Promise<{ hideJunk: boolean; keepSession: boolean; showPop: boolean; autoQueue: boolean }> {
-  const rest: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean } = {};
+): Promise<{ hideJunk: boolean; keepSession: boolean; showPop: boolean; showMachine: boolean; autoQueue: boolean }> {
+  const rest: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; showMachine?: boolean } = {};
   if ('hideJunk' in patch)
     rest.hideJunk = patch.hideJunk;
 
@@ -266,13 +269,16 @@ async function flagsAfter(
   if ('showPop' in patch)
     rest.showPop = patch.showPop;
 
-  if ('hideJunk' in rest || 'keepSession' in rest || 'showPop' in rest)
+  if ('showMachine' in patch)
+    rest.showMachine = patch.showMachine;
+
+  if ('hideJunk' in rest || 'keepSession' in rest || 'showPop' in rest || 'showMachine' in rest)
     await setFlags(rest);
 
   return { ...await getFlags(), autoQueue: on };
 }
 
-async function writeFlags(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean }): Promise<unknown> {
+async function writeFlags(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; showMachine?: boolean; autoQueue?: boolean }): Promise<unknown> {
   if (patch.autoQueue === true)
     return enablePilot(patch);
 
@@ -282,7 +288,7 @@ async function writeFlags(patch: { hideJunk?: boolean; keepSession?: boolean; sh
   return setFlags(patch);
 }
 
-async function enablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean }): Promise<unknown> {
+async function enablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; showMachine?: boolean; autoQueue?: boolean }): Promise<unknown> {
   if (await guardCaptcha(true)) {
     await clearPilotPending();
     await clearPilotLink();
@@ -314,7 +320,7 @@ async function enablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; s
   return { ...next, error: pushed.error };
 }
 
-async function disablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; autoQueue?: boolean }): Promise<unknown> {
+async function disablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; showMachine?: boolean; autoQueue?: boolean }): Promise<unknown> {
   await setPilotPending('off');
   await markPilotStop();
   const decided = await applyPilot({ type: 'stop', reason: 'user' });

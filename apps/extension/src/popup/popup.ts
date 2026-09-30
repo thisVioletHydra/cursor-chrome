@@ -66,6 +66,7 @@ const connectErrorEl = document.getElementById('connect-error') as HTMLElement |
 const hideJunkEl = document.getElementById('flag-hide-junk') as HTMLInputElement | null;
 const showPopEl = document.getElementById('flag-show-pop') as HTMLInputElement | null;
 const keepSessionEl = document.getElementById('flag-keep-session') as HTMLInputElement | null;
+const showMachineEl = document.getElementById('flag-show-machine') as HTMLInputElement | null;
 const workerUrlForm = document.getElementById('worker-url-form') as HTMLFormElement | null;
 
 if (verEl)
@@ -160,6 +161,10 @@ keepSessionEl?.addEventListener('change', () => {
   void browser.runtime.sendMessage({ type: 'set-flags', keepSession: keepSessionEl.checked === true });
 });
 
+showMachineEl?.addEventListener('change', () => {
+  void browser.runtime.sendMessage({ type: 'set-flags', showMachine: showMachineEl.checked === true });
+});
+
 browser.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local')
     return;
@@ -174,6 +179,7 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (changes.flags === undefined)
     return;
 
+  paintMachineBox(changes.flags.newValue);
   const next = changes.flags.newValue;
   if (typeof next !== 'object' || next === null || !('autoQueue' in next))
     return;
@@ -554,6 +560,17 @@ type HhOpen = {
   status?: string;
   url?: string;
 };
+
+function paintMachineBox(value: unknown): void {
+  if (showMachineEl === null || typeof value !== 'object' || value === null)
+    return;
+
+  const on = 'showMachine' in value && value.showMachine === true;
+  if (showMachineEl.checked === on)
+    return;
+
+  showMachineEl.checked = on;
+}
 
 function paintPilotLink(value: unknown): void {
   const text = typeof value === 'string' ? value : '';
@@ -1004,6 +1021,7 @@ async function bootSettings(): Promise<void> {
     hideJunk?: boolean;
     keepSession?: boolean;
     showPop?: boolean;
+    showMachine?: boolean;
     autoQueue?: boolean;
   };
   autoOn = flags?.autoQueue === true;
@@ -1011,6 +1029,7 @@ async function bootSettings(): Promise<void> {
     [hideJunkEl, flags?.hideJunk === true],
     [keepSessionEl, flags?.keepSession === true],
     [showPopEl, flags?.showPop !== false],
+    [showMachineEl, flags?.showMachine === true],
   ];
   for (const [element, on] of boxes) {
     if (element)

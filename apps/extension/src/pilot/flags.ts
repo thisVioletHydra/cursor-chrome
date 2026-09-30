@@ -7,11 +7,12 @@ export type Flags = {
   hideJunk: boolean;
   keepSession: boolean;
   showPop: boolean;
+  showMachine: boolean;
   autoQueue: boolean;
 };
 
 const KEY = 'flags';
-const DEFAULTS: Flags = { hideJunk: false, keepSession: false, showPop: true, autoQueue: false };
+const DEFAULTS: Flags = { hideJunk: false, keepSession: false, showPop: true, showMachine: false, autoQueue: false };
 
 export async function getFlags(): Promise<Flags> {
   const stored = await browser.storage.local.get(KEY);
@@ -19,12 +20,13 @@ export async function getFlags(): Promise<Flags> {
   if (!raw || typeof raw !== 'object')
     return { ...DEFAULTS };
 
-  const row = raw as { hideJunk?: unknown; keepSession?: unknown; showPop?: unknown; autoQueue?: unknown };
+  const row = raw as { hideJunk?: unknown; keepSession?: unknown; showPop?: unknown; showMachine?: unknown; autoQueue?: unknown };
 
   return {
     hideJunk: row.hideJunk === true,
     keepSession: row.keepSession === true,
     showPop: row.showPop !== false,
+    showMachine: row.showMachine === true,
     autoQueue: row.autoQueue === true,
   };
 }

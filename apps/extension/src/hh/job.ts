@@ -1,5 +1,6 @@
 import { scanApplied, watchToasts } from './apply-watch';
 import { keepLiveLog, mountLiveLog } from './live-log';
+import { keepMachine, mountMachine } from './machine-hud';
 import { pullRemoteNegotiations, scanNegotiations } from './negotiations';
 import { mountOverlay, refreshOverlay } from './overlay';
 import { scanScreenQuestions, watchScreenQuestions } from './screen-questions';
@@ -15,6 +16,7 @@ export function startHhJob(): void {
 
   mountOverlay();
   mountLiveLog();
+  mountMachine();
   watchToasts();
   watchScreenQuestions();
   void bootHistory();
@@ -23,6 +25,7 @@ export function startHhJob(): void {
       mountOverlay();
 
     keepLiveLog();
+    keepMachine();
     scanApplied();
     scanScreenQuestions();
     scanNegotiations();
