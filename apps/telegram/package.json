@@ -6,10 +6,11 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "start": "node --experimental-strip-types src/index.ts"
+    "start": "tsx src/index.ts"
   },
   "dependencies": {
-    "@cursor-chrome/hh": "workspace:*"
+    "@cursor-chrome/hh": "workspace:*",
+    "tsx": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
