@@ -1,6 +1,6 @@
 import type { Hunt, QueueItem } from './admin-api';
 
-import { dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, postFound, rememberPage, seenAmong } from './admin-api';
+import { dropKnown, dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, markRead, postFound, rememberPage, seenAmong } from './admin-api';
 import { getSyncKey, getSyncUrl } from './apply-log';
 import { getFlags, setFlags } from './flags';
 import { pinnedCaptcha, tabShowsCaptcha } from './hh-captcha';
@@ -304,7 +304,7 @@ async function drain(): Promise<QueueRun> {
   return run;
 }
 
-type ApplyPass = { started: boolean; stop: boolean; reason: string; held?: boolean };
+type ApplyPass = { started: boolean; stop: boolean; reason: string; held?: boolean; seen?: boolean };
 
 async function applyPending(base: string, key: string, run: QueueRun): Promise<ApplyPass> {
   const seen = new Set<string>();
@@ -377,20 +377,40 @@ async function applyPending(base: string, key: string, run: QueueRun): Promise<A
 
 async function drainSaved(base: string, key: string, run: QueueRun): Promise<ApplyPass> {
   let started = false;
+  let skipped = 0;
 
   while (hoursOpen()) {
     if (hangHalted())
-      return { started, stop: true, reason: 'расширение зависло' };
+      return noteSkip(skipped, { started, stop: true, reason: 'расширение зависло' });
 
     const links = await fetchLinks(base, key);
     if (links === null)
-      return { started, stop: true, reason: 'админка не отдала очередь' };
+      return noteSkip(skipped, { started, stop: true, reason: 'админка не отдала очередь' });
 
-    const link = links[0];
+    if (links.length === 0)
+      return noteSkip(skipped, { started, stop: false, reason: '' });
+
+    const known = await dropKnown(base, key, links.map(link => link.id));
+    if (known === null)
+      return noteSkip(skipped, { started, stop: true, reason: 'админка не отдала очередь' });
+
+    const blocked = new Set(known);
+    skipped += known.length;
+    const link = links.find(row => blocked.has(row.id) === false);
     if (link === undefined)
-      return { started, stop: false, reason: '' };
+      continue;
+
+    if (skipped > 0) {
+      await tellPage(`в списке уже видели, ${skipped}`);
+      skipped = 0;
+    }
 
     const step = await takeLink(base, key, run, link);
+    if (step.seen === true) {
+      skipped += 1;
+      continue;
+    }
+
     if (step.started)
       started = true;
 
@@ -401,7 +421,14 @@ async function drainSaved(base: string, key: string, run: QueueRun): Promise<App
       return { started, stop: false, reason: '', held: true };
   }
 
-  return { started, stop: hoursOpen() === false, reason: hoursOpen() ? '' : 'рабочие часы закрыты' };
+  return noteSkip(skipped, { started, stop: hoursOpen() === false, reason: hoursOpen() ? '' : 'рабочие часы закрыты' });
+}
+
+async function noteSkip(count: number, pass: ApplyPass): Promise<ApplyPass> {
+  if (count > 0)
+    await tellPage(`в списке уже видели, ${count}`);
+
+  return pass;
 }
 
 async function takeLink(base: string, key: string, run: QueueRun, link: { id: string; url: string }): Promise<ApplyPass> {
@@ -415,9 +442,13 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
   if (await cycleOpen() === false)
     return { started: false, stop: false, reason: '', held: true };
 
-  const shown = await showVacancy(link.url);
-  if ('tabId' in shown === false)
+  const shown = await showVacancy(link.url, { base, key, id: link.id });
+  if ('tabId' in shown === false) {
+    if ((shown.reason || '') === 'уже видели')
+      return { started: false, stop: false, reason: '', seen: true };
+
     return stallLink(base, key, shown);
+  }
 
   const card = await readVacancyPage(shown.tabId, link.id, link.url);
   if (card === null) {
@@ -651,7 +682,7 @@ function runOf(raw: unknown): QueueRun | null {
   return { ok, sent, human, skipped, left, reason, lines };
 }
 
-async function showVacancy(url: string): Promise<{ tabId: number } | ApplyReply> {
+async function showVacancy(url: string, read?: { base: string; key: string; id: string }): Promise<{ tabId: number } | ApplyReply> {
   if (hangHalted())
     return { status: 'skip', reason: 'расширение зависло' };
 
@@ -670,6 +701,15 @@ async function showVacancy(url: string): Promise<{ tabId: number } | ApplyReply>
   const tabId = requireTabId(tab);
   if (await tabShowsCaptcha(tabId))
     return { status: 'skip', reason: 'капча' };
+
+  if (read !== undefined) {
+    const open = await markRead(read.base, read.key, read.id);
+    if (open === null)
+      return { status: 'skip', reason: 'админка не отдала очередь' };
+
+    if (open === false)
+      return { status: 'skip', reason: 'уже видели' };
+  }
 
   const loaded = waitTab(tabId, 15_000);
   await browser.tabs.update(tabId, { url, active: false });

@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 
-import { COVER_LETTER, dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, keepSearchTitle, knownAmong, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readQueue, readState, rememberSearchPage, searchPages, serveQueries, splitQueries, takePilotStart, workHours, writeState } from '@cursor-chrome/hh';
+import { COVER_LETTER, busyAmong, dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, keepSearchTitle, knownAmong, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readState, remember, rememberSearchPage, searchPages, serveQueries, splitQueries, takePilotStart, workHours, writeState } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { DEFAULT_QUERY, readAccount } from '$lib/server/secrets';
@@ -50,9 +50,34 @@ export const POST: RequestHandler = async ({ request }) => {
   if (login === null)
     return json({ error: 'нет' }, { status: 401 });
 
-  const body = await request.json().catch(() => null) as { ids?: unknown; links?: unknown; drop?: unknown; cursor?: unknown; resetPages?: unknown } | null;
+  const body = await request.json().catch(() => null) as { ids?: unknown; links?: unknown; drop?: unknown; cursor?: unknown; resetPages?: unknown; gate?: unknown; opened?: unknown } | null;
   if (body === null)
     return json({ error: 'пустое тело' }, { status: 400 });
+
+  if (body.gate !== undefined) {
+    const known = await knownIds(pageIds(body.gate));
+    if (known.length > 0)
+      await forgetLinks(known);
+
+    return json({ known });
+  }
+
+  if (body.opened !== undefined) {
+    const id = pageIds([body.opened])[0];
+    if (id === undefined)
+      return json({ open: false });
+
+    const known = await knownIds([id]);
+    if (known.length > 0) {
+      await forgetLinks([id]);
+
+      return json({ open: false });
+    }
+
+    await remember([id]);
+
+    return json({ open: true });
+  }
 
   const cursor = cursorOf(body.cursor);
   if (body.ids === undefined && body.links === undefined) {
@@ -72,7 +97,7 @@ export const POST: RequestHandler = async ({ request }) => {
   const ids = pageIds(body.ids);
   const links = pageLinks(body.links).filter(link => keepSearchTitle(link.title, rulesOf(account.hhRules).stopWords));
   const asked = ids.length > 0 ? ids : links.map(link => link.id);
-  const seen = await seenOnPage(asked);
+  const seen = await knownIds(asked);
   const seenSet = new Set(seen);
   const held = new Set(await heldAmong(links.map(link => link.id)));
   const fresh = links.filter(link => seenSet.has(link.id) === false && held.has(link.id) === false);
@@ -153,14 +178,9 @@ function pageQueries(value: unknown): string[] {
   return queries;
 }
 
-async function seenOnPage(ids: string[]): Promise<string[]> {
-  const [known, queue] = await Promise.all([knownAmong(ids), readQueue()]);
-  const hit = new Set(known);
-  const asked = new Set(ids);
-  for (const row of queue) {
-    if (asked.has(row.id))
-      hit.add(row.id);
-  }
+async function knownIds(ids: string[]): Promise<string[]> {
+  const [known, busy] = await Promise.all([knownAmong(ids), busyAmong(ids)]);
+  const hit = new Set<string>([...known, ...busy]);
 
   return ids.filter(id => hit.has(id));
 }

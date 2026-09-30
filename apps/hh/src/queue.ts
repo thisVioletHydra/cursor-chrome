@@ -82,6 +82,22 @@ export async function pendingCount(): Promise<number> {
   return queue.filter(row => row.status === 'pending').length;
 }
 
+const BUSY: ReadonlySet<QueueStatus> = new Set(['pending', 'sent', 'needsHuman']);
+
+export async function busyAmong(ids: readonly string[]): Promise<string[]> {
+  const asked = new Set(ids);
+  if (asked.size === 0)
+    return [];
+
+  const hit = new Set<string>();
+  for (const row of await readQueue()) {
+    if (asked.has(row.id) && BUSY.has(row.status))
+      hit.add(row.id);
+  }
+
+  return ids.filter(id => hit.has(id));
+}
+
 export async function markDone(id: string, status: Exclude<QueueStatus, 'pending'>, hints: string[] = []): Promise<QueueItem | null> {
   const queue = await readQueue();
   const found = queue.find(row => row.id === id);

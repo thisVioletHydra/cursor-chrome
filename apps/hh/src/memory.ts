@@ -50,7 +50,12 @@ export function heldAmong(ids: readonly string[]): Promise<string[]> {
 }
 
 export function keepLinks(rows: readonly { id: string; url: string; title: string }[]): Promise<string[]> {
-  return turn(async () => insertLinks(rows, Date.now()));
+  return turn(async () => {
+    const { busyAmong } = await import('./queue.ts');
+    const busy = new Set(await busyAmong(rows.map(row => row.id)));
+
+    return insertLinks(rows.filter(row => busy.has(row.id) === false), Date.now());
+  });
 }
 
 export function readLinks(limit: number): Promise<{ id: string; url: string; title: string }[]> {

@@ -18,7 +18,7 @@ export { serveQueries } from './mix.ts';
 export type { QueryCursor } from './mix.ts';
 export { splitQueries, suggestQueries } from './queries.ts';
 export { fitsTitle } from './title-fit.ts';
-export { applyOutcomes, markDone, markFailed, pending, pendingCount, readQueue } from './queue.ts';
+export { applyOutcomes, busyAmong, markDone, markFailed, pending, pendingCount, readQueue } from './queue.ts';
 export type { Outcome, OutcomeChange, QueueItem, QueueStatus } from './queue.ts';
 export { scan } from './scan.ts';
 export { scanBlock, startTicker } from './scheduler.ts';

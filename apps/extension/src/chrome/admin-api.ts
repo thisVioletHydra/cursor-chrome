@@ -112,6 +112,47 @@ export async function rememberPage(base: string, key: string, cursor: { query: s
   }
 }
 
+export async function dropKnown(base: string, key: string, ids: readonly string[]): Promise<string[] | null> {
+  if (ids.length === 0)
+    return [];
+
+  try {
+    const res = await fetch(`${base}/api/queue`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ gate: ids }),
+    });
+    if (res.ok === false)
+      return null;
+
+    const body = await res.json() as { known?: unknown };
+
+    return idsOf(body.known);
+  }
+  catch {
+    return null;
+  }
+}
+
+export async function markRead(base: string, key: string, id: string): Promise<boolean | null> {
+  try {
+    const res = await fetch(`${base}/api/queue`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ opened: id }),
+    });
+    if (res.ok === false)
+      return null;
+
+    const body = await res.json() as { open?: unknown };
+
+    return body.open === true;
+  }
+  catch {
+    return null;
+  }
+}
+
 export async function dropLinks(base: string, key: string, ids: readonly string[]): Promise<boolean> {
   if (ids.length === 0)
     return true;
