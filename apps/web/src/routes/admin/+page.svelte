@@ -24,7 +24,7 @@ let copyNote = $state(COPY_LABEL);
 let copyTone = $state<'idle' | 'ok' | 'fail'>('idle');
 let copyTimer: ReturnType<typeof setTimeout> | undefined;
 let now = $state(Date.now());
-let board = $state<'accepted' | 'hidden'>('accepted');
+let board = $state<'accepted' | 'hidden' | 'waiting'>('accepted');
 
 const copyClass = $derived(
   copyTone === 'ok'
@@ -379,7 +379,7 @@ const figures = $derived([
   { label: 'Скрытые', value: stats.hidden },
 ]);
 
-function showBoard(next: 'accepted' | 'hidden'): void {
+function showBoard(next: 'accepted' | 'hidden' | 'waiting'): void {
   board = next;
 }
 
@@ -426,7 +426,6 @@ const checks = $derived([
   { ok: data.ready.telegram, label: 'Токен бота', miss: 'Токена нет. Вставь его в', href: '/admin/telegram', link: 'Telegram' },
   { ok: data.ready.model, label: 'Хотя бы одна модель', miss: 'Моделей нет. Добавь ключ в', href: '/admin/model', link: 'Модель' },
   { ok: data.ready.resume, label: 'Резюме привязано', miss: 'Резюме не привязано. Вставь ссылку в', href: '/admin/hh', link: 'HeadHunter' },
-  { ok: data.ready.queries, label: 'Запросы поиска сохранены', miss: 'Запросы не сохранены. Запиши их в', href: '/admin/hh', link: 'HeadHunter' },
   { ok: data.ready.extension, label: 'Ссылка расширения выпущена', miss: 'Ссылки нет. Выпусти её в', href: '/admin/extension', link: 'Extension' },
   { ok: data.ready.live, label: 'Боевой режим', miss: 'Боевой режим выключен. Включи его кнопкой ниже.', href: '', link: '' },
 ]);
@@ -609,10 +608,16 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
       aria-pressed={board === 'hidden'}
       onclick={() => showBoard('hidden')}
     >Скрытые</button>
+    <button
+      class="{chipClass} {board === 'waiting' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
+      type="button"
+      aria-pressed={board === 'waiting'}
+      onclick={() => showBoard('waiting')}
+    >Ждуны</button>
   </div>
   <div class="max-h-[26rem] overflow-x-hidden overflow-y-auto rounded-2xl border border-white/8 bg-[#151922]">
     {#if board === 'accepted'}
-      {#if stats.rows.length > 0}
+      {#if stats.rows.some(row => row.status !== 'needsHuman')}
         <table class="table">
           <thead class="sticky top-0 z-10">
             <tr class="bg-[#151922] text-xs text-zinc-500">
@@ -622,7 +627,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
             </tr>
           </thead>
           <tbody>
-            {#each stats.rows as row (row.id)}
+            {#each stats.rows.filter(row => row.status !== 'needsHuman') as row (row.id)}
               <tr>
                 <td class="max-w-xs truncate">
                   <a class="text-zinc-200 underline-offset-4 hover:underline" href={row.url} target="_blank" rel="noreferrer">{plainLabel(row.company)} · {plainLabel(row.title)}</a>
@@ -635,6 +640,31 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
         </table>
       {:else}
         <p class="px-5 py-8 text-sm text-zinc-500">Очередь пустая.</p>
+      {/if}
+    {:else if board === 'waiting'}
+      {#if stats.rows.some(row => row.status === 'needsHuman')}
+        <table class="table">
+          <thead class="sticky top-0 z-10">
+            <tr class="bg-[#151922] text-xs text-zinc-500">
+              <th>Вакансия</th>
+              <th>Статус</th>
+              <th>Когда</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each stats.rows.filter(row => row.status === 'needsHuman') as row (row.id)}
+              <tr>
+                <td class="max-w-xs truncate">
+                  <a class="text-zinc-200 underline-offset-4 hover:underline" href={row.url} target="_blank" rel="noreferrer">{plainLabel(row.company)} · {plainLabel(row.title)}</a>
+                </td>
+                <td><span class="badge badge-sm {statusBadge[row.status] ?? 'badge-ghost'}">{statusText[row.status] ?? row.status}</span></td>
+                <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {:else}
+        <p class="px-5 py-8 text-sm text-zinc-500">Ждунов нет.</p>
       {/if}
     {:else if stats.passed.length > 0}
       <table class="table">

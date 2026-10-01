@@ -28,7 +28,7 @@ async function statsOf(preview: boolean) {
 
   const [queue, state, judged, hidden, passed] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount(), readPassed()]);
   const day = moscowDay();
-  const rows = queue.slice(0, 20).map(row => ({
+  const rows = [...queue.filter(row => row.status === 'needsHuman'), ...queue.filter(row => row.status !== 'needsHuman')].slice(0, 40).map(row => ({
     id: row.id,
     company: row.company,
     title: row.title,

@@ -13,6 +13,9 @@ import { browser } from '../browser-host';
 
 const HIDE_REASON = 'не подходит профессия';
 const FIRST_PAGE = 0;
+const FEED_KEY = 'лента';
+const FEED = 'https://hh.ru/search/vacancy?enable_snippets=true&ored_clusters=true&search_period=7&hhtmFromLabel=search_order_button&hhtmFrom=vacancy_search_list';
+let lastFeedPage = FIRST_PAGE;
 const endedQuery = new Set<string>();
 let endedQuiet = false;
 let sawCaptcha = false;
@@ -73,6 +76,7 @@ export async function collectVacancies(
   noteHidden: (row: HiddenMark) => Promise<void>,
   plan: SearchPlan = { focus: '', depth: 1, phase: 'cover' },
 ): Promise<SearchHit> {
+  void plan;
   sawCaptcha = false;
   endedQuery.clear();
   const pinned = await getWorkerTabId();
@@ -148,6 +152,8 @@ export async function collectVacancies(
       const landed = explicitPage(pulled.url);
       const here = landed === null ? page : landed;
       seenPage = here;
+      if (query === FEED_KEY)
+        lastFeedPage = here;
       const batch = cardsOf(serpHtml(pulled.html));
       const nextPage = await listedAfter(tabId, pulled.html, here, batch.length);
       if (nextPage === null)
@@ -159,7 +165,7 @@ export async function collectVacancies(
       if (batch.length === 0)
         return finish(query, searchStep({ saved: 0, hasNext: more }), more);
 
-      const fitting = batch.filter(card => fitsTitle(card.title, queries));
+      const fitting = query === FEED_KEY ? batch : batch.filter(card => fitsTitle(card.title, queries));
       const marks = await knownOnPage(
         batch.map(card => card.id),
         fitting.map(card => ({ id: card.id, url: card.url, title: card.title })),
@@ -213,9 +219,9 @@ export async function collectVacancies(
       await tellPage('не прочиталась страница hh');
     }
 
-    const focus = (plan.focus.trim() || queries.find(query => query.trim().length > 0) || '').trim();
-    const phase = plan.phase === 'deep' ? 'deep' : 'cover';
-    const depth = phase === 'cover' ? 1 : Math.min(3, Math.max(1, Math.floor(plan.depth) || 1));
+    const focus = FEED_KEY;
+    const phase = 'cover';
+    const depth = 1;
     if (focus.length === 0)
       return false;
 
@@ -350,12 +356,26 @@ function miss(captcha: boolean, login: boolean, reason: string, read = 0): Searc
 }
 
 function searchUrl(query: string, page: number): string {
+  if (query === FEED_KEY)
+    return putSearchPage(FEED, page);
+
   const url = new URL(SEARCH);
   url.searchParams.set('text', query);
   url.searchParams.set('search_period', '3');
   url.searchParams.set('order_by', 'publication_time');
 
   return putSearchPage(url.toString(), page);
+}
+
+export async function hideOnFeed(tabId: number, id: string, note: (row: HiddenMark) => Promise<void>): Promise<boolean> {
+  await showUrl(tabId, searchUrl(FEED_KEY, lastFeedPage));
+  const hit = await settleHide(tabId, id);
+  if (hit !== 'done')
+    return hit !== 'stuck';
+
+  await note({ id, reason: HIDE_REASON, title: '', company: '' });
+
+  return true;
 }
 
 async function listedAfter(tabId: number, html: string, page: number, cards: number): Promise<number | null> {
@@ -579,15 +599,10 @@ function resumePath(url: string): boolean {
   }
 }
 
-const FRONT_QUERY = /frontend|front[\s-]?end|фронтенд|фронтэнд|vue|react/i;
-
 export function huntSearchUrl(queries: readonly string[]): string {
-  const front = queries.find(query => FRONT_QUERY.test(query));
-  const text = (front ?? queries.find(query => query.trim().length > 0))?.trim();
-  if (text === undefined || text.length === 0)
-    return SEARCH;
+  void queries;
 
-  return searchUrl(text, FIRST_PAGE);
+  return putSearchPage(FEED, FIRST_PAGE);
 }
 
 async function searchTab(queries: readonly string[]): Promise<number | null> {

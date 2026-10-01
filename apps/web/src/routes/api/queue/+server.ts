@@ -1,10 +1,10 @@
 import type { State } from '@cursor-chrome/hh';
 import type { RequestHandler } from './$types';
 
-import { COVER_LETTER, HIDE_REASON, busyAmong, dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, moscowDay, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readState, remember, rememberSearchPage, searchPages, searchTitleSkip, splitQueries, stepWalk, takePilotStart, walkFrom, workHours, writeState } from '@cursor-chrome/hh';
+import { COVER_LETTER, HIDE_REASON, busyAmong, dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, moscowDay, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readState, remember, rememberSearchPage, searchPages, searchTitleSkip, stepWalk, takePilotStart, walkFrom, workHours, writeState } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
-import { DEFAULT_QUERY, readAccount } from '$lib/server/secrets';
+import { readAccount } from '$lib/server/secrets';
 
 export const GET: RequestHandler = async ({ request, url }) => {
   const login = await extLogin(request);
@@ -14,7 +14,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
   const [memory, account, loaded] = await Promise.all([readMemory(), readAccount(login), readState()]);
   const state = await walkToday(loaded);
   const letter = account.coverLetter || COVER_LETTER;
-  const saved = splitQueries(account.hhQuery.trim() || DEFAULT_QUERY);
+  const saved = ['лента'];
   const stop = state.hung === true && state.auto === false;
   const auto = state.auto === true;
   const listen = url.searchParams.get('listen') === '1';
@@ -101,7 +101,7 @@ export const POST: RequestHandler = async ({ request }) => {
   const walked = walkNote(body.walk);
   if (walked !== null) {
     const account = await readAccount(login);
-    const saved = splitQueries(account.hhQuery.trim() || DEFAULT_QUERY);
+    const saved = ['лента'];
     const state = await walkToday(await readState());
     const next = stepWalk(walkFrom(state), saved.length, walked.read, walked.done, Math.random());
     await writeState({ walkPhase: next.phase, walkAt: next.at, walkLeft: next.left, walkDay: moscowDay() });

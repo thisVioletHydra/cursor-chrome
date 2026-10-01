@@ -114,7 +114,7 @@ function openResume() {
 
 <section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Фильтрация</h2>
-  <p class="mt-2 text-sm text-zinc-400">Слева что искать, справа что выкинуть. Одна строка — одно слово. В поиск уходит только левая колонка.</p>
+  <p class="mt-2 text-sm text-zinc-400">Поиск по словам выключен. Бот открывает одну ленту hh и идёт по вакансиям сверху вниз. Левая колонка не используется, правая по-прежнему выкидывает.</p>
   {#if queryMessage}
     <p class="mt-3 font-mono text-xs {queryOk ? 'text-emerald-300' : 'text-rose-300'}">{queryMessage}</p>
   {/if}

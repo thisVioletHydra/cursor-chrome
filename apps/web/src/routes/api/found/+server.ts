@@ -1,7 +1,7 @@
 import type { Vacancy } from '@cursor-chrome/hh';
 import type { RequestHandler } from './$types';
 
-import { dayOpen, fitsTitle, LOOK_PER_START, pendingCount, QUEUE_TARGET, readMemory, readState, scan, splitQueries, watchDeath, watchNote, workHours } from '@cursor-chrome/hh';
+import { dayOpen, LOOK_PER_START, pendingCount, QUEUE_TARGET, readMemory, readState, scan, watchDeath, watchNote, workHours } from '@cursor-chrome/hh';
 import { chargeQueued } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
@@ -42,10 +42,7 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ ok: true, added: 0, reason: 'не те id' });
 
   const query = account.hhQuery.trim() || DEFAULT_QUERY;
-  const queries = splitQueries(query);
-  const list = queries.length === 0 ? parsed : parsed.filter(vacancy => fitsTitle(vacancy.title, queries));
-  if (list.length === 0)
-    return json({ ok: true, added: 0, reason: 'нет вакансий по запросу' });
+  const list = parsed;
   let result: Awaited<ReturnType<typeof scan>>;
   try {
     result = await scan({
@@ -84,8 +81,11 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   const reason = added === 0 ? idleReason(result.reports, result.already) : '';
+  const verdict = result.reports.find(report => report.verdict === 'skip')?.verdict
+    ?? result.reports.find(report => report.verdict !== 'apply')?.verdict
+    ?? (added > 0 ? 'apply' : '');
 
-  return json({ ok: true, added, already: result.already, reason });
+  return json({ ok: true, added, already: result.already, reason, verdict });
 }
 
 function closedReason(live: boolean, auto: boolean, hours: boolean, day: boolean, room: boolean): string {

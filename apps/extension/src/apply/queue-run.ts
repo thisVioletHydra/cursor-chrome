@@ -13,7 +13,7 @@ import { applyPilot } from '../pilot/pilot-apply';
 import { markPilotStop } from '../pilot/pilot-stop';
 import { runHhApply } from './hh-apply-cmd';
 import { HIDE_POPUP_STUCK } from '../search/hide-popup';
-import { collectVacancies, readVacancyPage, releaseHidePopup } from '../search/hh-search';
+import { collectVacancies, hideOnFeed, readVacancyPage, releaseHidePopup } from '../search/hh-search';
 import { requireTabId } from '../link/inject';
 import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
@@ -479,8 +479,12 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
   if (dropped === false)
     return { started: false, stop: false, reason: '', held: true };
 
-  if (posted.added === 0)
+  if (posted.added === 0) {
+    if (posted.verdict === 'skip' && 'tabId' in shown && await hideOnFeed(shown.tabId, link.id, row => postHidden(base, key, row)) === false)
+      return { started: false, stop: true, reason: HIDE_POPUP_STUCK };
+
     return { started: false, stop: false, reason: '' };
+  }
 
   const items = await fetchQueue(base, key);
   const item = items?.find(row => row.id === link.id);

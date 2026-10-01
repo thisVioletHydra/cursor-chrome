@@ -27,7 +27,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
       waitingReply: queue.filter(row => row.outcome === 'response').length,
       hidden,
     },
-    rows: queue.slice(0, 20).map(row => ({
+    rows: [...queue.filter(row => row.status === 'needsHuman'), ...queue.filter(row => row.status !== 'needsHuman')].slice(0, 40).map(row => ({
       id: row.id,
       company: row.company,
       title: row.title,
