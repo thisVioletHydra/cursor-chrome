@@ -484,10 +484,13 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
 
   if (posted.added === 0) {
     const why = posted.reason.trim();
-    if (why.length > 0)
-      await tellPage(posted.verdict === 'skip' ? `скип: ${why}` : why);
+    const ignore = posted.verdict === 'skip' || why === 'уже видели';
+    if (ignore)
+      await tellPage(why.length > 0 ? `скип: ${why}` : 'скип');
+    else if (why.length > 0)
+      await tellPage(why);
 
-    if (posted.verdict === 'skip' && 'tabId' in shown && await hideOpenVacancy(shown.tabId, link.id, row => postHidden(base, key, row)) === false)
+    if (ignore && 'tabId' in shown && await hideOpenVacancy(shown.tabId, link.id, row => postHidden(base, key, row)) === false)
       return { started: false, stop: true, reason: HIDE_POPUP_STUCK };
 
     return { started: false, stop: false, reason: '' };
