@@ -5,9 +5,10 @@ import { getFlags } from './flags';
 import { noteHours } from '../apply/hours-flag';
 import { loadPace, waitMs } from '../apply/pace';
 import { reconcilePilot } from './pilot-heal';
-import { clearPilotLink, clearPilotPending, noteGateway, notePilotAnswer, noteServerSilent, readPilotPending, remoteStopCounts } from './pilot-link';
+import { clearPilotLink, clearPilotPending, noteGateway, notePilotAnswer, noteServerSilent, readPilotLink, readPilotPending, readServerDown, remoteStopCounts, SERVER_WAIT } from './pilot-link';
 import { applyPilot } from './pilot-apply';
-import { markPilotStop } from './pilot-stop';
+import { markPilotStop, pilotStopped } from './pilot-stop';
+import { serverWaitOver } from '../chrome/pilot';
 import { browser } from '../browser-host';
 
 const MAX_LINES = 12;
@@ -470,6 +471,7 @@ function enqueuePulse(line: string): Promise<void> {
 let pulseChain: Promise<void> = Promise.resolve();
 
 export async function pulseNow(): Promise<void> {
+  await pokeServer();
   if (onPilotSettle !== undefined)
     await onPilotSettle();
 
@@ -719,7 +721,7 @@ async function listenPilot(): Promise<void> {
 }
 
 async function pilotWake(): Promise<void> {
-  if (waking)
+  if (waking || await pilotStopped())
     return;
 
   waking = true;
@@ -817,8 +819,47 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+const SERVER_PING_MS = 15_000;
+let poking = false;
+
 if (inWorker()) {
   setInterval(() => {
     void pulseNow();
   }, 60_000);
+  setInterval(() => {
+    void pokeServer();
+  }, SERVER_PING_MS);
+}
+
+async function pokeServer(): Promise<void> {
+  if (poking || halted)
+    return;
+
+  if ((await readPilotLink()) !== SERVER_WAIT)
+    return;
+
+  const since = await readServerDown();
+  if (since === 0)
+    return;
+
+  if (serverWaitOver(since, Date.now())) {
+    poking = true;
+    try {
+      await tellPage('сервер не ответил');
+      await haltHang();
+    }
+    finally {
+      poking = false;
+    }
+
+    return;
+  }
+
+  poking = true;
+  try {
+    await listenPilot();
+  }
+  finally {
+    poking = false;
+  }
 }

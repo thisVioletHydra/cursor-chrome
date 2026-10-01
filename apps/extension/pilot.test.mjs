@@ -1,7 +1,14 @@
-import { freshPilot, pilotStep, SERVER_WAIT, TEA_PERIOD_MS } from './src/chrome/pilot.ts';
+import { freshPilot, pilotStep, SERVER_DIE_MS, SERVER_WAIT, serverWaitOver, TEA_PERIOD_MS } from './src/chrome/pilot.ts';
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
+
+test('a server wait dies after three minutes and not before', () => {
+  const start = 1_000;
+  assert.equal(serverWaitOver(0, start + SERVER_DIE_MS), false);
+  assert.equal(serverWaitOver(start, start + SERVER_DIE_MS - 1), false);
+  assert.equal(serverWaitOver(start, start + SERVER_DIE_MS), true);
+});
 
 test('server fault keeps an enabled bot on and the tab open', () => {
   const on = { ...freshPilot(), on: true };

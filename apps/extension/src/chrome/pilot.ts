@@ -1,5 +1,6 @@
 export const SERVER_WAIT = 'жду сервер';
 export const SERVER_SILENT = 'сервер не ответил, попробуй позже';
+export const SERVER_DIE_MS = 3 * 60 * 1000;
 export const TEA_PERIOD_MS = 45 * 60 * 1000;
 
 export type Pilot = {
@@ -126,6 +127,16 @@ function dueIsClock(teaDue: number | null): boolean {
     return true;
 
   return Number.isFinite(teaDue);
+}
+
+export function serverWaitOver(since: number, now: number): boolean {
+  if (Number.isFinite(since) === false || since <= 0)
+    return false;
+
+  if (Number.isFinite(now) === false)
+    return false;
+
+  return now - since >= SERVER_DIE_MS;
 }
 
 function pageAfter(page: number, hasNext: boolean): number | null {
