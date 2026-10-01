@@ -12,6 +12,7 @@ import { isPilotLinkText, readPilotLink } from '../pilot/pilot-link';
 import { applyPilot } from '../pilot/pilot-apply';
 import { markPilotStop } from '../pilot/pilot-stop';
 import { runHhApply } from './hh-apply-cmd';
+import { feedEnded, nextDryStreak } from '../search/feed-dry';
 import { HIDE_POPUP_STUCK } from '../search/hide-popup';
 import { collectVacancies, hideOpenVacancy, readVacancyPage, releaseHidePopup } from '../search/hh-search';
 import { requireTabId } from '../link/inject';
@@ -53,6 +54,7 @@ const LOGIN = /login|войти/i;
 const TEST = /тест|тестов/i;
 
 let running = false;
+let dryStreak = 0;
 
 export function queueBusy(): boolean {
   return running;
@@ -385,6 +387,7 @@ async function applyPending(base: string, key: string, run: QueueRun): Promise<A
 async function drainSaved(base: string, key: string, run: QueueRun): Promise<ApplyPass> {
   let started = false;
   let skipped = 0;
+  dryStreak = 0;
 
   while (hoursOpen()) {
     if (hangHalted())
@@ -468,6 +471,8 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
   }
 
   await tellPage(`queue-run.ts · открыл ${card.title}`);
+  dryStreak = nextDryStreak(dryStreak, card.title, card.text);
+  const ended = feedEnded(dryStreak);
   const posted = await sendFound(base, key, [card]);
   if (posted.reason === 'день закрыт') {
     await stopForToday();
@@ -475,8 +480,12 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
     return { started: false, stop: true, reason: 'лимит на сегодня' };
   }
 
-  if (holdLink(posted))
+  if (holdLink(posted)) {
+    if (ended)
+      return stopFeed();
+
     return { started: false, stop: false, reason: '', held: true };
+  }
 
   const dropped = await dropLinks(base, key, [link.id]);
   if (dropped === false)
@@ -493,8 +502,14 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
     if (ignore && 'tabId' in shown && await hideOpenVacancy(shown.tabId, link.id, row => postHidden(base, key, row)) === false)
       return { started: false, stop: true, reason: HIDE_POPUP_STUCK };
 
+    if (ended)
+      return stopFeed();
+
     return { started: false, stop: false, reason: '' };
   }
+
+  if (ended)
+    return stopFeed();
 
   const items = await fetchQueue(base, key);
   const item = items?.find(row => row.id === link.id);
@@ -596,6 +611,14 @@ async function cycleOpen(): Promise<boolean> {
 
 function blank(reason: string): QueueRun {
   return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason, lines: [] };
+}
+
+async function stopFeed(): Promise<ApplyPass> {
+  await tellPage('queue-run.ts · вакансии походу закончились');
+  await markPilotStop();
+  await applyPilot({ type: 'stop', reason: 'feed' });
+
+  return { started: false, stop: true, reason: 'вакансии походу закончились' };
 }
 
 async function stopForToday(): Promise<void> {

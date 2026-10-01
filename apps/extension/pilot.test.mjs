@@ -30,13 +30,14 @@ test('server fault keeps an enabled bot on and the tab open', () => {
 
 test('user, captcha, hang, and daily limit turn the bot off and close the tab', () => {
   const on = { ...freshPilot(), on: true };
-  for (const reason of ['user', 'captcha', 'hang', 'daily']) {
+  for (const reason of ['user', 'captcha', 'hang', 'daily', 'feed']) {
     const next = pilotStep(on, { type: 'stop', reason });
     assert.equal(next.on, false);
     assert.equal(next.closeBotTab, true);
   }
 
   assert.equal(pilotStep(on, { type: 'stop', reason: 'daily' }).status, 'лимит на сегодня');
+  assert.equal(pilotStep(on, { type: 'stop', reason: 'feed' }).status, 'вакансии походу закончились');
 });
 
 test('pin, wake, focus, popup, discard, and tab id are not a stop', () => {

@@ -1,5 +1,6 @@
 import { FLIP_MAX_MS, FLIP_MIN_MS, HIDE_MAX_MS, HIDE_MIN_MS, PAGE_LOAD_MS, endedAfter, flipWaitMs, foldLiveLine, hideWaitMs, landedPage, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchHasNext, searchReady, searchStep } from './src/search/page-load.ts';
 import { pulseLines, waitMark, waitPulse } from './src/pilot/wait-pulse.ts';
+import { feedDry, feedEnded, nextDryStreak } from './src/search/feed-dry.ts';
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -174,4 +175,22 @@ test('a named wait replaces the same pulse', () => {
     'потом: жду загрузку страницы hh',
     'hh-search.ts',
   ]);
+});
+
+test('three junk vacancies in a row end the feed, a stack title resets', () => {
+  assert.equal(feedDry('Водитель-курьер', ''), true);
+  assert.equal(feedDry('Начинающий риелтор/Помощник риелтора', ''), true);
+  assert.equal(feedDry('Начинающий агент по недвижимости', ''), true);
+  assert.equal(feedDry('Менеджер по продажам', 'нужен JavaScript'), true);
+  assert.equal(feedDry('Специалист разметки данных', 'киргизский язык'), true);
+  assert.equal(feedDry('Разработчик React', 'ДБО, GraphQL'), false);
+  assert.equal(feedDry('Фронтенд', 'в команде есть менеджер продукта'), false);
+
+  let streak = 0;
+  streak = nextDryStreak(streak, 'Водитель-курьер', '');
+  streak = nextDryStreak(streak, 'Начинающий риелтор', '');
+  assert.equal(feedEnded(streak), false);
+  streak = nextDryStreak(streak, 'Методолог (IT)', '');
+  assert.equal(feedEnded(streak), true);
+  assert.equal(nextDryStreak(streak, 'Разработчик React', 'TypeScript'), 0);
 });
