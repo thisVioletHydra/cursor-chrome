@@ -58,10 +58,8 @@ export async function fillApply(): Promise<FillFail | null> {
     return { ok: false, status: 'needsHuman', reason: asked.reason, hints: asked.hints };
 
   const kind = resumeKind(vacancyTitle(), vacancyBody());
-  if (kind !== null) {
-    noteLive(`резюме ${kind}`);
-    await pickResume(kind);
-  }
+  noteLive(`резюме ${kind}`);
+  await pickResume(kind);
 
   const letterOk = await insertLetter();
   const mid = captchaFail();

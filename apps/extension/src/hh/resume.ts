@@ -8,8 +8,8 @@ const NAME: Record<ResumeKind, RegExp> = {
   fullstack: /fullstack|full[\s-]?stack|фул+стек/i,
 };
 
-const BACKEND = /fullstack|full[\s-]?stack|фул+стек|backend|бэкенд|бекенд|back[\s-]?end|настрано\s+про\s+бэкенд/i;
-const FRONTEND = /frontend|front[\s-]?end|фронтенд/i;
+const BACKEND_TITLE = /fullstack|full[\s-]?stack|фул+стек|backend|бэкенд|бекенд|back[\s-]?end|\bnode(?:\.?js)?\b/i;
+const FRONT_TITLE = /frontend|front[\s-]?end|фронтенд|\bvue\b|\breact\b/i;
 
 const TRIGGER_SEL = [
   '[data-qa="resume-select"] button',
@@ -25,22 +25,19 @@ const OPTION_SEL = [
   '[data-qa*="resume"] [role="listbox"] *',
 ].join(',');
 
-export function resumeKind(title: string, body: string): ResumeKind | null {
+export function resumeKind(title: string, body: string): ResumeKind {
   const head = compact(title);
-  const text = compact(`${title}\n${body}`);
-  if (BACKEND.test(head))
-    return 'fullstack';
+  if (head.length > 0)
+    return murkyBackend(head) ? 'fullstack' : 'frontend';
 
-  if (FRONTEND.test(head))
-    return 'frontend';
+  return murkyBackend(compact(body)) ? 'fullstack' : 'frontend';
+}
 
-  if (BACKEND.test(text))
-    return 'fullstack';
+function murkyBackend(text: string): boolean {
+  if (FRONT_TITLE.test(text))
+    return false;
 
-  if (FRONTEND.test(text))
-    return 'frontend';
-
-  return null;
+  return BACKEND_TITLE.test(text);
 }
 
 export function vacancyTitle(): string {
