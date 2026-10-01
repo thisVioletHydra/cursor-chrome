@@ -125,7 +125,7 @@ const PLACE: Record<string, { do: string; file: string }> = {
 };
 
 export function stageLine(mark: WaitMark): string | null {
-  if (mark.id === 'queue.idle')
+  if (mark.id === 'queue.idle' || mark.id === 'hide.wait')
     return null;
 
   const here = PLACE[mark.id];

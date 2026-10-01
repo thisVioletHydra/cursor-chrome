@@ -173,11 +173,10 @@ export async function collectVacancies(
       }
 
       const knownIds = batch.filter(card => marks.seen.has(card.id)).map(card => card.id);
-      if (knownIds.length > 0)
-        await tellPage(`hh-search.ts · уже видели, ${knownIds.length}`);
-
       const fresh = new Set(marks.saved);
       const cards = new Map(batch.map(card => [card.id, card]));
+      if (knownIds.length > 0)
+        await tellPage(`hh-search.ts · уже видели, ${knownIds.length}`);
       const hidden = await hideKnown(tabId, pulled.url, knownIds.filter(id => fresh.has(id) === false), cards, noteHidden);
       if (hidden === false) {
         hideBlocked = true;
@@ -417,15 +416,20 @@ async function hideKnown(
     if (id === undefined)
       continue;
 
+    const name = hideName(cards.get(id), id);
+    await tellPage(`hh-search.ts · скрываю уже видели: ${name}`);
     const hit = await settleHide(tabId, id);
     if (hit === 'halt')
       return true;
 
     if (hit === 'stuck') {
-      await tellPage(HIDE_POPUP_STUCK);
+      await tellPage(`${HIDE_POPUP_STUCK}: ${name}`);
 
       return false;
     }
+
+    if (hit === 'skip')
+      await tellPage(`hh-search.ts · не скрыл, нет глазика: ${name}`);
 
     if (hit === 'done') {
       const card = cards.get(id);
@@ -443,6 +447,14 @@ async function hideKnown(
   }
 
   return true;
+}
+
+function hideName(card: { title: string } | undefined, id: string): string {
+  const title = card?.title.trim() ?? '';
+  if (title.length === 0)
+    return id;
+
+  return title.length > 90 ? `${title.slice(0, 87)}...` : title;
 }
 
 export async function releaseHidePopup(tabId: number): Promise<'clear' | 'stuck'> {
