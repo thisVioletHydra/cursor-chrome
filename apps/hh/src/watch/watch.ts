@@ -337,6 +337,20 @@ async function mark(who: WatchWho, text: string, death: boolean, stage = false):
     }
   }
 
+  if (death === false) {
+    const twin = twinRow(clean);
+    if (twin !== null) {
+      if (skipCore(clean).length > skipCore(twin.text).length) {
+        twin.text = clean;
+        twin.who = who;
+        twin.at = Date.now();
+        await save();
+      }
+
+      return;
+    }
+  }
+
   rows.push({ at: Date.now(), who, text: clean, death });
   trim();
   await save();
@@ -619,18 +633,33 @@ function skipEssay(text: string): boolean {
 }
 
 function echoed(text: string): boolean {
-  return rows.slice(-40).some((row) => {
-    if (row.who !== 'model')
-      return false;
+  return twinRow(text) !== null;
+}
 
-    if (row.text === text || row.text.endsWith(`: ${text}`))
-      return true;
+function twinRow(text: string): WatchRow | null {
+  const body = skipCore(text);
+  if (body.length < 12)
+    return null;
 
-    if (text.length < 24)
-      return false;
+  const from = Math.max(0, rows.length - 40);
+  for (let index = rows.length - 1; index >= from; index -= 1) {
+    const row = rows[index];
+    if (row === undefined || row.death)
+      continue;
 
-    return row.text.includes(text.slice(0, 48));
-  });
+    const other = skipCore(row.text);
+    if (other.length < 12)
+      continue;
+
+    if (body === other || body.endsWith(other) || other.endsWith(body))
+      return row;
+  }
+
+  return null;
+}
+
+function skipCore(text: string): string {
+  return text.replace(/^(?:[\w./-]+ · )?скип:\s*/i, '').trim();
 }
 
 function asShown(row: WatchRow): WatchRow {
