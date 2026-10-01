@@ -10,6 +10,9 @@ export function hideDom(op: string, id: string): HideDom {
   if (op === 'eye')
     return shot(clickEye(id));
 
+  if (op === 'more')
+    return shot(clickMore());
+
   if (op === 'vacancy')
     return shot(clickVacancy());
 
@@ -82,6 +85,17 @@ export function hideDom(op: string, id: string): HideDom {
 
     button.scrollIntoView({ block: 'center' });
     button.click();
+
+    return true;
+  }
+
+  function clickMore(): boolean {
+    const marked = document.querySelector('[data-qa="vacancy__more-actions"]');
+    if ((marked instanceof HTMLElement) === false || shown(marked) === false)
+      return false;
+
+    marked.scrollIntoView({ block: 'center' });
+    marked.click();
 
     return true;
   }

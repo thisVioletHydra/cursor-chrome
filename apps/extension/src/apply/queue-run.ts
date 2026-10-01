@@ -13,7 +13,7 @@ import { applyPilot } from '../pilot/pilot-apply';
 import { markPilotStop } from '../pilot/pilot-stop';
 import { runHhApply } from './hh-apply-cmd';
 import { HIDE_POPUP_STUCK } from '../search/hide-popup';
-import { collectVacancies, hideOnFeed, readVacancyPage, releaseHidePopup } from '../search/hh-search';
+import { collectVacancies, hideOpenVacancy, readVacancyPage, releaseHidePopup } from '../search/hh-search';
 import { requireTabId } from '../link/inject';
 import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
@@ -487,7 +487,7 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
     if (why.length > 0)
       await tellPage(posted.verdict === 'skip' ? `скип: ${why}` : why);
 
-    if (posted.verdict === 'skip' && 'tabId' in shown && await hideOnFeed(shown.tabId, link.id, row => postHidden(base, key, row)) === false)
+    if (posted.verdict === 'skip' && 'tabId' in shown && await hideOpenVacancy(shown.tabId, link.id, row => postHidden(base, key, row)) === false)
       return { started: false, stop: true, reason: HIDE_POPUP_STUCK };
 
     return { started: false, stop: false, reason: '' };

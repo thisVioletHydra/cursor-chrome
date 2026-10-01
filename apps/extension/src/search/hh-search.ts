@@ -14,7 +14,6 @@ const HIDE_REASON = 'не подходит профессия';
 const FIRST_PAGE = 0;
 const FEED_KEY = 'лента';
 const FEED = 'https://hh.ru/search/vacancy?enable_snippets=true&ored_clusters=true&search_period=7&hhtmFromLabel=search_order_button&hhtmFrom=vacancy_search_list';
-let lastFeedPage = FIRST_PAGE;
 const endedQuery = new Set<string>();
 let endedQuiet = false;
 let sawCaptcha = false;
@@ -149,8 +148,6 @@ export async function collectVacancies(
 
       const landed = explicitPage(pulled.url);
       const here = landed === null ? page : landed;
-      if (query === FEED_KEY)
-        lastFeedPage = here;
       const batch = cardsOf(serpHtml(pulled.html));
       const nextPage = await listedAfter(tabId, pulled.html, here, batch.length);
       if (nextPage === null)
@@ -327,9 +324,18 @@ function searchUrl(query: string, page: number): string {
   return putSearchPage(url.toString(), page);
 }
 
-export async function hideOnFeed(tabId: number, id: string, note: (row: HiddenMark) => Promise<void>): Promise<boolean> {
-  await showUrl(tabId, searchUrl(FEED_KEY, lastFeedPage));
-  const hit = await settleHide(tabId, id);
+export async function hideOpenVacancy(tabId: number, id: string, note: (row: HiddenMark) => Promise<void>): Promise<boolean> {
+  const more = await hideCall(tabId, 'more', '');
+  if (more === null || hideClickOk(more) === false) {
+    await tellPage('нет кнопки Ещё');
+
+    return true;
+  }
+
+  const hit = await runHide(tabId, hideStart());
+  if (hit === 'halt')
+    return true;
+
   if (hit !== 'done')
     return hit !== 'stuck';
 
