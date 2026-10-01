@@ -703,6 +703,7 @@ async function lightSleep(): Promise<boolean> {
   if (await cycleOpen() === false)
     return false;
 
+  await holdWorker();
   const until = Date.now() + LIGHT_SLEEP_MS;
   await browser.storage.local.set({ [LIGHT_UNTIL_KEY]: until });
   await tickPage('сплю', LIGHT_SLEEP_MS, '', waitMark({
@@ -712,9 +713,8 @@ async function lightSleep(): Promise<boolean> {
     next: 'light.hunt',
     hold: true,
   }));
-  await browser.storage.local.remove(LIGHT_UNTIL_KEY);
 
-  return cycleOpen();
+  return wokeFromLight();
 }
 
 async function finishLightNap(): Promise<void> {
@@ -723,6 +723,7 @@ async function finishLightNap(): Promise<void> {
   if (typeof until !== 'number' || until <= Date.now())
     return;
 
+  await holdWorker();
   await tickPage('сплю', until - Date.now(), '', waitMark({
     id: 'light.sleep',
     human: 'лайт, сплю час',
@@ -730,7 +731,22 @@ async function finishLightNap(): Promise<void> {
     next: 'light.hunt',
     hold: true,
   }));
+  await wokeFromLight();
+}
+
+async function wokeFromLight(): Promise<boolean> {
   await browser.storage.local.remove(LIGHT_UNTIL_KEY);
+  await tellPage('queue-run.ts · час прошёл, снова 10');
+
+  return cycleOpen();
+}
+
+async function holdWorker(): Promise<void> {
+  const tabId = await getWorkerTabId();
+  if (tabId === null)
+    return;
+
+  await browser.tabs.update(tabId, { autoDiscardable: false }).catch(() => {});
 }
 
 async function stopForToday(): Promise<void> {

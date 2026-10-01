@@ -166,15 +166,28 @@ export async function wakeWorkerTab(tabId: number, force = false): Promise<void>
   if (await touchKeeps('wake') === false)
     return;
 
-  await browser.tabs.update(tabId, { autoDiscardable: false }).catch(() => {});
+  await race(browser.tabs.update(tabId, { autoDiscardable: false }).then(() => undefined), 4_000);
   const tab = await browser.tabs.get(tabId).catch(() => null);
   if (tab === null || (force === false && asleep(tab) === false))
     return;
 
   const prev = await snapshotFocus();
-  await browser.tabs.update(tabId, { active: true });
+  await race(browser.tabs.update(tabId, { active: true }).then(() => undefined), 8_000);
   if (prev !== null && prev.tabId !== tabId)
-    await restoreFocus(prev);
+    await race(restoreFocus(prev), 4_000);
+}
+
+function race(work: Promise<void>, ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    work.then(() => {
+      clearTimeout(timer);
+      resolve();
+    }, () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
 }
 
 export async function checkWorker(): Promise<WorkerCheck> {

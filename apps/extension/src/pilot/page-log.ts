@@ -264,7 +264,7 @@ function planStall(): void {
     }
 
     const step = stallStep() || 'жду очередь';
-    if (step.includes('ищу вакансию') || step.includes('жду загрузку') || step.includes('жду страницу') || step.includes('не прочиталась'))
+    if (step.includes('ищу вакансию') || step.includes('жду загрузку') || step.includes('жду страницу') || step.includes('не прочиталась') || step.includes('лайт, сплю час'))
       return;
 
     if (queueRestStep(step))

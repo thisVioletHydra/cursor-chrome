@@ -242,7 +242,7 @@ async function silence(): Promise<void> {
     return;
 
   const where = shortStep(pulse.line) ? pulse.line : 'нет пульса';
-  if (queueWait(where))
+  if (queueWait(where) || lightNap(where))
     return;
 
   if (where.includes('ищу вакансию') || searchTick(where) || where.includes('жду страницу') || where.includes('не прочиталась')) {
@@ -390,7 +390,7 @@ function queueWait(text: string): boolean {
 }
 
 function queueRestHang(text: string): boolean {
-  if (queueWait(text))
+  if (queueWait(text) || lightNap(text))
     return true;
 
   if (text.startsWith('я завис: ') === false)
@@ -401,7 +401,11 @@ function queueRestHang(text: string): boolean {
   if (at < 0)
     return false;
 
-  return queueWait(body.slice(0, at));
+  return queueWait(body.slice(0, at)) || lightNap(body.slice(0, at));
+}
+
+function lightNap(text: string): boolean {
+  return text.includes('лайт, сплю час');
 }
 
 function searchTick(text: string): boolean {
