@@ -1,4 +1,4 @@
-import { FLIP_MAX_MS, FLIP_MIN_MS, HIDE_MAX_MS, HIDE_MIN_MS, PAGE_LOAD_MS, endedAfter, flipWaitMs, foldLiveLine, hideWaitMs, landedPage, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchHasNext, searchReady, searchStep } from './src/search/page-load.ts';
+import { FLIP_MAX_MS, FLIP_MIN_MS, HIDE_MAX_MS, HIDE_MIN_MS, PAGE_LOAD_MS, endedAfter, feedAddress, flipWaitMs, foldLiveLine, hideWaitMs, landedPage, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchHasNext, searchReady, searchStep } from './src/search/page-load.ts';
 import { pulseLines, waitMark, waitPulse } from './src/pilot/wait-pulse.ts';
 import { feedDry, feedEnded, nextDryStreak } from './src/search/feed-dry.ts';
 import { descriptionText } from './src/search/vacancy-text.ts';
@@ -102,6 +102,10 @@ test('the saved feed counts without a text query', () => {
   assert.equal(searchReady('https://hh.ru/search/vacancy?text=Fullstack&page=20', html, '', 0, false), false);
   assert.equal(searchReady('https://hh.ru/search/vacancy', html, '', 0, false), true);
   assert.equal(searchReady(`${feed}&text=JavaScript`, html, '', 0, false), true);
+  const light = 'https://hh.ru/search/vacancy?enable_snippets=true&ored_clusters=true&work_format=REMOTE&search_period=1&hhtmFrom=vacancy_search_list';
+  assert.equal(feedAddress(light), true);
+  assert.equal(searchReady(light, html, '', 0, false), true);
+  assert.equal(feedAddress('https://hh.ru/search/vacancy?ored_clusters=true&search_period=1'), false);
 });
 
 test('a clamped deep page counts after the address changes', () => {

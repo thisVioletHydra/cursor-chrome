@@ -15,6 +15,13 @@ const HIDE_REASON = 'не подходит профессия';
 const FIRST_PAGE = 0;
 const FEED_KEY = 'лента';
 const FEED = 'https://hh.ru/search/vacancy?enable_snippets=true&ored_clusters=true&search_period=7&hhtmFromLabel=search_order_button&hhtmFrom=vacancy_search_list';
+const LIGHT = 'https://hh.ru/search/vacancy?enable_snippets=true&ored_clusters=true&work_format=REMOTE&search_period=1&hhtmFromLabel=search_order_button&hhtmFrom=vacancy_search_list';
+const LIGHT_CAP = 10;
+let lightOn = false;
+
+export function useLightFeed(on: boolean): void {
+  lightOn = on;
+}
 const endedQuery = new Set<string>();
 let endedQuiet = false;
 let sawCaptcha = false;
@@ -149,8 +156,9 @@ export async function collectVacancies(
 
       const landed = explicitPage(pulled.url);
       const here = landed === null ? page : landed;
-      const batch = cardsOf(serpHtml(pulled.html));
-      const nextPage = await listedAfter(tabId, pulled.html, here, batch.length);
+      const seen = cardsOf(serpHtml(pulled.html));
+      const batch = lightOn ? seen.slice(0, LIGHT_CAP) : seen;
+      const nextPage = lightOn ? null : await listedAfter(tabId, pulled.html, here, batch.length);
       if (nextPage === null)
         listedNext.delete(query);
       else
@@ -214,8 +222,8 @@ export async function collectVacancies(
     }
 
     const focus = FEED_KEY;
-    const stored = storedPage(pages[focus]);
-    await tellPage(`hh-search.ts · ${focus}, стр. ${stored + 1}`);
+    const stored = lightOn ? 0 : storedPage(pages[focus]);
+    await tellPage(lightOn ? 'hh-search.ts · лайт, первые 10' : `hh-search.ts · ${focus}, стр. ${stored + 1}`);
     const hit = await harvest(focus, stored, null, false);
     if (hit === 'login')
       return true;
@@ -230,6 +238,12 @@ export async function collectVacancies(
       return false;
 
     read += 1;
+    if (lightOn) {
+      wordDone = true;
+
+      return false;
+    }
+
     const listed = listedNext.get(focus);
     if (listed !== undefined && await keep(focus, listed) === false)
       return false;
@@ -314,7 +328,7 @@ function miss(captcha: boolean, login: boolean, reason: string, read = 0): Searc
 
 function searchUrl(query: string, page: number): string {
   if (query === FEED_KEY)
-    return putSearchPage(FEED, page);
+    return putSearchPage(lightOn ? LIGHT : FEED, page);
 
   const url = new URL(SEARCH);
   url.searchParams.set('text', query);

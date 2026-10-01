@@ -122,6 +122,8 @@ const PLACE: Record<string, { do: string; file: string }> = {
   'queue.next': { do: 'следующая вакансия', file: 'queue-run.ts' },
   'queue.idle': { do: 'простой', file: 'page-log.ts' },
   'queue.wake': { do: 'продолжу очередь', file: 'page-log.ts' },
+  'light.sleep': { do: 'лайт, сплю час', file: 'queue-run.ts' },
+  'light.hunt': { do: 'снова 10 удалённых', file: 'hh-search.ts' },
 };
 
 export function stageLine(mark: WaitMark): string | null {

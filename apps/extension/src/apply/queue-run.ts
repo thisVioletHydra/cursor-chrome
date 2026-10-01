@@ -14,7 +14,7 @@ import { markPilotStop } from '../pilot/pilot-stop';
 import { runHhApply } from './hh-apply-cmd';
 import { feedEnded, nextDryStreak } from '../search/feed-dry';
 import { HIDE_POPUP_STUCK } from '../search/hide-popup';
-import { collectVacancies, hideOpenVacancy, readVacancyPage, releaseHidePopup } from '../search/hh-search';
+import { collectVacancies, hideOpenVacancy, readVacancyPage, releaseHidePopup, useLightFeed } from '../search/hh-search';
 import { requireTabId } from '../link/inject';
 import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
@@ -53,8 +53,14 @@ const LIMIT = /максимум вакансий|лимит откликов|с�
 const LOGIN = /login|войти/i;
 const TEST = /тест|тестов/i;
 
+const LIGHT_KEY = 'feedLight';
+const LIGHT_UNTIL_KEY = 'feedLightUntil';
+const LIGHT_SLEEP_MS = 60 * 60 * 1000;
+
 let running = false;
 let dryStreak = 0;
+let feedLight = false;
+let lightDue = false;
 
 export function queueBusy(): boolean {
   return running;
@@ -188,7 +194,39 @@ export async function readPausedUntil(): Promise<number | null> {
   return null;
 }
 
+async function loadLight(): Promise<void> {
+  const stored = await browser.storage.local.get(LIGHT_KEY);
+  feedLight = stored[LIGHT_KEY] === true;
+  if (feedLight === false)
+    lightDue = false;
+
+  useLightFeed(feedLight);
+}
+
+async function dropBacklog(base: string, key: string): Promise<void> {
+  await fetch(`${base}/api/queue`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+    body: JSON.stringify({ dropAll: true }),
+  });
+}
+
 async function resetFeed(base: string, key: string): Promise<void> {
+  await loadLight();
+  if (feedLight) {
+    try {
+      await dropBacklog(base, key);
+      await tellPage('queue-run.ts · лайт снова, первые 10');
+    }
+    catch {
+      await tellPage('queue-run.ts · не сбросил лайт');
+    }
+
+    await finishLightNap();
+
+    return;
+  }
+
   try {
     const res = await fetch(`${base}/api/queue`, {
       method: 'POST',
@@ -256,6 +294,12 @@ async function drain(): Promise<QueueRun> {
       continue;
     }
 
+    if (feedLight && lightDue) {
+      lightDue = false;
+      if (await lightSleep() === false)
+        break;
+    }
+
     const hunt = await fetchHunt(base, key);
     if (hangHalted()) {
       run.reason = 'расширение зависло';
@@ -287,6 +331,14 @@ async function drain(): Promise<QueueRun> {
 
     if (filled.saved > 0)
       continue;
+
+    if (feedLight && lightDue && filled.note !== 'не прочиталась страница hh') {
+      lightDue = false;
+      if (await lightSleep() === false)
+        break;
+
+      continue;
+    }
 
     if (filled.done === false) {
       if (filled.retry && await restCycle() === false)
@@ -498,8 +550,8 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
   }
 
   if (holdLink(posted)) {
-    if (ended)
-      return stopFeed();
+    if (ended && feedLight === false)
+      return enterLight(base, key);
 
     return { started: false, stop: false, reason: '', held: true };
   }
@@ -519,14 +571,14 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
     if (ignore && 'tabId' in shown && await hideOpenVacancy(shown.tabId, link.id, row => postHidden(base, key, row)) === false)
       return { started: false, stop: true, reason: HIDE_POPUP_STUCK };
 
-    if (ended)
-      return stopFeed();
+    if (ended && feedLight === false)
+      return enterLight(base, key);
 
     return { started: false, stop: false, reason: '' };
   }
 
-  if (ended)
-    return stopFeed();
+  if (ended && feedLight === false)
+    return enterLight(base, key);
 
   const items = await fetchQueue(base, key);
   const item = items?.find(row => row.id === link.id);
@@ -630,12 +682,55 @@ function blank(reason: string): QueueRun {
   return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason, lines: [] };
 }
 
-async function stopFeed(): Promise<ApplyPass> {
-  await tellPage('queue-run.ts · вакансии походу закончились');
-  await markPilotStop();
-  await applyPilot({ type: 'stop', reason: 'feed' });
+async function enterLight(base: string, key: string): Promise<ApplyPass> {
+  dryStreak = 0;
+  feedLight = true;
+  lightDue = false;
+  useLightFeed(true);
+  await browser.storage.local.set({ [LIGHT_KEY]: true });
+  await tellPage('queue-run.ts · всратые пошли, лайт: удалёнка за сутки, 10 штук, потом час');
+  try {
+    await dropBacklog(base, key);
+  }
+  catch {
+    await tellPage('queue-run.ts · не сбросил хвост ленты');
+  }
 
-  return { started: false, stop: true, reason: 'вакансии походу закончились' };
+  return { started: false, stop: false, reason: '' };
+}
+
+async function lightSleep(): Promise<boolean> {
+  if (await cycleOpen() === false)
+    return false;
+
+  const until = Date.now() + LIGHT_SLEEP_MS;
+  await browser.storage.local.set({ [LIGHT_UNTIL_KEY]: until });
+  await tickPage('сплю', LIGHT_SLEEP_MS, '', waitMark({
+    id: 'light.sleep',
+    human: 'лайт, сплю час',
+    budget: 3600,
+    next: 'light.hunt',
+    hold: true,
+  }));
+  await browser.storage.local.remove(LIGHT_UNTIL_KEY);
+
+  return cycleOpen();
+}
+
+async function finishLightNap(): Promise<void> {
+  const stored = await browser.storage.local.get(LIGHT_UNTIL_KEY);
+  const until = stored[LIGHT_UNTIL_KEY];
+  if (typeof until !== 'number' || until <= Date.now())
+    return;
+
+  await tickPage('сплю', until - Date.now(), '', waitMark({
+    id: 'light.sleep',
+    human: 'лайт, сплю час',
+    budget: budgetSec(until - Date.now()),
+    next: 'light.hunt',
+    hold: true,
+  }));
+  await browser.storage.local.remove(LIGHT_UNTIL_KEY);
 }
 
 async function stopForToday(): Promise<void> {
@@ -699,6 +794,8 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
     return { note: 'сервер не записал круг', saved: found.saved, more: false, done: false, retry: true };
 
   const retry = found.done === false && found.saved === 0 && found.reason.length > 0;
+  if (feedLight && found.reason !== 'не прочиталась страница hh' && (found.done || found.saved > 0))
+    lightDue = true;
 
   return { note: found.reason, saved: found.saved, more: found.more, done: found.done, retry };
 }

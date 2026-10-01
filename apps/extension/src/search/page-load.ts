@@ -132,7 +132,14 @@ export function feedAddress(url: string): boolean {
     if (parsed.pathname !== '/search/vacancy')
       return false;
 
-    return parsed.searchParams.get('search_period') === '7' && parsed.searchParams.get('ored_clusters') === 'true';
+    if (parsed.searchParams.get('ored_clusters') !== 'true')
+      return false;
+
+    const period = parsed.searchParams.get('search_period');
+    if (period === '7')
+      return true;
+
+    return period === '1' && parsed.searchParams.get('work_format') === 'REMOTE';
   }
   catch {
     return false;
