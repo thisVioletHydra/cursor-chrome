@@ -5,7 +5,7 @@ import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from '../app
 import { syncNegotiations } from '../apply/negotiations';
 import { bindPilotSettle, clearStuckHang, forgetStuckHang, liveLines, stallStep, stalling, tellPage } from '../pilot/page-log';
 import { reconcilePilot } from '../pilot/pilot-heal';
-import { clearPilotLink, clearPilotPending, notePilotLink, setPilotPending } from '../pilot/pilot-link';
+import { clearPilotLink, clearPilotPending, notePilotLink, setPilotPending, takeServerPush } from '../pilot/pilot-link';
 import { applyPilot } from '../pilot/pilot-apply';
 import { clearPilotStop, markPilotStop } from '../pilot/pilot-stop';
 import { pushPilot, retryPilotPush } from '../pilot/pilot-switch';
@@ -336,7 +336,7 @@ async function disablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; 
 }
 
 bindPilotSettle(async () => {
-  const confirmed = await retryPilotPush();
+  const confirmed = await retryPilotPush(takeServerPush());
   if (confirmed === false)
     return;
 

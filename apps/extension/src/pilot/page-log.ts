@@ -5,7 +5,7 @@ import { getFlags } from './flags';
 import { noteHours } from '../apply/hours-flag';
 import { loadPace, waitMs } from '../apply/pace';
 import { reconcilePilot } from './pilot-heal';
-import { clearPilotLink, clearPilotPending, noteGateway, notePilotAnswer, noteServerSilent, readPilotLink, readPilotPending, readServerDown, remoteStopCounts, SERVER_WAIT } from './pilot-link';
+import { clearPilotLink, clearPilotPending, noteGateway, notePilotAnswer, noteServerSilent, readPilotLink, readPilotPending, readServerDown, remoteStopCounts, SERVER_WAIT, askServerPush } from './pilot-link';
 import { applyPilot } from './pilot-apply';
 import { markPilotStop, pilotStopped } from './pilot-stop';
 import { serverWaitOver } from '../chrome/pilot';
@@ -857,7 +857,26 @@ async function pokeServer(): Promise<void> {
 
   poking = true;
   try {
-    await listenPilot();
+    const body = await pilotFetch('/api/queue?listen=1');
+    if (body === null || halted)
+      return;
+
+    await clearPilotLink();
+    await notePilotAnswer(body);
+    if (queueRunning)
+      return;
+
+    if ((await readPilotPending()) === 'on')
+      askServerPush();
+
+    if (onPilotSettle !== undefined)
+      await onPilotSettle();
+
+    if (queueRunning || halted)
+      return;
+
+    if ((await getFlags()).autoQueue === true || pilotStart(body) || pilotAuto(body))
+      await pilotWake();
   }
   finally {
     poking = false;

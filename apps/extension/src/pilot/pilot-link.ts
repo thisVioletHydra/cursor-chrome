@@ -5,6 +5,18 @@ import { browser } from '../browser-host';
 const LINK_KEY = 'pilotLink';
 const PENDING_KEY = 'pilotPending';
 const DOWN_KEY = 'serverDownAt';
+let serverPush = false;
+
+export function askServerPush(): void {
+  serverPush = true;
+}
+
+export function takeServerPush(): boolean {
+  const on = serverPush;
+  serverPush = false;
+
+  return on;
+}
 
 export const PILOT_LINK_KEY = LINK_KEY;
 

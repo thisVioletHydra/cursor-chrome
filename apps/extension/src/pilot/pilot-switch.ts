@@ -21,8 +21,8 @@ export async function pushPilot(on: boolean): Promise<{ ok: true } | { ok: false
   }
 }
 
-export async function retryPilotPush(): Promise<boolean> {
-  if (pushing || Date.now() - pushedAt < RETRY_MS)
+export async function retryPilotPush(force = false): Promise<boolean> {
+  if (pushing || (force === false && Date.now() - pushedAt < RETRY_MS))
     return false;
 
   const pending = await readPilotPending();
