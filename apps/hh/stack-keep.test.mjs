@@ -1,5 +1,6 @@
 import { judge } from './src/scan/judge.ts';
 import { hardSkip, NO_META, titleFront, titleStack } from './src/scan/rules.ts';
+import { EMPTY_RULES, ruleSkip } from './src/scan/score.ts';
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -33,4 +34,15 @@ test('a model skip does not throw away a stack title', async () => {
   });
   assert.equal(report.verdict, 'apply');
   assert.equal(report.reason, 'наш стек');
+});
+
+test('php in the title is a skip even when react is there too', () => {
+  const rules = { ...EMPTY_RULES, stopWords: ['php', 'bitrix', 'react native'] };
+  const php = {
+    ...react,
+    title: 'Fullstack-разработчик PHP · React · API',
+    text: 'PHP от 3 лет, и современный 8.x, и легаси без фреймворка',
+  };
+  assert.equal(ruleSkip(php, rules), 'стоп-слово «php»');
+  assert.equal(ruleSkip(react, rules), null);
 });

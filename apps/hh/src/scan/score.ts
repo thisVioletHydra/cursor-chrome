@@ -92,9 +92,7 @@ export function ruleSkip(vacancy: Vacancy, rules: Rules): string | null {
   if (banned !== undefined)
     return 'компания в чёрном списке';
 
-  const stop = titleFront(vacancy.title)
-    ? undefined
-    : rules.stopWords.find(word => blob.includes(word.toLowerCase()));
+  const stop = stopWord(vacancy, rules.stopWords);
   if (stop !== undefined)
     return `стоп-слово «${stop}»`;
 
@@ -120,6 +118,20 @@ export function scoreOf(vacancy: Vacancy, rules: Rules): number {
 
 export function byScore(rules: Rules): (left: Vacancy, right: Vacancy) => number {
   return (left, right) => scoreOf(right, rules) - scoreOf(left, rules);
+}
+
+function stopWord(vacancy: Vacancy, stopWords: readonly string[]): string | undefined {
+  const title = vacancy.title.toLowerCase();
+  const inTitle = stopWords.find(word => word.length > 0 && title.includes(word.toLowerCase()));
+  if (inTitle !== undefined)
+    return inTitle;
+
+  if (titleFront(vacancy.title))
+    return undefined;
+
+  const blob = `${vacancy.title}\n${vacancy.text}`.toLowerCase();
+
+  return stopWords.find(word => word.length > 0 && blob.includes(word.toLowerCase()));
 }
 
 function stopHit(title: string, stopWords: readonly string[]): string | null {

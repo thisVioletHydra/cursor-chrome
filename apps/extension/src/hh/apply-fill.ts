@@ -122,7 +122,12 @@ function coveredBy(reason: string, hints: string[], answered: string[]): boolean
   });
 }
 
+const SKILL_JUNK = /(?:^|[^\p{L}\p{N}])(?:php|bitrix|битрикс|1с|1c)(?=$|[^\p{L}\p{N}])|react\s*native/iu;
+
 async function fillByCloud(prompt: string, block: HTMLElement): Promise<FillFail | null> {
+  if (SKILL_JUNK.test(prompt))
+    return { ok: false, status: 'skip', reason: `не наше: ${prompt}`, hints: [prompt] };
+
   const question = describeField(prompt, block);
   if (question === null)
     return humanFail(`поле не разобрал: ${prompt}`, [prompt]);
