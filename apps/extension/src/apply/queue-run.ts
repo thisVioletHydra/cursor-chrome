@@ -287,6 +287,9 @@ async function drain(): Promise<QueueRun> {
     if (pending.length > 0)
       continue;
 
+    if (filled.note === 'не прочиталась страница hh')
+      continue;
+
     if (await restCycle() === false)
       break;
   }

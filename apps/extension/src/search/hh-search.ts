@@ -765,11 +765,14 @@ async function captchaNow(tabId: number, until: number): Promise<boolean> {
 
 function readPage(): { url: string; html: string } {
   const root = document.documentElement;
+  let html = root ? root.outerHTML.slice(0, 1_500_000) : '';
+  if (html.includes('data-qa="pager-next"') === false) {
+    const pager = document.querySelector('[data-qa="pager-next"]');
+    if (pager instanceof Element)
+      html += pager.outerHTML;
+  }
 
-  return {
-    url: location.href,
-    html: root ? root.outerHTML.slice(0, 1_500_000) : '',
-  };
+  return { url: location.href, html };
 }
 
 function asHtml(raw: unknown): { url: string; html: string } | null {
