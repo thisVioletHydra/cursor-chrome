@@ -188,6 +188,21 @@ export async function readPausedUntil(): Promise<number | null> {
   return null;
 }
 
+async function resetFeed(base: string, key: string): Promise<void> {
+  try {
+    const res = await fetch(`${base}/api/queue`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ resetPages: ['лента'], dropAll: true }),
+    });
+    if (res.ok)
+      await tellPage('queue-run.ts · лента с первой карточки');
+  }
+  catch {
+    await tellPage('queue-run.ts · не сбросил ленту');
+  }
+}
+
 async function drain(): Promise<QueueRun> {
   const base = await syncBase();
   const key = await getSyncKey();
@@ -196,6 +211,8 @@ async function drain(): Promise<QueueRun> {
 
   if (base.length === 0)
     return blank('нет адреса админки');
+
+  await resetFeed(base, key);
 
   const run: QueueRun = { ok: true, sent: 0, human: 0, skipped: 0, left: 0, reason: '', lines: [] };
   let started = false;

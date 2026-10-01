@@ -40,6 +40,13 @@ export type Model = (vacancy: Vacancy) => Promise<{ verdict: Verdict; reason: st
 const OFFICE = /только офис|только в офисе|удалёнки нет|удаленки нет|удалёнку не рассматриваем|удаленку не рассматриваем|удалённую не рассматриваем|удаленную не рассматриваем/i;
 const STACK_TITLE = /(?:^|[^\p{L}\p{N}])(?:frontend|front-end|front\s*end|фронтенд|фронтэнд|vue|react|typescript|javascript|node(?:\.?js)?|nest(?:\.?js)?|graphql|fullstack|full-stack|full\s*stack|фул+ст[еэ]к)(?=$|[^\p{L}\p{N}])/iu;
 
+export function titleFront(title: string): boolean {
+  if (/react\s*native/i.test(title))
+    return false;
+
+  return /(?:^|[^\p{L}\p{N}])(?:frontend|front-end|front\s*end|фронтенд|фронтэнд|vue|react|typescript|javascript)(?=$|[^\p{L}\p{N}])/iu.test(title);
+}
+
 export function titleStack(title: string): boolean {
   if (/react\s*native/i.test(title))
     return false;

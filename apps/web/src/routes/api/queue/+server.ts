@@ -1,7 +1,7 @@
 import type { State } from '@cursor-chrome/hh';
 import type { RequestHandler } from './$types';
 
-import { COVER_LETTER, HIDE_REASON, busyAmong, dayOpen, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, moscowDay, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readState, rememberSearchPage, searchPages, searchTitleSkip, stepWalk, takePilotStart, walkFrom, workHours, writeState } from '@cursor-chrome/hh';
+import { COVER_LETTER, HIDE_REASON, busyAmong, dayOpen, forgetAllLinks, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, moscowDay, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readState, rememberSearchPage, searchPages, stepWalk, takePilotStart, walkFrom, workHours, writeState } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { readAccount } from '$lib/server/secrets';
@@ -33,7 +33,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
   const queued = await pendingCount();
   const want = account.hhLive === '1' && state.auto && queued < QUEUE_TARGET;
-  const [items, links, pages] = await Promise.all([pending(10), keptLinks(account.hhRules), searchPages(saved)]);
+  const [items, links, pages] = await Promise.all([pending(10), keptLinks(), searchPages(saved)]);
 
   return json({
     items: items.map(row => ({ id: row.id, company: row.company, title: row.title, url: row.url })),
@@ -61,7 +61,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (login === null)
     return json({ error: 'нет' }, { status: 401 });
 
-  const body = await request.json().catch(() => null) as { ids?: unknown; links?: unknown; drop?: unknown; cursor?: unknown; resetPages?: unknown; gate?: unknown; opened?: unknown; hidden?: unknown; walk?: unknown } | null;
+  const body = await request.json().catch(() => null) as { ids?: unknown; links?: unknown; drop?: unknown; dropAll?: unknown; cursor?: unknown; resetPages?: unknown; gate?: unknown; opened?: unknown; hidden?: unknown; walk?: unknown } | null;
   if (body === null)
     return json({ error: 'пустое тело' }, { status: 400 });
 
@@ -115,6 +115,9 @@ export const POST: RequestHandler = async ({ request }) => {
     if (body.resetPages !== undefined)
       await forgetSearchPages(pageQueries(body.resetPages));
 
+    if (body.dropAll === true)
+      await forgetAllLinks();
+
     if (body.drop !== undefined)
       await forgetLinks(pageIds(body.drop));
 
@@ -137,40 +140,15 @@ export const POST: RequestHandler = async ({ request }) => {
 }
 
 async function keptSearch(links: { id: string; url: string; title: string }[], stopWords: string[]): Promise<{ id: string; url: string; title: string }[]> {
-  const kept: { id: string; url: string; title: string }[] = [];
-  const skipped: { id: string; reason: string; title: string }[] = [];
-  for (const link of links) {
-    const reason = searchTitleSkip(link.title, stopWords);
-    if (reason === null)
-      kept.push(link);
-    else
-      skipped.push({ id: link.id, reason, title: link.title });
-  }
+  void stopWords;
 
-  if (skipped.length > 0)
-    await notePassed(skipped);
-
-  return kept;
+  return links;
 }
 
-async function keptLinks(rawRules: string): Promise<{ id: string; url: string }[]> {
-  const stopWords = rulesOf(rawRules).stopWords;
+async function keptLinks(): Promise<{ id: string; url: string }[]> {
   const rows = await readLinks(40);
-  const junk = rows.flatMap((row) => {
-    const reason = searchTitleSkip(row.title, stopWords);
-    if (row.title.length === 0 || reason === null)
-      return [];
 
-    return [{ id: row.id, reason, title: row.title }];
-  });
-  if (junk.length > 0) {
-    await forgetLinks(junk.map(row => row.id));
-    await notePassed(junk);
-  }
-
-  const dropped = new Set(junk.map(row => row.id));
-
-  return rows.filter(row => dropped.has(row.id) === false).slice(0, 10).map(row => ({ id: row.id, url: row.url }));
+  return rows.slice(0, 10).map(row => ({ id: row.id, url: row.url }));
 }
 
 function rulesOf(raw: string): { stopWords: string[] } {

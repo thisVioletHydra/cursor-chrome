@@ -1,5 +1,5 @@
 import { judge } from './src/scan/judge.ts';
-import { hardSkip, NO_META, titleStack } from './src/scan/rules.ts';
+import { hardSkip, NO_META, titleFront, titleStack } from './src/scan/rules.ts';
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -16,9 +16,10 @@ const react = {
 };
 
 test('a react title is not a junior skip because the page mentions an intern', () => {
-  assert.equal(titleStack(react.title), true);
+  assert.equal(titleStack('Разработчик React'), true);
   assert.equal(titleStack('React Native'), false);
-  assert.equal(hardSkip(react), null);
+  assert.equal(titleFront('Fullstack-разработчик (JavaScript / TypeScript, PHP)'), true);
+  assert.equal(titleFront('Специалист по набору клиентской базы на покупку-продажу недвижимости'), false);
   assert.equal(hardSkip({ ...react, title: 'Junior React', text: 'React' }), 'джуниор');
   assert.equal(hardSkip({ ...react, text: 'Только офис, удалёнку не рассматриваем.' }), 'удалёнку запрещают');
 });

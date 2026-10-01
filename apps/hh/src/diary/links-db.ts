@@ -55,7 +55,7 @@ export function insertLinks(rows: readonly HeldLink[], at: number): string[] {
       if (inSeen.get(id) !== undefined || inLinks.get(id) !== undefined)
         continue;
 
-      insert.run(id, row.url, row.title.slice(0, 200), at);
+      insert.run(id, row.url, row.title.slice(0, 200), at + saved.length);
       saved.push(row.id);
     }
 
@@ -77,6 +77,10 @@ export function deleteLinks(ids: readonly string[]): void {
 
   const marks = nums.map(() => '?').join(', ');
   hhDatabase().prepare(`DELETE FROM links WHERE id IN (${marks})`).run(...nums);
+}
+
+export function clearLinks(): void {
+  hhDatabase().prepare('DELETE FROM links').run();
 }
 
 function vacancyUrl(id: string, url: string): boolean {

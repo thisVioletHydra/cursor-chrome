@@ -1,7 +1,7 @@
 import type { Vacancy } from './rules.ts';
 
 import { roleJunk } from '../mix/mix.ts';
-import { hardSkip, NO_META } from './rules.ts';
+import { hardSkip, NO_META, titleFront } from './rules.ts';
 
 import process from 'node:process';
 
@@ -92,7 +92,9 @@ export function ruleSkip(vacancy: Vacancy, rules: Rules): string | null {
   if (banned !== undefined)
     return 'компания в чёрном списке';
 
-  const stop = rules.stopWords.find(word => blob.includes(word.toLowerCase()));
+  const stop = titleFront(vacancy.title)
+    ? undefined
+    : rules.stopWords.find(word => blob.includes(word.toLowerCase()));
   if (stop !== undefined)
     return `стоп-слово «${stop}»`;
 

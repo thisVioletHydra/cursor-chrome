@@ -1,4 +1,4 @@
-import { deleteLinks, insertLinks, listLinks, lookupHeld } from './links-db.ts';
+import { clearLinks, deleteLinks, insertLinks, listLinks, lookupHeld } from './links-db.ts';
 import { SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from '../limits.ts';
 import { bumpDay, clearSearchPages, countHidden, countSeen, insertHidden, insertSeen, listPassed, lookupSeen, openStore, readDay, readSearchPages, savePassed, storePath, writeDay, writeSearchPage } from './seen-db.ts';
 import type { PassedNote, PassedRow } from './seen-db.ts';
@@ -103,6 +103,12 @@ export function forgetSearchPages(queries: readonly string[]): Promise<void> {
 export function forgetLinks(ids: readonly string[]): Promise<void> {
   return turn(async () => {
     deleteLinks(ids);
+  });
+}
+
+export function forgetAllLinks(): Promise<void> {
+  return turn(async () => {
+    clearLinks();
   });
 }
 
