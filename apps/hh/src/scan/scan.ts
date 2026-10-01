@@ -145,9 +145,6 @@ async function finish(vacancy: Vacancy, report: Report, score: number): Promise<
   }
 
   const sent = await sendApply(vacancy, report.reason, score);
-  if (sent === 'human')
-    return packReport(vacancy, 'human', 'нет резюме', false);
-
   if (sent === 'again')
     return packReport(vacancy, 'skip', 'уже в очереди', false);
 

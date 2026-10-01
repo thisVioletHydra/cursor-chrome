@@ -483,6 +483,10 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
     return { started: false, stop: false, reason: '', held: true };
 
   if (posted.added === 0) {
+    const why = posted.reason.trim();
+    if (why.length > 0)
+      await tellPage(posted.verdict === 'skip' ? `скип: ${why}` : why);
+
     if (posted.verdict === 'skip' && 'tabId' in shown && await hideOnFeed(shown.tabId, link.id, row => postHidden(base, key, row)) === false)
       return { started: false, stop: true, reason: HIDE_POPUP_STUCK };
 
@@ -690,7 +694,7 @@ async function restCycle(): Promise<boolean> {
   return cycleOpen();
 }
 
-async function sendFound(base: string, key: string, cards: unknown[]): Promise<{ ok: boolean; added: number; reason: string }> {
+async function sendFound(base: string, key: string, cards: unknown[]): Promise<{ ok: boolean; added: number; reason: string; verdict: string }> {
   await noteServerBatch();
   let posted = await postFound(base, key, cards).finally(doneServerBatch);
   if (posted.added > 0 || posted.reason.startsWith(DOWN) === false)
