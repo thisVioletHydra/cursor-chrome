@@ -21,7 +21,7 @@ const LESS = /(?:^|[^\p{L}\p{N}])(?:backend|back\s*end|бэкенд|бекенд
 const ROLE_LESS = /(?:^|[^\p{L}\p{N}])(?:backend|back\s*end|бэкенд|бекенд|fullstack|full\s*stack|фул+ст[еэ]к)(?=$|[^\p{L}\p{N}])/iu;
 const FRONT = /(?:^|[^\p{L}\p{N}])(?:frontend|front\s*end|фронтенд|фронтэнд|vue|react|graphql)(?=$|[^\p{L}\p{N}])/iu;
 const SCRIPT = /(?:^|[^\p{L}\p{N}])(?:javascript|typescript)(?=$|[^\p{L}\p{N}])/iu;
-const JUNK = /(?:^|[^\p{L}\p{N}])(?:qa|aqa|manager|sourcer|analyst|support|саппорт)(?=$|[^\p{L}\p{N}])|(?:^|[^\p{L}\p{N}])(?:quality assurance|тестиров|менеджер|сорсер|аналитик|робототех|robotics|техподдерж)/iu;
+const JUNK = /(?:^|[^\p{L}\p{N}])(?:qa|aqa|manager|sourcer|analyst|support|саппорт)(?=$|[^\p{L}\p{N}])|(?:^|[^\p{L}\p{N}])(?:quality assurance|тестиров|менеджер|сорсер|аналитик|робототех|robotics|техподдерж|курьер|водител|риелтор|риэлтор|недвижимост|мерчендайзер|колл-?центр|коллцентр|кассир|продавец|кладовщик|грузчик|комплектовщик)/iu
 
 export function roleJunk(title: string): boolean {
   return JUNK.test(fold(title));
