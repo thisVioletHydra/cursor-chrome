@@ -7,6 +7,7 @@ import { budgetSec, waitMark } from '../pilot/wait-pulse';
 import { hideDom } from './hide-dom';
 import { HIDE_POLL_MS, HIDE_POPUP_STUCK, hideBlocks, hideClickOk, hideFaceOf, hideLimit, hideStart, stepHide } from './hide-popup';
 import { PAGE_LOAD_MS, endedAfter, explicitPage, flipWaitMs, hideWaitMs, nextListedPage, pageLoadMiss, parsedSearch, putSearchPage, queryText, searchReady, searchStep } from './page-load';
+import { descriptionText } from './vacancy-text';
 import { getWorkerTabId, isBotWorkUrl, isHhUrl, openBotSearch, requireWorkerTab, wakeWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
@@ -946,8 +947,7 @@ function vacancyFromHtml(html: string, id: string, url: string): FoundCard | nul
 }
 
 function fillText(card: FoundCard, html: string): void {
-  const at = html.indexOf('data-qa="vacancy-description"');
-  const text = at < 0 ? '' : decode(html.slice(at, at + 20_000)).slice(0, 6000);
+  const text = descriptionText(html);
   if (text.length > 0)
     card.text = text;
 

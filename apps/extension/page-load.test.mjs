@@ -1,6 +1,7 @@
 import { FLIP_MAX_MS, FLIP_MIN_MS, HIDE_MAX_MS, HIDE_MIN_MS, PAGE_LOAD_MS, endedAfter, flipWaitMs, foldLiveLine, hideWaitMs, landedPage, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchHasNext, searchReady, searchStep } from './src/search/page-load.ts';
 import { pulseLines, waitMark, waitPulse } from './src/pilot/wait-pulse.ts';
 import { feedDry, feedEnded, nextDryStreak } from './src/search/feed-dry.ts';
+import { descriptionText } from './src/search/vacancy-text.ts';
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -193,4 +194,15 @@ test('three junk vacancies in a row end the feed, a stack title resets', () => {
   streak = nextDryStreak(streak, 'Методолог (IT)', '');
   assert.equal(feedEnded(streak), true);
   assert.equal(nextDryStreak(streak, 'Разработчик React', 'TypeScript'), 0);
+});
+
+test('the vacancy description does not swallow the jobs under it', () => {
+  const html = [
+    '<div data-qa="vacancy-description"><div><p>React и GraphQL. Удалённо по РФ.</p></div></div>',
+    '<div>PHP Python стажёр</div>',
+  ].join('');
+  const text = descriptionText(html);
+  assert.equal(text.includes('React'), true);
+  assert.equal(text.includes('PHP'), false);
+  assert.equal(text.includes('стажёр'), false);
 });

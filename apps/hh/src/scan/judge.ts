@@ -1,7 +1,7 @@
 import type { Model, Report, Vacancy, Verdict } from './rules.ts';
 
 import { FACTS } from '../model/copy.ts';
-import { hardSkip, lineOf } from './rules.ts';
+import { hardSkip, lineOf, titleStack } from './rules.ts';
 
 export type JudgeOpts = {
   dry: boolean;
@@ -24,6 +24,8 @@ export async function judge(vacancy: Vacancy, opts: JudgeOpts): Promise<Report> 
   opts.takeModel();
   try {
     const answer = await opts.model(vacancy);
+    if (answer.verdict === 'skip' && titleStack(vacancy.title))
+      return packReport(vacancy, 'apply', 'наш стек', opts.dry);
 
     return packReport(vacancy, answer.verdict, answer.reason, opts.dry);
   }
@@ -50,7 +52,7 @@ export function modelPrompt(vacancy: Vacancy): string {
     'Реши по вакансии: apply, skip или human.',
     'apply — наш стек. Молчание про удалёнку, гибрид и «на месте работодателя» тоже apply: на собесе просится удалёнка.',
     'skip — не наш стек, скам, или текст прямо запретил удалёнку: только офис, удалёнки нет.',
-    'Город Бишкек сам по себе не причина скипа.',
+    'Город Бишкек сам по себе не причина скипа. Удалёнка по РФ, Москва и гибрид тоже apply.',
     'human — гугл-форма, тест, вопрос без факта.',
     'Не выдумывай Python, Kubernetes и английский C1.',
     FACTS,
