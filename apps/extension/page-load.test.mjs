@@ -92,6 +92,16 @@ test('the first hh page has no page param and still counts', () => {
   assert.equal(searchReady('https://hh.ru/search/vacancy?text=Frontend', html, 'Frontend', 2, false), false);
 });
 
+test('the saved feed counts without a text query', () => {
+  const html = '<div data-qa="vacancy-serp__vacancy"></div>';
+  const feed = 'https://hh.ru/search/vacancy?enable_snippets=true&ored_clusters=true&search_period=7&hhtmFrom=vacancy_search_list';
+  assert.equal(searchReady(feed, html, '', 0, false), true);
+  assert.equal(searchReady(`${feed}&page=2`, html, '', 2, false), true);
+  assert.equal(searchReady('https://hh.ru/search/vacancy?text=Fullstack&page=20', html, '', 0, false), false);
+  assert.equal(searchReady('https://hh.ru/search/vacancy', html, '', 0, false), true);
+  assert.equal(searchReady(`${feed}&text=JavaScript`, html, '', 0, false), true);
+});
+
 test('a clamped deep page counts after the address changes', () => {
   const html = '<div data-qa="vacancy-serp__vacancy"></div>';
   const url = 'https://hh.ru/search/vacancy?text=Frontend&page=4';

@@ -123,11 +123,41 @@ export function queryText(url: string): string {
   }
 }
 
+export function feedAddress(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.toLowerCase().endsWith('hh.ru') === false)
+      return false;
+
+    if (parsed.pathname !== '/search/vacancy')
+      return false;
+
+    return parsed.searchParams.get('search_period') === '7' && parsed.searchParams.get('ored_clusters') === 'true';
+  }
+  catch {
+    return false;
+  }
+}
+
 export function sameQuery(url: string, query: string): boolean {
-  const left = queryText(url).toLowerCase();
   const right = query.trim().toLowerCase();
+  if (right.length === 0)
+    return feedAddress(url) || (queryText(url).length === 0 && vacancySearch(url));
+
+  const left = queryText(url).toLowerCase();
 
   return left.length > 0 && left === right;
+}
+
+function vacancySearch(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+
+    return parsed.hostname.toLowerCase().endsWith('hh.ru') && parsed.pathname === '/search/vacancy';
+  }
+  catch {
+    return false;
+  }
 }
 
 export function explicitPage(url: string): number | null {

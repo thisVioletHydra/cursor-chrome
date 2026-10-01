@@ -1,7 +1,6 @@
 import type { HideFace, HideStep } from './hide-popup';
 
 import { getFlags } from '../pilot/flags';
-import { freshPilot, pilotStep } from '../chrome/pilot';
 import { tabShowsCaptcha } from '../tab/hh-captcha';
 import { hangHalted, loadWithin, tellPage, tickPage, whileSearching } from '../pilot/page-log';
 import { budgetSec, waitMark } from '../pilot/wait-pulse';
@@ -113,7 +112,6 @@ export async function collectVacancies(
       return false;
     }
 
-    let seenPage = FIRST_PAGE;
     const listedNext = new Map<string, number>();
 
     async function harvest(query: string, page: number, hold: number | null, gap: boolean): Promise<PageHit> {
@@ -151,7 +149,6 @@ export async function collectVacancies(
 
       const landed = explicitPage(pulled.url);
       const here = landed === null ? page : landed;
-      seenPage = here;
       if (query === FEED_KEY)
         lastFeedPage = here;
       const batch = cardsOf(serpHtml(pulled.html));
@@ -220,62 +217,25 @@ export async function collectVacancies(
     }
 
     const focus = FEED_KEY;
-    const phase = 'cover';
-    const depth = 1;
-    if (focus.length === 0)
+    const stored = storedPage(pages[focus]);
+    await tellPage(`${focus}, стр. ${stored + 1}`);
+    const hit = await harvest(focus, stored, null, false);
+    if (hit === 'login')
+      return true;
+
+    if (hit === 'miss') {
+      wordDone = true;
+
+      return false;
+    }
+
+    if (hit === 'fail')
       return false;
 
-    const stored = storedPage(pages[focus]);
-    let page = phase === 'cover' ? FIRST_PAGE : stored;
-    let left = depth;
-    let gap = false;
-
-    while (left > 0) {
-      await tellPage(`${focus}, стр. ${page + 1}`);
-      const hit = await harvest(focus, page, phase === 'cover' ? stored : null, gap);
-      if (hit === 'login')
-        return true;
-
-      if (hit === 'miss') {
-        wordDone = true;
-
-        return false;
-      }
-
-      if (hit === 'fail')
-        return false;
-
-      read += 1;
-      left -= 1;
-      const listed = listedNext.get(focus);
-      if (phase === 'cover') {
-        if (listed !== undefined) {
-          const next = Math.max(stored, FIRST_PAGE + 1);
-          if (next !== stored && await keep(focus, next) === false)
-            return false;
-        }
-
-        wordDone = true;
-
-        return false;
-      }
-
-      if (listed === undefined || left === 0) {
-        wordDone = true;
-
-        return false;
-      }
-
-      const turned = pilotStep(freshPilot(), { type: 'page', page: seenPage, hasNext: true }).page;
-      if (turned === null || listed === seenPage) {
-        wordDone = true;
-
-        return false;
-      }
-
-      page = listed;
-      gap = true;
-    }
+    read += 1;
+    const listed = listedNext.get(focus);
+    if (listed !== undefined && await keep(focus, listed) === false)
+      return false;
 
     wordDone = true;
 
