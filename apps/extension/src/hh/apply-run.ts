@@ -120,7 +120,7 @@ async function clickOpen(plan: ReturnType<typeof planOpen>): Promise<ApplyResult
   if (before)
     return before;
 
-  await noteLive('жму откликнуться');
+  await noteLive('apply-run.ts · жму Откликнуться');
   const pause = between(700, 2_600);
   await beat(pause, () => employerQuestionnaire() !== null, waitMark({
     id: 'apply.pause',
@@ -171,7 +171,7 @@ async function submitStep(): Promise<ApplyResult> {
   if (btn === null)
     return fail('нет кнопки отправки');
 
-  await noteLive('отправляю отклик');
+  await noteLive('apply-run.ts · отправляю отклик');
   const pause = between(900, 3_200);
   await beat(pause, () => employerQuestionnaire() !== null, waitMark({
     id: 'apply.pause',
@@ -185,7 +185,7 @@ async function submitStep(): Promise<ApplyResult> {
     return paused;
 
   click(btn);
-  await noteLive('жду ответ');
+  await noteLive('apply-run.ts · жду ответ hh');
   await beat(8_000, () => employerQuestionnaire() !== null || freshSuccess(hadToast) || formErrors().length > 0, ANSWER_WAIT);
   const asked = askedResult();
   if (asked)
@@ -222,7 +222,7 @@ function murkyStep(): ApplyResult | null {
   if (block === null)
     return null;
 
-  noteLive('мутно, зову человека');
+  noteLive('apply-run.ts · форма мутная, в ждуны');
 
   return humanResult(block);
 }

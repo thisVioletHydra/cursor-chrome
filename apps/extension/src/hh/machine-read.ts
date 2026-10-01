@@ -1,4 +1,3 @@
-import { SERVER_WAIT } from '../chrome/pilot';
 import { pulseLines } from '../pilot/wait-pulse';
 import { browser } from '../browser-host';
 import { ask } from './bridge';
@@ -56,14 +55,10 @@ export function statusLines(snap: Snap): string[] {
   if (detail !== null)
     lines.push(...detail);
 
-  lines.push(snap.link.length > 0 ? snap.link : (snap.auto ? 'вкл' : 'выкл'), pinLine(snap.pinned));
+  lines.push(stateLine(snap));
   const step = currentStep(snap);
   if (detail === null && step.length > 0)
     lines.push(`шаг: ${step}`);
-
-  const flags = flagLine(snap);
-  if (flags.length > 0)
-    lines.push(flags);
 
   const stuck = stuckLine(snap);
   if (stuck.length > 0 && lines.includes(stuck) === false)
@@ -72,14 +67,15 @@ export function statusLines(snap: Snap): string[] {
   return lines;
 }
 
-function pinLine(pinned: boolean | null): string {
-  if (pinned === null)
-    return 'пин: ?';
+function stateLine(snap: Snap): string {
+  const power = snap.link.length > 0 ? snap.link : (snap.auto ? 'бот включён' : 'бот выключен');
+  if (snap.pinned === null)
+    return `${power} · вкладка hh не проверена`;
 
-  if (pinned)
-    return 'пин: да';
+  if (snap.pinned)
+    return `${power} · вкладка hh закреплена`;
 
-  return 'пин: нет';
+  return `${power} · вкладка hh не закреплена`;
 }
 
 function waitText(snap: Snap): string {
@@ -129,23 +125,6 @@ function stuckLine(snap: Snap): string {
     return snap.reason;
 
   return '';
-}
-
-function flagLine(snap: Snap): string {
-  const on: string[] = [];
-  if (snap.auto)
-    on.push('автопилот');
-
-  if (snap.pinned === true)
-    on.push('пин');
-
-  if (snap.link === SERVER_WAIT)
-    on.push(SERVER_WAIT);
-
-  if (on.length === 0)
-    return '';
-
-  return `флаги: ${on.join(', ')}`;
 }
 
 function hang(line: string): boolean {

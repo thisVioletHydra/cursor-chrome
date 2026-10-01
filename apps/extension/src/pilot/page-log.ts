@@ -1,6 +1,6 @@
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 import { foldLiveLine, liveTick, PAGE_LOAD_MS } from '../search/page-load';
-import { budgetSec, pulseHolds, waitMark, waitPulse, type WaitMark } from './wait-pulse';
+import { budgetSec, pulseHolds, stageLine, waitMark, waitPulse, type WaitMark } from './wait-pulse';
 import { getFlags } from './flags';
 import { noteHours } from '../apply/hours-flag';
 import { loadPace, waitMs } from '../apply/pace';
@@ -70,7 +70,7 @@ export function disarmLiveLog(): void {
 
 export async function noteServerBatch(): Promise<void> {
   serverWait = true;
-  await tellPage('сервер разбирает пачку');
+  await tellPage('page-log.ts · сервер разбирает пачку');
 }
 
 export function doneServerBatch(): void {
@@ -264,10 +264,7 @@ function planStall(): void {
     }
 
     const step = stallStep() || 'жду очередь';
-    if (step === 'ищу вакансию' || step.startsWith('ищу вакансию,'))
-      return;
-
-    if (step.startsWith('жду страницу') || step.startsWith('не прочиталась'))
+    if (step.includes('ищу вакансию') || step.includes('жду загрузку') || step.includes('жду страницу') || step.includes('не прочиталась'))
       return;
 
     if (queueRestStep(step))
@@ -322,7 +319,7 @@ let loadingPage = false;
 export async function whileSearching<T>(work: () => Promise<T>): Promise<T> {
   const gen = ++searchGen;
   const started = Date.now();
-  await tellPage('ищу вакансию');
+  await tellPage('page-log.ts · ищу вакансию');
   void runSearchClock(gen, started);
   try {
     return await work();
@@ -535,9 +532,9 @@ async function startWait(label: string, ms: number, resume: '' | 'hunt', mark: W
   lastSent = 0;
   namedWait = true;
   await saveWait(job);
-  const stage = STAGE[label];
-  if (stage !== undefined)
-    await tellPage(stage);
+  const told = mark === null ? STAGE[label] : stageLine(mark);
+  if (told !== undefined && told !== null)
+    await tellPage(told);
 
   await postWaitSecond();
 
@@ -845,7 +842,7 @@ async function pokeServer(): Promise<void> {
   if (serverWaitOver(since, Date.now())) {
     poking = true;
     try {
-      await tellPage('сервер не ответил');
+  await tellPage('page-log.ts · сервер не ответил, выключаюсь');
       await haltHang();
     }
     finally {

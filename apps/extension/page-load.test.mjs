@@ -153,11 +153,10 @@ test('a named wait replaces the same pulse', () => {
   const next = waitPulse(hide, 4);
   assert.equal(first.length <= 80, true);
   assert.deepEqual(pulseLines(first), [
-    'hide.wait',
-    'скрытие',
-    'жребий: 8 с',
-    'прошло: 3 с',
-    'дальше: hide.look',
+    'пауза после скрытия',
+    '3 из 8 с',
+    'потом: проверю, закрылось ли меню',
+    'hh-search.ts',
   ]);
   assert.deepEqual(foldLiveLine(['жду 29'], first), [first]);
   assert.deepEqual(foldLiveLine([first], next), [next]);
@@ -170,10 +169,9 @@ test('a named wait replaces the same pulse', () => {
     kind: 's',
   }), 12);
   assert.deepEqual(pulseLines(hunt), [
-    'search.hunt',
-    'ищу вакансию',
-    'без жребия',
-    'прошло: 12 с',
-    'дальше: search.load',
+    'ищу вакансию в ленте',
+    '12 с',
+    'потом: жду загрузку страницы hh',
+    'hh-search.ts',
   ]);
 });

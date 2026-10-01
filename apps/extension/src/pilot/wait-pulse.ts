@@ -96,16 +96,62 @@ export function pulseHolds(text: string): boolean {
   return readWaitPulse(text)?.hold === true;
 }
 
+const PLACE: Record<string, { do: string; file: string }> = {
+  'apply.read': { do: 'читаю вакансию перед откликом', file: 'page-log.ts' },
+  'apply.open': { do: 'открою вакансию', file: 'queue-run.ts' },
+  'apply.skim': { do: 'быстро пролистал', file: 'queue-run.ts' },
+  'apply.look': { do: 'читаю вакансию', file: 'queue-run.ts' },
+  'apply.send': { do: 'отправлю текст на сервер', file: 'queue-run.ts' },
+  'apply.distract': { do: 'пауза после отклика', file: 'queue-run.ts' },
+  'apply.pause': { do: 'пауза перед кнопкой', file: 'apply-run.ts' },
+  'apply.click': { do: 'нажму Откликнуться', file: 'apply-click.ts' },
+  'apply.form': { do: 'жду форму отклика', file: 'apply-run.ts' },
+  'apply.fill': { do: 'заполню форму', file: 'apply-fill.ts' },
+  'apply.done': { do: 'закончу отклик', file: 'apply-run.ts' },
+  'apply.answer': { do: 'жду ответ hh', file: 'apply-run.ts' },
+  'search.hunt': { do: 'ищу вакансию в ленте', file: 'hh-search.ts' },
+  'search.load': { do: 'жду загрузку страницы hh', file: 'page-load.ts' },
+  'search.read': { do: 'читаю карточки на странице', file: 'hh-search.ts' },
+  'hide.wait': { do: 'пауза после скрытия', file: 'hh-search.ts' },
+  'hide.look': { do: 'проверю, закрылось ли меню', file: 'hide-popup.ts' },
+  'cycle.rest': { do: 'пауза между кругами поиска', file: 'queue-run.ts' },
+  'server.retry': { do: 'сервер молчит, повтор', file: 'queue-run.ts' },
+  'server.send': { do: 'отправлю снова', file: 'queue-run.ts' },
+  'tea.break': { do: 'ушёл курить', file: 'tea.ts' },
+  'tea.miss': { do: 'перекур не выпал', file: 'tea.ts' },
+  'queue.next': { do: 'следующая вакансия', file: 'queue-run.ts' },
+  'queue.idle': { do: 'простой', file: 'page-log.ts' },
+  'queue.wake': { do: 'продолжу очередь', file: 'page-log.ts' },
+};
+
+export function stageLine(mark: WaitMark): string | null {
+  if (mark.id === 'queue.idle')
+    return null;
+
+  const here = PLACE[mark.id];
+  const next = PLACE[mark.next];
+  const file = here?.file ?? mark.id;
+  const doing = here?.do ?? mark.human;
+  const after = next?.do ?? mark.next;
+  const budget = mark.budget === null ? '' : `, ${mark.budget} с`;
+
+  return `${file} · ${doing}${budget} · потом ${after}`;
+}
+
 export function pulseLines(text: string): string[] | null {
   const hit = readWaitPulse(text);
   if (hit === null)
     return null;
 
-  return [
-    hit.id,
-    hit.human,
-    hit.budget === null ? 'без жребия' : `жребий: ${hit.budget} с`,
-    `прошло: ${hit.elapsed} с`,
-    `дальше: ${hit.next}`,
-  ];
+  const here = PLACE[hit.id];
+  const next = PLACE[hit.next];
+  const doing = here?.do ?? hit.human;
+  const file = here?.file ?? hit.id;
+  const after = next?.do ?? hit.next;
+  if (hit.id === 'queue.idle')
+    return ['простой, секунды не пишу', 'жду следующую работу', file];
+
+  const clock = hit.budget === null ? `${hit.elapsed} с` : `${hit.elapsed} из ${hit.budget} с`;
+
+  return [doing, clock, `потом: ${after}`, file];
 }

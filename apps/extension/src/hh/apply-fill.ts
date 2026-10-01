@@ -58,7 +58,7 @@ export async function fillApply(): Promise<FillFail | null> {
     return { ok: false, status: 'needsHuman', reason: asked.reason, hints: asked.hints };
 
   const kind = resumeKind(vacancyTitle(), vacancyBody());
-  noteLive(`резюме ${kind}`);
+  noteLive(`apply-fill.ts · резюме ${kind}`);
   await pickResume(kind);
 
   const letterOk = await insertLetter();

@@ -245,7 +245,7 @@ async function silence(): Promise<void> {
   if (queueWait(where))
     return;
 
-  if (where === 'ищу вакансию' || searchTick(where)) {
+  if (where.includes('ищу вакансию') || searchTick(where) || where.includes('жду страницу') || where.includes('не прочиталась')) {
     silenceNoted = true;
     try {
       await mark('extension', 'не прочиталась страница hh', false);
@@ -417,10 +417,10 @@ function stateHold(text: string): boolean {
 }
 
 function searchHang(text: string): boolean {
-  if (text.startsWith('я завис: ищу вакансию') || text.startsWith('я завис: жду страницу') || text.startsWith('я завис: не прочиталась'))
-    return true;
+  if (text.includes('ищу вакансию') || text.includes('жду страницу') || text.includes('не прочиталась'))
+    return text.startsWith('я завис') || text.startsWith('замолчало');
 
-  return text.startsWith('замолчало на шаге ищу') || text.startsWith('замолчало на шаге жду страницу');
+  return false;
 }
 
 function noteTick(text: string): void {

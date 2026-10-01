@@ -408,7 +408,7 @@ async function drainSaved(base: string, key: string, run: QueueRun): Promise<App
       continue;
 
     if (skipped > 0) {
-      await tellPage(`в списке уже видели, ${skipped}`);
+      await tellPage(`queue-run.ts · в списке уже видели, ${skipped}`);
       skipped = 0;
     }
 
@@ -433,7 +433,7 @@ async function drainSaved(base: string, key: string, run: QueueRun): Promise<App
 
 async function noteSkip(count: number, pass: ApplyPass): Promise<ApplyPass> {
   if (count > 0)
-    await tellPage(`в списке уже видели, ${count}`);
+    await tellPage(`queue-run.ts · в списке уже видели, ${count}`);
 
   return pass;
 }
@@ -462,12 +462,12 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
 
   const card = await readVacancyPage(shown.tabId, link.id, link.url);
   if (card === null) {
-    await tellPage('вакансия не открылась');
+    await tellPage('queue-run.ts · вакансия не открылась');
 
     return { started: false, stop: false, reason: '', held: true };
   }
 
-  await tellPage(`открыл ${card.title}`);
+  await tellPage(`queue-run.ts · открыл ${card.title}`);
   const posted = await sendFound(base, key, [card]);
   if (posted.reason === 'день закрыт') {
     await stopForToday();
@@ -486,9 +486,9 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
     const why = posted.reason.trim();
     const ignore = posted.verdict === 'skip' || why === 'уже видели';
     if (ignore)
-      await tellPage(why.length > 0 ? `скип: ${why}` : 'скип');
+      await tellPage(why.length > 0 ? `queue-run.ts · скип: ${why}` : 'queue-run.ts · скип');
     else if (why.length > 0)
-      await tellPage(why);
+      await tellPage(`queue-run.ts · ${why}`);
 
     if (ignore && 'tabId' in shown && await hideOpenVacancy(shown.tabId, link.id, row => postHidden(base, key, row)) === false)
       return { started: false, stop: true, reason: HIDE_POPUP_STUCK };
@@ -565,7 +565,7 @@ async function noteReply(base: string, key: string, run: QueueRun, item: QueueIt
     }));
   }
   else
-    await tellPage(landed ? describe(status, reply) : 'админка не приняла отклик');
+    await tellPage(`queue-run.ts · ${landed ? describe(status, reply) : 'админка не приняла отклик'}`);
 
   if (status === 'needsHuman')
     await report(base, key, item, { status, hints: hintsOf(reply) });
@@ -613,7 +613,7 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
   }
 
   if (hunt.want === false) {
-    await tellPage('сервер не просит поиск');
+    await tellPage('queue-run.ts · сервер не просит поиск');
 
     return { note: 'сервер не просит поиск', saved: 0, more: false, done: false, retry: true };
   }
@@ -703,7 +703,7 @@ async function sendFound(base: string, key: string, cards: unknown[]): Promise<{
   if (posted.added > 0 || posted.reason.startsWith(DOWN) === false)
     return posted;
 
-  await tellPage(posted.reason);
+  await tellPage(`queue-run.ts · ${posted.reason}`);
   await tickPage('жду', RETRY_MS, '', waitMark({
     id: 'server.retry',
     human: 'сервер',
@@ -846,7 +846,7 @@ async function applyOne(item: QueueItem, already = false): Promise<ApplyReply> {
       return shown;
 
     tabId = shown.tabId;
-    await tellPage(`открыл ${item.title.trim() || item.id}`);
+    await tellPage(`queue-run.ts · открыл ${item.title.trim() || item.id}`);
   }
 
   if (await tabShowsCaptcha(tabId))

@@ -173,7 +173,7 @@ export async function collectVacancies(
 
       const knownIds = batch.filter(card => marks.seen.has(card.id)).map(card => card.id);
       if (knownIds.length > 0)
-        await tellPage(`уже видели, ${knownIds.length}`);
+        await tellPage(`hh-search.ts · уже видели, ${knownIds.length}`);
 
       const fresh = new Set(marks.saved);
       const cards = new Map(batch.map(card => [card.id, card]));
@@ -187,7 +187,7 @@ export async function collectVacancies(
       const step = searchStep({ saved: marks.saved.length, hasNext: more });
       if (step === 'saved') {
         saved += marks.saved.length;
-        await tellPage(`в список ${marks.saved.length}`);
+        await tellPage(`hh-search.ts · в список ${marks.saved.length}`);
       }
 
       return finish(query, step, more);
@@ -210,12 +210,12 @@ export async function collectVacancies(
         return;
 
       missed = true;
-      await tellPage('не прочиталась страница hh');
+      await tellPage('hh-search.ts · не прочиталась страница hh');
     }
 
     const focus = FEED_KEY;
     const stored = storedPage(pages[focus]);
-    await tellPage(`${focus}, стр. ${stored + 1}`);
+    await tellPage(`hh-search.ts · ${focus}, стр. ${stored + 1}`);
     const hit = await harvest(focus, stored, null, false);
     if (hit === 'login')
       return true;
@@ -298,7 +298,7 @@ async function noteEnded(query: string, fresh: boolean): Promise<void> {
   if (line.say === false)
     return;
 
-  await tellPage('страницы кончились');
+  await tellPage('hh-search.ts · страницы кончились');
 }
 
 function storedPage(page: number | undefined): number {
@@ -325,13 +325,15 @@ function searchUrl(query: string, page: number): string {
 }
 
 export async function hideOpenVacancy(tabId: number, id: string, note: (row: HiddenMark) => Promise<void>): Promise<boolean> {
+  await tellPage('hh-search.ts · жму Ещё');
   const more = await hideCall(tabId, 'more', '');
   if (more === null || hideClickOk(more) === false) {
-    await tellPage('нет кнопки Ещё');
+    await tellPage('hh-search.ts · нет кнопки Ещё');
 
     return true;
   }
 
+  await tellPage('hh-search.ts · жму Скрыть эту вакансию');
   const hit = await runHide(tabId, hideStart());
   if (hit === 'halt')
     return true;
@@ -339,6 +341,7 @@ export async function hideOpenVacancy(tabId: number, id: string, note: (row: Hid
   if (hit !== 'done')
     return hit !== 'stuck';
 
+  await tellPage('hh-search.ts · вакансия скрыта');
   await note({ id, reason: HIDE_REASON, title: '', company: '' });
 
   return true;
