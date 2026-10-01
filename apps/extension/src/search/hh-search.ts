@@ -7,7 +7,7 @@ import { hangHalted, loadWithin, tellPage, tickPage, whileSearching } from '../p
 import { budgetSec, waitMark } from '../pilot/wait-pulse';
 import { hideDom } from './hide-dom';
 import { HIDE_POLL_MS, HIDE_POPUP_STUCK, hideBlocks, hideClickOk, hideFaceOf, hideLimit, hideStart, stepHide } from './hide-popup';
-import { PAGE_LOAD_MS, endedAfter, flipWaitMs, hideWaitMs, landedPage, nextListedPage, pageLoadMiss, parsedSearch, putSearchPage, searchStep } from './page-load';
+import { PAGE_LOAD_MS, endedAfter, explicitPage, flipWaitMs, hideWaitMs, nextListedPage, pageLoadMiss, parsedSearch, putSearchPage, queryText, searchReady, searchStep } from './page-load';
 import { getWorkerTabId, isBotWorkUrl, isHhUrl, openBotSearch, requireWorkerTab, wakeWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
@@ -145,10 +145,8 @@ export async function collectVacancies(
         return 'miss';
       }
 
-      const here = landedPage(pulled.url, page);
-      if (here !== page)
-        return 'miss';
-
+      const landed = explicitPage(pulled.url);
+      const here = landed === null ? page : landed;
       seenPage = here;
       const batch = cardsOf(serpHtml(pulled.html));
       const nextPage = await listedAfter(tabId, pulled.html, here, batch.length);
@@ -221,18 +219,24 @@ export async function collectVacancies(
     if (focus.length === 0)
       return false;
 
-    await tellPage(phase === 'cover' ? `${focus}, первая` : `${focus}, ${depth} стр.`);
     const stored = storedPage(pages[focus]);
     let page = phase === 'cover' ? FIRST_PAGE : stored;
     let left = depth;
     let gap = false;
 
     while (left > 0) {
+      await tellPage(`${focus}, стр. ${page + 1}`);
       const hit = await harvest(focus, page, phase === 'cover' ? stored : null, gap);
       if (hit === 'login')
         return true;
 
-      if (hit === 'miss' || hit === 'fail')
+      if (hit === 'miss') {
+        wordDone = true;
+
+        return false;
+      }
+
+      if (hit === 'fail')
         return false;
 
       read += 1;
@@ -279,7 +283,7 @@ export async function collectVacancies(
     return { login: true, captcha: false, saved, more: false, done: false, read, reason: '' };
 
   if (missed && saved === 0)
-    return miss(false, false, 'не прочиталась страница hh', read);
+    return { login: false, captcha: false, saved: 0, more: false, done: wordDone, read, reason: 'не прочиталась страница hh' };
 
   if (checkFailed && saved === 0) {
     await tellPage('сервер не сверил вакансии');
@@ -363,7 +367,8 @@ async function listedAfter(tabId: number, html: string, page: number, cards: num
     return null;
 
   const again = await readTab(tabId);
-  if (again === null || landedPage(again.url, -1) !== page)
+  const here = again === null ? null : explicitPage(again.url) ?? 0;
+  if (again === null || here !== page)
     return null;
 
   return nextListedPage(again.html, page);
@@ -667,20 +672,20 @@ async function readSearchPage(tabId: number, url: string, until: number, page: n
   if (await blocked(tabId, until))
     return null;
 
-  await showUrl(tabId, url, until);
+  const moved = await showUrl(tabId, url, until);
   if (sawCaptcha || await blocked(tabId, until))
     return null;
 
-  return readUntilSerp(tabId, until, page);
+  return readUntilSerp(tabId, until, page, queryText(url), moved);
 }
 
-async function readUntilSerp(tabId: number, until: number, want: number): Promise<{ url: string; html: string } | null> {
+async function readUntilSerp(tabId: number, until: number, want: number, query: string, moved: boolean): Promise<{ url: string; html: string } | null> {
   while (late(until) === false && hangHalted() === false) {
     if (await captchaNow(tabId, until))
       return null;
 
     const page = await readTab(tabId, until);
-    if (openedAsk(page, want))
+    if (openedAsk(page, want, query, moved))
       return page;
 
     if (await waitBit(until) === false)
@@ -690,17 +695,14 @@ async function readUntilSerp(tabId: number, until: number, want: number): Promis
   return null;
 }
 
-function openedAsk(page: { url: string; html: string } | null, want: number): page is { url: string; html: string } {
+function openedAsk(page: { url: string; html: string } | null, want: number, query: string, moved: boolean): page is { url: string; html: string } {
   if (page === null)
     return false;
 
   if (isLogin(page.url, page.html))
     return true;
 
-  if (parsedSearch(page.html) === false)
-    return false;
-
-  return landedPage(page.url, -1) === want;
+  return searchReady(page.url, page.html, query, want, moved);
 }
 
 async function waitBit(until: number): Promise<boolean> {
@@ -736,27 +738,32 @@ async function readTab(tabId: number, until = 0): Promise<{ url: string; html: s
   }
 }
 
-async function showUrl(tabId: number, url: string, until = 0): Promise<void> {
+async function showUrl(tabId: number, url: string, until = 0): Promise<boolean> {
   const deadline = until > 0 ? until : Date.now() + PAGE_LOAD_MS;
   if (await blocked(tabId, deadline))
-    return;
+    return false;
 
   await budget(wakeWorkerTab(tabId), deadline);
   if (await blocked(tabId, deadline))
-    return;
+    return false;
 
   const tab = await budget(browser.tabs.get(tabId).catch(() => null), deadline);
   if (late(deadline))
-    return;
+    return false;
 
+  const before = tab?.url || tab?.pendingUrl || '';
   const loaded = waitTab(tabId, Math.min(15_000, Math.max(0, deadline - Date.now())));
   const open = tab?.active === true ? { url } : { url, active: false };
   await budget(browser.tabs.update(tabId, open), deadline);
   await budget(loaded, deadline);
   if (late(deadline))
-    return;
+    return false;
 
   await budget(pause(500, 1200), deadline);
+  const after = await budget(browser.tabs.get(tabId).catch(() => null), deadline);
+  const landed = after?.url || after?.pendingUrl || '';
+
+  return landed.length > 0 && landed !== before;
 }
 
 function late(until: number): boolean {

@@ -417,7 +417,7 @@ function stateHold(text: string): boolean {
 }
 
 function searchHang(text: string): boolean {
-  if (text.startsWith('я завис: ищу вакансию') || text.startsWith('я завис: жду страницу'))
+  if (text.startsWith('я завис: ищу вакансию') || text.startsWith('я завис: жду страницу') || text.startsWith('я завис: не прочиталась'))
     return true;
 
   return text.startsWith('замолчало на шаге ищу') || text.startsWith('замолчало на шаге жду страницу');

@@ -266,7 +266,7 @@ function planStall(): void {
     if (step === 'ищу вакансию' || step.startsWith('ищу вакансию,'))
       return;
 
-    if (step.startsWith('жду страницу'))
+    if (step.startsWith('жду страницу') || step.startsWith('не прочиталась'))
       return;
 
     if (queueRestStep(step))

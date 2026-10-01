@@ -114,6 +114,56 @@ function hrefPages(html: string, qa: string): number[] {
   return pages;
 }
 
+export function queryText(url: string): string {
+  try {
+    return new URL(url).searchParams.get('text')?.trim() ?? '';
+  }
+  catch {
+    return '';
+  }
+}
+
+export function sameQuery(url: string, query: string): boolean {
+  const left = queryText(url).toLowerCase();
+  const right = query.trim().toLowerCase();
+
+  return left.length > 0 && left === right;
+}
+
+export function explicitPage(url: string): number | null {
+  try {
+    const value = new URL(url).searchParams.get('page');
+    if (value === null)
+      return null;
+
+    const page = Number(value);
+    if (Number.isInteger(page) && page >= 0)
+      return page;
+  }
+  catch {
+    return null;
+  }
+
+  return null;
+}
+
+export function searchReady(url: string, html: string, query: string, want: number, moved: boolean): boolean {
+  if (parsedSearch(html) === false)
+    return false;
+
+  if (sameQuery(url, query) === false)
+    return false;
+
+  const landed = explicitPage(url);
+  if (landed === null)
+    return want === 0;
+
+  if (landed === want)
+    return true;
+
+  return moved && landed < want;
+}
+
 export function landedPage(url: string, asked: number): number {
   try {
     const value = new URL(url).searchParams.get('page');

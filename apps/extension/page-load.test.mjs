@@ -1,4 +1,4 @@
-import { FLIP_MAX_MS, FLIP_MIN_MS, HIDE_MAX_MS, HIDE_MIN_MS, PAGE_LOAD_MS, endedAfter, flipWaitMs, foldLiveLine, hideWaitMs, landedPage, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchHasNext, searchStep } from './src/search/page-load.ts';
+import { FLIP_MAX_MS, FLIP_MIN_MS, HIDE_MAX_MS, HIDE_MIN_MS, PAGE_LOAD_MS, endedAfter, flipWaitMs, foldLiveLine, hideWaitMs, landedPage, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchHasNext, searchReady, searchStep } from './src/search/page-load.ts';
 import { pulseLines, waitMark, waitPulse } from './src/pilot/wait-pulse.ts';
 
 import assert from 'node:assert/strict';
@@ -83,6 +83,21 @@ test('a finished hide sits from one to eight seconds', () => {
   assert.equal(HIDE_MAX_MS, 8_000);
   assert.equal(hideWaitMs(Number.NaN), 1_000);
   assert.equal(hideWaitMs(2), 8_000);
+});
+
+test('the first hh page has no page param and still counts', () => {
+  const html = '<div data-qa="vacancy-serp__vacancy"></div>';
+  assert.equal(searchReady('https://hh.ru/search/vacancy?text=Frontend', html, 'Frontend', 0, false), true);
+  assert.equal(searchReady('https://hh.ru/search/vacancy?text=Frontend', html, 'Vue.js', 0, false), false);
+  assert.equal(searchReady('https://hh.ru/search/vacancy?text=Frontend', html, 'Frontend', 2, false), false);
+});
+
+test('a clamped deep page counts after the address changes', () => {
+  const html = '<div data-qa="vacancy-serp__vacancy"></div>';
+  const url = 'https://hh.ru/search/vacancy?text=Frontend&page=4';
+  assert.equal(searchReady(url, html, 'Frontend', 20, true), true);
+  assert.equal(searchReady(url, html, 'Frontend', 20, false), false);
+  assert.equal(searchReady(url, html, 'Frontend', 4, false), true);
 });
 
 test('hh clamps a deep cursor onto the page it actually opened', () => {
