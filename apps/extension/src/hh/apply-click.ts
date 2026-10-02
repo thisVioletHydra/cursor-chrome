@@ -67,6 +67,15 @@ export function freshSuccess(hadToast: boolean): boolean {
   return ctaApplied() || (applySucceeded() && hadToast === false);
 }
 
+export function relocationConfirm(): HTMLElement | null {
+  const marked = document.querySelector<HTMLElement>('[data-qa="relocation-warning-confirm"]');
+  if (marked && visible(marked))
+    return marked;
+
+  return [...document.querySelectorAll<HTMLElement>('button')]
+    .find(element => visible(element) && /все равно откликнуться/i.test(compact(element.textContent || ''))) ?? null;
+}
+
 export function findSubmit(): HTMLElement | null {
   const root = applyRoot();
   if (root === null)

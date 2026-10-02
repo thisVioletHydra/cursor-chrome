@@ -1,7 +1,7 @@
 import { click } from '../page/actions';
 import { budgetSec, waitMark, waitPulse, type WaitMark } from '../pilot/wait-pulse';
 import { applyMeta, applySucceeded } from './apply-watch';
-import { ctaApplied, findSubmit, formErrors, freshSuccess, pageSkip, planOpen } from './apply-click';
+import { ctaApplied, findSubmit, formErrors, freshSuccess, pageSkip, planOpen, relocationConfirm } from './apply-click';
 import { applyBlocker, captchaOnPage, formReady, humanPayload } from './apply-detect';
 import { asHumanBlock, fillApply } from './apply-fill';
 import { ask } from './bridge';
@@ -26,6 +26,7 @@ export type ApplyResult = {
 
 let running: Promise<ApplyResult> | null = null;
 let hadToast = false;
+let abroadNoted = false;
 
 const ANSWER_WAIT = waitMark({
   id: 'apply.answer',
@@ -49,6 +50,7 @@ export function runApply(resume = false): Promise<ApplyResult> {
 
 async function applyOnce(resume: boolean): Promise<ApplyResult> {
   setApplyLock(true);
+  abroadNoted = false;
   hadToast = resume ? hadToast : applySucceeded();
   if (resume)
     await until(() => formReady() || ctaApplied() || employerQuestionnaire() !== null, 8000);
@@ -66,6 +68,7 @@ async function applyOnce(resume: boolean): Promise<ApplyResult> {
     async () => submitStep(),
   ];
   for (const step of steps) {
+    acceptAbroad();
     const hit = await step();
     if (hit)
       return hit;
@@ -134,7 +137,11 @@ async function clickOpen(plan: ReturnType<typeof planOpen>): Promise<ApplyResult
     return mid;
 
   click(plan.el);
-  const ok = await beat(8_000, () => employerQuestionnaire() !== null || formReady() || freshSuccess(hadToast), waitMark({
+  const ok = await beat(8_000, () => {
+    acceptAbroad();
+
+    return employerQuestionnaire() !== null || formReady() || freshSuccess(hadToast);
+  }, waitMark({
     id: 'apply.form',
     human: 'форма отклика',
     budget: 8,
@@ -186,7 +193,11 @@ async function submitStep(): Promise<ApplyResult> {
 
   click(btn);
   await noteLive('apply-run.ts · жду ответ hh');
-  await beat(8_000, () => employerQuestionnaire() !== null || freshSuccess(hadToast) || formErrors().length > 0, ANSWER_WAIT);
+  await beat(8_000, () => {
+    acceptAbroad();
+
+    return employerQuestionnaire() !== null || freshSuccess(hadToast) || formErrors().length > 0;
+  }, ANSWER_WAIT);
   const asked = askedResult();
   if (asked)
     return asked;
@@ -200,7 +211,11 @@ async function submitStep(): Promise<ApplyResult> {
     const again = findSubmit();
     if (again !== null) {
       click(again);
-      await beat(8_000, () => employerQuestionnaire() !== null || freshSuccess(hadToast) || formErrors().length > 0, ANSWER_WAIT);
+      await beat(8_000, () => {
+        acceptAbroad();
+
+        return employerQuestionnaire() !== null || freshSuccess(hadToast) || formErrors().length > 0;
+      }, ANSWER_WAIT);
     }
   }
   const afterAgain = askedResult();
@@ -229,6 +244,19 @@ function murkyStep(): ApplyResult | null {
 
 function humanOrNull(block: ReturnType<typeof applyBlocker>): ApplyResult | null {
   return block ? humanResult(block) : null;
+}
+
+function acceptAbroad(): void {
+  const button = relocationConfirm();
+  if (button === null)
+    return;
+
+  click(button);
+  if (abroadNoted)
+    return;
+
+  abroadNoted = true;
+  void noteLive('apply-run.ts · другая страна, всё равно откликнуться');
 }
 
 function askedResult(): ApplyResult | null {
