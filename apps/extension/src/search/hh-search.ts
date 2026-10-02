@@ -11,7 +11,7 @@ import { descriptionText } from './vacancy-text';
 import { getWorkerTabId, isBotWorkUrl, isHhUrl, openBotSearch, requireWorkerTab, wakeWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
-const HIDE_REASON = 'не подходит профессия';
+const HIDE_REASON = 'скрыл, уже видели';
 const FIRST_PAGE = 0;
 const FEED_KEY = 'лента';
 const FEED = 'https://hh.ru/search/vacancy?enable_snippets=true&ored_clusters=true&search_period=7&hhtmFromLabel=search_order_button&hhtmFrom=vacancy_search_list';

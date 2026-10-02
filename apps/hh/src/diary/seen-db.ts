@@ -13,7 +13,9 @@ const DAY_HIGH = Math.ceil(SEND_PER_DAY * (1 + SWAY));
 const INSERT_STEP = 5_000;
 const PASSED_LIMIT = 80;
 
-export const HIDE_REASON = 'не подходит профессия';
+const LEGACY_HIDE = 'не подходит профессия';
+
+export const HIDE_REASON = 'скрыл, уже видели';
 
 const QUIET_REASON = new Set(['', 'уже видели', 'уже в очереди']);
 
@@ -280,6 +282,15 @@ function ensurePassed(opened: sqlite.DatabaseSync): void {
     INSERT OR IGNORE INTO passed (id, at, reason, company, title)
     SELECT id, at, ?, '', '' FROM hidden
   `).run(HIDE_REASON);
+  opened.prepare('UPDATE passed SET reason = ? WHERE reason = ?').run(HIDE_REASON, LEGACY_HIDE);
+}
+
+function shownHideReason(reason: string): string {
+  return reason === LEGACY_HIDE ? HIDE_REASON : reason;
+}
+
+function cannedHide(reason: string): boolean {
+  return reason === HIDE_REASON || reason === LEGACY_HIDE;
 }
 
 function writePassed(
@@ -290,7 +301,7 @@ function writePassed(
   row: PassedNote,
 ): void {
   const id = numId(row.id);
-  const reason = row.reason.trim().slice(0, 200);
+  const reason = shownHideReason(row.reason.trim().slice(0, 200));
   if (id === null || QUIET_REASON.has(reason))
     return;
 
@@ -309,7 +320,7 @@ function writePassed(
   const keptTitle = sqlText(existing.title);
   const nextCompany = keptCompany.length > 0 ? keptCompany : company;
   const nextTitle = keptTitle.length > 0 ? keptTitle : title;
-  if (prior === HIDE_REASON && reason !== HIDE_REASON) {
+  if (cannedHide(prior) && reason !== prior) {
     replace.run(at, reason, nextCompany, nextTitle, id);
 
     return;
