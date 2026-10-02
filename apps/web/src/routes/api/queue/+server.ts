@@ -1,7 +1,7 @@
 import type { State } from '@cursor-chrome/hh';
 import type { RequestHandler } from './$types';
 
-import { COVER_LETTER, DEFAULT_QUERY, HIDE_REASON, busyAmong, dayOpen, forgetAllLinks, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, moscowDay, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readState, rememberSearchPage, searchPages, splitQueries, stepWalk, takePilotStart, walkFrom, workHours, writeState } from '@cursor-chrome/hh';
+import { COVER_LETTER, DEFAULT_QUERY, HIDE_REASON, busyAmong, coveredWaiters, dayOpen, dropWaiters, forgetAllLinks, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, moscowDay, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readQueue, readState, rememberSearchPage, searchPages, splitQueries, stepWalk, takePilotStart, walkFrom, workHours, writeState } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { readAccount } from '$lib/server/secrets';
@@ -71,6 +71,11 @@ export const POST: RequestHandler = async ({ request }) => {
     const hidden = hiddenNotes(body.hidden);
     await noteHidden(hidden.map(row => row.id));
     await notePassed(hidden);
+    const ids = coveredWaiters(await readQueue(), hidden.map(row => row.id));
+    if (ids.length > 0) {
+      await forgetLinks(ids);
+      await dropWaiters(ids);
+    }
 
     return json({ ok: true });
   }

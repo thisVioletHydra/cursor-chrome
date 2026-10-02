@@ -93,6 +93,38 @@ export function bumpDay(day: string): void {
   openDatabase().prepare('UPDATE day_cap SET sent = sent + 1 WHERE day = ?').run(day);
 }
 
+const STAYS_WAITING = new Set([
+  'вопросы работодателя',
+  'вопросы работодателя, обязательные поля',
+  'свои вопросы HH',
+  'ждёт тебя',
+  'уже видели',
+]);
+
+export function lookupShelved(ids: readonly string[]): string[] {
+  const nums = uniqueNums(ids);
+  if (nums.length === 0)
+    return [];
+
+  const marks = nums.map(() => '?').join(', ');
+  const opened = openDatabase();
+  const found = new Set<string>();
+  for (const row of opened.prepare(`SELECT id FROM hidden WHERE id IN (${marks})`).all(...nums)) {
+    const id = textId(row.id);
+    if (id !== null)
+      found.add(id);
+  }
+
+  for (const row of opened.prepare(`SELECT id, reason FROM passed WHERE id IN (${marks})`).all(...nums)) {
+    const id = textId(row.id);
+    const reason = sqlText(row.reason);
+    if (id !== null && reason.length > 0 && STAYS_WAITING.has(reason) === false)
+      found.add(id);
+  }
+
+  return ids.filter(id => found.has(id));
+}
+
 export function lookupSeen(ids: readonly string[]): string[] {
   const nums = uniqueNums(ids);
   if (nums.length === 0)

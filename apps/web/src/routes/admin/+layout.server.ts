@@ -4,7 +4,7 @@ import { COVER_LETTER, hiddenCount, moscowDay, passedCount, PRESETS, providerNam
 import { boardFrom } from '$lib/server/board';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { redirect } from '@sveltejs/kit';
-import { coolLeft } from '$lib/server/admin-actions';
+import { coolLeft, pruneShelvedWaiters } from '$lib/server/admin-actions';
 import { guestLinks, storedLinks } from '$lib/server/checks';
 import { chainOf, collapseChain, DEFAULT_QUERY, GUEST_BALANCE, isCreator, publishSecrets, readAccount, VACANCY_RUB, withChain, writeAccount } from '$lib/server/secrets';
 
@@ -28,7 +28,8 @@ async function statsOf(preview: boolean) {
     };
   }
 
-  const [queue, state, judged, hidden, passed, passedTotal] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount(), readPassed(), passedCount()]);
+  const [loaded, state, judged, hidden, passed, passedTotal] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount(), readPassed(), passedCount()]);
+  const queue = await pruneShelvedWaiters(loaded);
   const day = moscowDay();
   const board = boardFrom(queue, passed);
 

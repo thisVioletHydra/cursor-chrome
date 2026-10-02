@@ -1,6 +1,6 @@
 import { clearLinks, deleteLinks, insertLinks, listLinks, lookupHeld } from './links-db.ts';
 import { SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from '../limits.ts';
-import { bumpDay, clearSearchPages, countHidden, countPassed, countSeen, insertHidden, insertSeen, listPassed, lookupSeen, openStore, readDay, readSearchPages, savePassed, storePath, writeDay, writeSearchPage } from './seen-db.ts';
+import { bumpDay, clearSearchPages, countHidden, countPassed, countSeen, insertHidden, insertSeen, listPassed, lookupSeen, lookupShelved, openStore, readDay, readSearchPages, savePassed, storePath, writeDay, writeSearchPage } from './seen-db.ts';
 import type { PassedNote, PassedRow } from './seen-db.ts';
 
 export type { PassedNote, PassedRow };
@@ -57,6 +57,10 @@ export function markSent(id: string): Promise<void> {
 
 export function knownAmong(ids: readonly string[]): Promise<string[]> {
   return turn(async () => lookupSeen(ids));
+}
+
+export function shelvedAmong(ids: readonly string[]): Promise<string[]> {
+  return turn(async () => lookupShelved(ids));
 }
 
 export function seenCount(): Promise<number> {

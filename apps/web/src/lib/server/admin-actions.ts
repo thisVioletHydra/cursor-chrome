@@ -3,7 +3,7 @@ import type { Stored } from './secrets';
 
 import type { Provider } from '@cursor-chrome/hh';
 
-import { asProvider, COVER_LETTER, distillCorpus, dropWaiters, forgetLinks, notePassed, parseRules, providerName, readQueue, remember, scoreAts, splitQueries, splitWaiters, splitWords, staleWaiters, suggestQueries, watchRestart } from '@cursor-chrome/hh';
+import { asProvider, COVER_LETTER, coveredWaiters, distillCorpus, dropWaiters, forgetLinks, notePassed, parseRules, providerName, readQueue, remember, scoreAts, shelvedAmong, splitQueries, splitWaiters, splitWords, staleWaiters, suggestQueries, watchRestart, type QueueItem } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
 import { chainOf, collapseChain, imitationFromFields, isCreator, newExtToken, publishSecrets, readAccount, readResume, withChain, writeAccount, writeAtsScan } from './secrets';
@@ -387,6 +387,19 @@ export async function setHoursAdmin({ request, cookies }: RequestEvent) {
   publishSecrets(login, next);
 
   return { ok: true, detail: 'Сохранено', hours: hhHours !== '0' };
+}
+
+export async function pruneShelvedWaiters(queue: QueueItem[]): Promise<QueueItem[]> {
+  const waiting = queue.filter(row => row.status === 'needsHuman').map(row => row.id);
+  const ids = coveredWaiters(queue, await shelvedAmong(waiting));
+  if (ids.length === 0)
+    return queue;
+
+  await forgetLinks(ids);
+  await dropWaiters(ids);
+  const gone = new Set(ids);
+
+  return queue.filter(row => gone.has(row.id) === false);
 }
 
 export async function dropWaitingAdmin({ request, cookies }: RequestEvent) {

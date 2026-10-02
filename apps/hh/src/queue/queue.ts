@@ -107,6 +107,12 @@ export function staleWaiters(queue: readonly QueueItem[], now = Date.now()): Que
   return queue.filter(row => row.status === 'needsHuman' && isStale(row.doneAt ?? row.at, now));
 }
 
+export function coveredWaiters(queue: readonly QueueItem[], shelved: readonly string[]): string[] {
+  const hit = new Set(shelved);
+
+  return queue.filter(row => row.status === 'needsHuman' && hit.has(row.id)).map(row => row.id);
+}
+
 export function splitWaiters(queue: readonly QueueItem[], ids: readonly string[] | null): { kept: QueueItem[]; taken: QueueItem[] } {
   const pick = ids === null ? null : new Set(ids);
   const kept: QueueItem[] = [];

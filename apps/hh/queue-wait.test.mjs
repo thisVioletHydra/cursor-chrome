@@ -1,4 +1,4 @@
-import { isStale, splitWaiters, staleWaiters, WEEK_MS } from './src/queue/queue.ts';
+import { coveredWaiters, isStale, splitWaiters, staleWaiters, WEEK_MS } from './src/queue/queue.ts';
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -28,6 +28,12 @@ test('only waiting rows leave, and a single id does not take the rest', () => {
   const sent = splitWaiters(queue, ['2']);
   assert.equal(sent.taken.length, 0);
   assert.equal(sent.kept.length, 4);
+});
+
+test('a hidden match leaves waiting, a fresh question stays', () => {
+  const queue = [row('1', 'needsHuman'), row('2', 'needsHuman'), row('3', 'sent')];
+  assert.deepEqual(coveredWaiters(queue, ['1', '3']), ['1']);
+  assert.deepEqual(coveredWaiters(queue, []), []);
 });
 
 test('a waiter is stale after a week, a fresh one stays', () => {
