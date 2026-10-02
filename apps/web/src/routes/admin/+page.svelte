@@ -531,7 +531,12 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
 <section class="mb-8 rounded-2xl border border-white/8 bg-[#151922] px-5 {allGreen ? 'py-3 lg:py-2' : 'py-4'}">
   <div class={allGreen ? 'lg:flex lg:items-center lg:gap-6' : ''}>
   <div class="flex items-center justify-between gap-3 {allGreen ? 'lg:contents' : ''}">
-    <h2 class="text-base font-semibold {allGreen ? 'lg:shrink-0' : ''}">До старта</h2>
+    <div class="flex min-w-0 items-baseline gap-3 {allGreen ? 'lg:contents' : ''}">
+      <h2 class="shrink-0 text-base font-semibold">До старта</h2>
+      {#if allGreen}
+        <p class="shrink-0 text-xs whitespace-nowrap text-zinc-500">С 9:00 до 22:00 МСК.</p>
+      {/if}
+    </div>
     <form
       class={allGreen ? 'lg:order-last lg:shrink-0' : ''}
       method="POST"
@@ -569,9 +574,6 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
       </button>
     </form>
   </div>
-  {#if allGreen}
-    <p class="mt-2 text-xs text-zinc-500 lg:mt-0 lg:shrink-0">С 9:00 до 22:00 МСК.</p>
-  {/if}
   <ul class="mt-3 grid grid-cols-2 gap-x-4 {allGreen ? 'gap-y-1 lg:mt-0 lg:flex lg:min-w-0 lg:flex-1 lg:flex-wrap lg:items-center lg:gap-x-4 lg:gap-y-1' : 'gap-y-3'}">
     {#each checks as row (row.label)}
       <li>
