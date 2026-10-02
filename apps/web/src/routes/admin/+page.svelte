@@ -659,7 +659,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
 
 <section class="mb-8">
   {#snippet chipCount(count: number)}
-    <span class="pointer-events-none absolute top-0 right-0 flex h-4 min-w-4 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-zinc-200 px-1 text-[10px] leading-none font-semibold text-[#10131a] tabular-nums">{count}</span>
+    <span class="pointer-events-none absolute top-0 right-0 flex h-4 min-w-4 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-[#1a1f29] px-1 text-[10px] leading-none font-medium text-zinc-500 tabular-nums">{count}</span>
   {/snippet}
   <div class="mb-3 flex flex-wrap gap-2 overflow-visible pt-2" role="group" aria-label="Список вакансий">
     <button
