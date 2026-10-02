@@ -734,8 +734,8 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
           <thead class="sticky top-0 z-10">
             <tr class="bg-[#151922] text-xs text-zinc-500">
               <th class="w-11"></th>
-              <th>Причина</th>
               <th class="w-[30%]">Вакансия</th>
+              <th>Причина</th>
               <th class="w-28">Когда</th>
             </tr>
           </thead>
@@ -748,14 +748,14 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
                     <button class="btn btn-ghost btn-xs h-7 min-h-7 w-7 px-0 text-lg leading-none text-zinc-500 hover:text-white" type="submit" aria-label="Удалить" disabled={dropping}>×</button>
                   </form>
                 </td>
-                <td class="pl-[0.8rem]!">
-                  <p class="line-clamp-2 text-sm leading-snug text-zinc-200" title={row.reason || 'не записано'}>{row.reason || 'не записано'}</p>
-                </td>
-                <td class="overflow-hidden">
+                <td class="overflow-hidden pl-[0.8rem]!">
                   <a class="block truncate text-xs underline-offset-4 hover:underline {rotten(row.at) ? 'text-zinc-600' : 'text-zinc-400'}" href={row.url} target="_blank" rel="noreferrer">{plainLabel(row.company)} · {plainLabel(row.title)}</a>
                   {#if rotten(row.at)}
                     <span class="text-xs text-zinc-600">протухло</span>
                   {/if}
+                </td>
+                <td>
+                  <p class="line-clamp-2 text-sm leading-snug text-zinc-200" title={row.reason || 'не записано'}>{row.reason || 'не записано'}</p>
                 </td>
                 <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
               </tr>
