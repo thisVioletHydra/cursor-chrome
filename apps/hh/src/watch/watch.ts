@@ -82,7 +82,7 @@ export async function watchPulse(line: string): Promise<boolean> {
 
   silenceNoted = false;
   const previous = pulse.line;
-  if (text.startsWith('я завис') && queueRestHang(text)) {
+  if (text.startsWith('я завис') && (queueRestHang(text) || readingHang(text))) {
     pulse = { at: Date.now(), line: previous };
 
     return pilotStop();
@@ -411,6 +411,10 @@ function queueRestHang(text: string): boolean {
 
 function lightNap(text: string): boolean {
   return text.includes('лайт, сплю час');
+}
+
+function readingHang(text: string): boolean {
+  return text.includes('читаю вакансию') || text.includes('открою вакансию') || text.includes('отправлю текст');
 }
 
 function searchTick(text: string): boolean {

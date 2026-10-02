@@ -291,12 +291,12 @@ export async function collectVacancies(
 
 export async function revealHiddenVacancy(tabId: number): Promise<boolean> {
   try {
-    const results = await browser.scripting.executeScript({
+    const results = await within(browser.scripting.executeScript({
       target: { tabId },
       func: showHiddenVacancy,
-    });
+    }), 8_000);
 
-    return results[0]?.result === true;
+    return results?.[0]?.result === true;
   }
   catch {
     return false;
@@ -353,12 +353,12 @@ function showHiddenVacancy(): Promise<boolean> {
 
 export async function vacancyShelved(tabId: number): Promise<boolean> {
   try {
-    const results = await browser.scripting.executeScript({
+    const results = await within(browser.scripting.executeScript({
       target: { tabId },
       func: shelvedOnPage,
-    });
+    }), 8_000);
 
-    return results[0]?.result === true;
+    return results?.[0]?.result === true;
   }
   catch {
     return false;
