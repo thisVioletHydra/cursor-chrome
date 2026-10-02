@@ -729,6 +729,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
             <tr class="bg-[#151922] text-xs text-zinc-500">
               <th>Вакансия</th>
               <th>Статус</th>
+              <th>Причина</th>
               <th>Когда</th>
               <th></th>
             </tr>
@@ -740,6 +741,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
                   {@render vacancyLink(row.url, `${plainLabel(row.company)} · ${plainLabel(row.title)}`, row.at)}
                 </td>
                 <td><span class="badge badge-sm {statusBadge[row.status] ?? 'badge-ghost'}">{statusText[row.status] ?? row.status}</span></td>
+                <td class="max-w-sm break-words whitespace-normal text-sm text-zinc-300">{row.reason || 'не записано'}</td>
                 <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
                 <td class="w-px whitespace-nowrap">
                   <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>

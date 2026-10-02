@@ -2,6 +2,7 @@ import { FLIP_MAX_MS, FLIP_MIN_MS, HIDE_MAX_MS, HIDE_MIN_MS, PAGE_LOAD_MS, ended
 import { pulseLines, waitMark, waitPulse } from './src/pilot/wait-pulse.ts';
 import { feedDry, feedEnded, nextDryStreak } from './src/search/feed-dry.ts';
 import { descriptionText } from './src/search/vacancy-text.ts';
+import { employerHints, waiterLine } from './src/hh/employer-ask.ts';
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -201,6 +202,22 @@ test('three junk vacancies in a row end the feed, a stack title resets', () => {
   streak = nextDryStreak(streak, 'Методолог (IT)', '');
   assert.equal(feedEnded(streak), true);
   assert.equal(nextDryStreak(streak, 'Разработчик React', 'TypeScript'), 0);
+});
+
+test('an employer test lands in waiting with the questions', () => {
+  const hints = employerHints([
+    'Работали ли вы лично с web funnels?',
+    '  С какими payment providers работали?  ',
+    'Работали ли вы лично с web funnels?',
+    'коротко',
+  ]);
+  assert.deepEqual(hints, [
+    'Работали ли вы лично с web funnels?',
+    'С какими payment providers работали?',
+  ]);
+  assert.equal(waiterLine(hints, 'вопросы работодателя'), 'ждёт тебя: Работали ли вы лично с web funnels?; С какими payment providers работали?');
+  assert.equal(waiterLine(['вопросы работодателя']), 'ждёт тебя: вопросы работодателя');
+  assert.equal(waiterLine([]), 'ждёт тебя');
 });
 
 test('the vacancy description does not swallow the jobs under it', () => {

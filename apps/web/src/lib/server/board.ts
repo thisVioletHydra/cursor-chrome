@@ -1,6 +1,14 @@
 import { WEEK_MS, type PassedRow, type QueueItem } from '@cursor-chrome/hh';
 
 const when = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Asia/Bishkek', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const GENERIC = new Set(['вопросы работодателя', 'вопросы работодателя, обязательные поля']);
+
+function waitWhy(hints: string[] | undefined): string {
+  const rows = (hints ?? []).map(row => row.trim()).filter(row => row.length > 0);
+  const specific = rows.filter(row => GENERIC.has(row) === false);
+
+  return (specific.length > 0 ? specific : rows).join(' · ');
+}
 
 export function boardFrom(queue: QueueItem[], passed: PassedRow[], now = Date.now()) {
   const waiting = queue.filter(row => row.status === 'needsHuman');
@@ -19,6 +27,7 @@ export function boardFrom(queue: QueueItem[], passed: PassedRow[], now = Date.no
         title: row.title,
         url: row.url,
         status: row.status,
+        reason: row.status === 'needsHuman' ? waitWhy(row.hints) : '',
         at,
         when: when.format(at),
       };

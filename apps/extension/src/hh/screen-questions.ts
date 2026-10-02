@@ -1,6 +1,7 @@
 import { applyMeta } from './apply-watch';
 import { ask } from './bridge';
 import { compact, visible } from './dom';
+import { EMPLOYER_REASON, employerHints } from './employer-ask';
 import { refreshOverlay } from './overlay';
 
 const APPLY_SEL = [
@@ -22,7 +23,6 @@ const QUESTION_SHELL = [
 
 const PAGE_ASK = /для отклика необходимо ответить на несколько вопросов/i;
 const BLOCK_ASK = /ответьте на вопросы/i;
-const EMPLOYER_REASON = 'вопросы работодателя, обязательные поля';
 const QUESTION_CONTROL = 'textarea, input, [role="radio"], [role="textbox"]';
 
 const CUSTOM_MARK = /крипт|usdt|btc|игр[аыуе]|портфолио|тест|задач|почему\s+вы|расскажите|github|кейс|пазл|quiz|код[ауе]?\b/i;
@@ -90,7 +90,19 @@ export function employerQuestionnaire(): { reason: string; hints: string[] } | n
   if (root === null)
     return null;
 
-  return { reason: EMPLOYER_REASON, hints: [EMPLOYER_REASON] };
+  const questions = employerHints(taskQuestions(root));
+
+  return { reason: EMPLOYER_REASON, hints: questions.length > 0 ? questions : [EMPLOYER_REASON] };
+}
+
+function taskQuestions(root: HTMLElement): string[] {
+  const marked = [...root.querySelectorAll<HTMLElement>('[data-qa="task-question"]')]
+    .map(element => compact(element.textContent || ''))
+    .filter(text => text.length >= 8);
+  if (marked.length > 0)
+    return marked;
+
+  return collectPrompts(root);
 }
 
 export function applyRoot(): HTMLElement | null {

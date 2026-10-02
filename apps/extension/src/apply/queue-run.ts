@@ -13,6 +13,7 @@ import { applyPilot } from '../pilot/pilot-apply';
 import { markPilotStop } from '../pilot/pilot-stop';
 import { runHhApply } from './hh-apply-cmd';
 import { feedEnded, nextDryStreak } from '../search/feed-dry';
+import { waiterLine } from '../hh/employer-ask';
 import { HIDE_POPUP_STUCK } from '../search/hide-popup';
 import { collectVacancies, hideOpenVacancy, readVacancyPage, releaseHidePopup, useFeedMode, useLightFeed, wordFallback } from '../search/hh-search';
 import { requireTabId } from '../link/inject';
@@ -1191,7 +1192,7 @@ function describe(status: Status, reply: ApplyReply): string {
     return 'отправлен';
 
   if (status === 'needsHuman')
-    return reply.reason === 'вопросы работодателя, обязательные поля' ? reply.reason : 'ждёт тебя';
+    return waiterLine(hintsOf(reply), reply.reason || '');
 
   return `мимо, ${reply.reason || 'без причины'}`;
 }
