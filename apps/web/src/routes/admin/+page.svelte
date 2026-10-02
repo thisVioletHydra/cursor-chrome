@@ -727,28 +727,28 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
         <table class="table">
           <thead class="sticky top-0 z-10">
             <tr class="bg-[#151922] text-xs text-zinc-500">
+              <th class="w-px"></th>
               <th>Вакансия</th>
               <th>Статус</th>
               <th>Причина</th>
               <th>Когда</th>
-              <th></th>
             </tr>
           </thead>
           <tbody>
             {#each stats.rows.filter(row => row.status === 'needsHuman') as row (row.id)}
               <tr>
+                <td class="w-px pr-0">
+                  <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>
+                    <input type="hidden" name="id" value={row.id} />
+                    <button class="btn btn-ghost btn-xs h-7 min-h-7 w-7 px-0 text-lg leading-none text-zinc-500 hover:text-white" type="submit" aria-label="Удалить" disabled={dropping}>×</button>
+                  </form>
+                </td>
                 <td class="max-w-xs truncate">
                   {@render vacancyLink(row.url, `${plainLabel(row.company)} · ${plainLabel(row.title)}`, row.at)}
                 </td>
                 <td><span class="badge badge-sm {statusBadge[row.status] ?? 'badge-ghost'}">{statusText[row.status] ?? row.status}</span></td>
                 <td class="max-w-sm break-words whitespace-normal text-sm text-zinc-300">{row.reason || 'не записано'}</td>
                 <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
-                <td class="w-px whitespace-nowrap">
-                  <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>
-                    <input type="hidden" name="id" value={row.id} />
-                    <button class="btn btn-ghost btn-xs h-7 min-h-7 px-2 text-zinc-400 hover:text-white" type="submit" disabled={dropping}>Удалить</button>
-                  </form>
-                </td>
               </tr>
             {/each}
           </tbody>
