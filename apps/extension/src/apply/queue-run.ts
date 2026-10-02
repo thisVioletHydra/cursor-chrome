@@ -15,7 +15,7 @@ import { runHhApply } from './hh-apply-cmd';
 import { feedDry, feedEnded, nextDryStreak } from '../search/feed-dry';
 import { waiterLine } from '../hh/employer-ask';
 import { HIDE_POPUP_STUCK } from '../search/hide-popup';
-import { collectVacancies, hideOpenVacancy, readVacancyPage, releaseHidePopup, useFeedMode, useLightFeed, wordFallback } from '../search/hh-search';
+import { collectVacancies, hideOpenVacancy, readVacancyPage, releaseHidePopup, useFeedMode, useLightFeed, vacancyShelved, wordFallback } from '../search/hh-search';
 import { requireTabId } from '../link/inject';
 import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
@@ -585,6 +585,14 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
     await tellPage('queue-run.ts · вакансия не открылась');
 
     return { started: false, stop: false, reason: '', held: true };
+  }
+
+  if (await vacancyShelved(shown.tabId)) {
+    await tellPage(`queue-run.ts · уже скрыта: ${card.title}`);
+    await postHidden(base, key, { id: link.id, reason: 'уже скрыта', title: card.title, company: card.company });
+    await dropLinks(base, key, [link.id]);
+
+    return { started: false, stop: false, reason: '' };
   }
 
   await tellPage(`queue-run.ts · открыл ${card.title}`);

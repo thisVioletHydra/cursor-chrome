@@ -23,6 +23,17 @@ test('a react title is not a junior skip because the page mentions an intern', (
   assert.equal(titleFront('Специалист по набору клиентской базы на покупку-продажу недвижимости'), false);
   assert.equal(hardSkip({ ...react, title: 'Junior React', text: 'React' }), 'джуниор');
   assert.equal(hardSkip({ ...react, text: 'Только офис, удалёнку не рассматриваем.' }), 'удалёнку запрещают');
+  assert.equal(hardSkip(react), null);
+  assert.equal(hardSkip({
+    ...react,
+    title: 'Fullstack-разработчик PHP · React · API только Санкт-Петербург',
+    text: 'Работа удаленная, очные спринты один раз в неделю в офисе в Санкт-Петербурге обязательны!',
+  }), 'стоп-слово «php»');
+  assert.equal(hardSkip({
+    ...react,
+    title: 'Fullstack-разработчик React',
+    text: 'Работа удаленная, очные спринты один раз в неделю в офисе в Санкт-Петербурге обязательны!',
+  }), 'офис обязателен');
 });
 
 test('a model skip does not throw away a stack title', async () => {

@@ -289,6 +289,57 @@ export async function collectVacancies(
   return { login: false, captcha: false, saved, more: false, done: wordDone, read, reason: '' };
 }
 
+export async function vacancyShelved(tabId: number): Promise<boolean> {
+  try {
+    const results = await browser.scripting.executeScript({
+      target: { tabId },
+      func: shelvedOnPage,
+    });
+
+    return results[0]?.result === true;
+  }
+  catch {
+    return false;
+  }
+}
+
+function shelvedOnPage(): Promise<boolean> {
+  const shown = (): boolean => [...document.querySelectorAll('button, a, [role="menuitem"]')]
+    .some(node => /показывать эту вакансию/i.test(node.textContent || ''));
+
+  if (shown())
+    return Promise.resolve(true);
+
+  const more = document.querySelector<HTMLElement>('button[data-qa="vacancy__more-actions"], button[aria-label="Ещё"]');
+  if (more === null)
+    return Promise.resolve(false);
+
+  more.click();
+
+  return new Promise((resolve) => {
+    let left = 8;
+    const tick = (): void => {
+      if (shown()) {
+        more.click();
+        resolve(true);
+
+        return;
+      }
+
+      left -= 1;
+      if (left < 0) {
+        more.click();
+        resolve(false);
+
+        return;
+      }
+
+      setTimeout(tick, 40);
+    };
+    setTimeout(tick, 40);
+  });
+}
+
 export async function readVacancyPage(tabId: number, id: string, url: string): Promise<FoundCard | null> {
   const pulled = await readTab(tabId);
   if (pulled === null)

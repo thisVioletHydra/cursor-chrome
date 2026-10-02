@@ -1,7 +1,7 @@
 import type { Vacancy } from '@cursor-chrome/hh';
 import type { RequestHandler } from './$types';
 
-import { dayOpen, LOOK_PER_START, pendingCount, QUEUE_TARGET, readMemory, readState, scan, watchDeath, watchNote, workHours } from '@cursor-chrome/hh';
+import { dayOpen, LOOK_PER_START, parseRules, pendingCount, QUEUE_TARGET, readMemory, readState, scan, watchDeath, watchNote, workHours } from '@cursor-chrome/hh';
 import { chargeQueued } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
@@ -49,6 +49,7 @@ export const POST: RequestHandler = async ({ request }) => {
       query,
       dry: false,
       live: true,
+      rules: savedRules(account.hhRules),
       load: async () => list,
     });
   }
@@ -120,6 +121,18 @@ function idleReason(reports: { verdict: string; reason: string }[], already: num
     return skip.reason;
 
   return 'в очередь ничего не встало';
+}
+
+function savedRules(raw: string) {
+  if (raw.trim().length === 0)
+    return parseRules(null);
+
+  try {
+    return parseRules(JSON.parse(raw));
+  }
+  catch {
+    return parseRules(null);
+  }
 }
 
 function vacanciesOf(value: unknown): Vacancy[] {
