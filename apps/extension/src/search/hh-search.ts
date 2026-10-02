@@ -2,7 +2,7 @@ import type { HideFace, HideStep } from './hide-popup';
 
 import { getFlags } from '../pilot/flags';
 import { tabShowsCaptcha } from '../tab/hh-captcha';
-import { hangHalted, loadWithin, tellPage, tickPage, whileSearching } from '../pilot/page-log';
+import { hangHalted, loadWithin, setLogMode, tellPage, tickPage, whileSearching } from '../pilot/page-log';
 import { budgetSec, waitMark } from '../pilot/wait-pulse';
 import { hideDom } from './hide-dom';
 import { HIDE_POLL_MS, HIDE_POPUP_STUCK, hideBlocks, hideClickOk, hideFaceOf, hideLimit, hideStart, stepHide } from './hide-popup';
@@ -27,6 +27,7 @@ export function useFeedMode(mode: FeedMode, query = ''): void {
   feedMode = mode;
   wordQuery = query.trim();
   lightOn = mode === 'light';
+  setLogMode(mode === 'light' ? 'light' : mode === 'words' ? 'target' : 'full');
 }
 
 export function useLightFeed(on: boolean): void {

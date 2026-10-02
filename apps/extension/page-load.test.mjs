@@ -1,6 +1,7 @@
 import { FLIP_MAX_MS, FLIP_MIN_MS, HIDE_MAX_MS, HIDE_MIN_MS, PAGE_LOAD_MS, endedAfter, feedAddress, flipWaitMs, foldLiveLine, hideWaitMs, landedPage, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchHasNext, searchReady, searchStep } from './src/search/page-load.ts';
 import { pulseLines, waitMark, waitPulse } from './src/pilot/wait-pulse.ts';
 import { feedDry, feedEnded, nextDryStreak } from './src/search/feed-dry.ts';
+import { tagLine } from './src/pilot/log-mode.ts';
 import { descriptionText } from './src/search/vacancy-text.ts';
 import { employerHints, waiterLine } from './src/hh/employer-ask.ts';
 
@@ -202,6 +203,13 @@ test('three junk vacancies in a row end the feed, a stack title resets', () => {
   streak = nextDryStreak(streak, 'Методолог (IT)', '');
   assert.equal(feedEnded(streak), true);
   assert.equal(nextDryStreak(streak, 'Разработчик React', 'TypeScript'), 0);
+});
+
+test('a journal line names the feed mode', () => {
+  assert.equal(tagLine('light', 'queue-run.ts · лайт, сплю час, 3600 с · потом снова 10 удалённых'), 'queue-run.ts · [light] лайт, сплю час, 3600 с · потом снова 10 удалённых');
+  assert.equal(tagLine('target', 'hh-search.ts · слово React'), 'hh-search.ts · [target] слово React');
+  assert.equal(tagLine('full', 'нет ключа'), '[full] нет ключа');
+  assert.equal(tagLine('light', 'queue-run.ts · [light] уже'), 'queue-run.ts · [light] уже');
 });
 
 test('an employer test lands in waiting with the questions', () => {

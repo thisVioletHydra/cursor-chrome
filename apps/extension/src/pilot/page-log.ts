@@ -1,5 +1,6 @@
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 import { foldLiveLine, liveTick, PAGE_LOAD_MS } from '../search/page-load';
+import { tagLine, type RunMode } from './log-mode';
 import { budgetSec, pulseHolds, stageLine, waitMark, waitPulse, type WaitMark } from './wait-pulse';
 import { getFlags } from './flags';
 import { noteHours } from '../apply/hours-flag';
@@ -157,13 +158,21 @@ export async function haltHang(): Promise<void> {
     await onHangClear();
 }
 
+let runMode: RunMode = 'full';
+
+export function setLogMode(mode: RunMode): void {
+  runMode = mode;
+}
+
 export async function tellPage(line: string): Promise<void> {
   if (halted)
     return;
 
-  const text = line.trim();
-  if (text.length === 0)
+  const raw = line.trim();
+  if (raw.length === 0)
     return;
+
+  const text = raw === 'сервер молчит' || raw.startsWith('я завис') ? raw : tagLine(runMode, raw);
 
   if (stallText(text) && hangLive === false)
     return;

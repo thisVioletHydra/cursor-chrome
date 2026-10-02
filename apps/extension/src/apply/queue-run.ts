@@ -12,7 +12,7 @@ import { isPilotLinkText, readPilotLink } from '../pilot/pilot-link';
 import { applyPilot } from '../pilot/pilot-apply';
 import { markPilotStop } from '../pilot/pilot-stop';
 import { runHhApply } from './hh-apply-cmd';
-import { feedEnded, nextDryStreak } from '../search/feed-dry';
+import { feedDry, feedEnded, nextDryStreak } from '../search/feed-dry';
 import { waiterLine } from '../hh/employer-ask';
 import { HIDE_POPUP_STUCK } from '../search/hide-popup';
 import { collectVacancies, hideOpenVacancy, readVacancyPage, releaseHidePopup, useFeedMode, useLightFeed, wordFallback } from '../search/hh-search';
@@ -66,6 +66,7 @@ let running = false;
 let dryStreak = 0;
 let feedLight = false;
 let lightDue = false;
+let lightBare = true;
 let feedMode: FeedMode = 'feed';
 let wordAt = 0;
 let wordPageDone = false;
@@ -336,7 +337,7 @@ async function drain(): Promise<QueueRun> {
 
     if (feedLight && lightDue) {
       lightDue = false;
-      if (await lightSleep() === false)
+      if (await napLight() === false)
         break;
     }
 
@@ -381,7 +382,7 @@ async function drain(): Promise<QueueRun> {
 
     if (feedLight && lightDue && filled.note !== 'не прочиталась страница hh') {
       lightDue = false;
-      if (await lightSleep() === false)
+      if (await napLight() === false)
         break;
 
       continue;
@@ -587,6 +588,9 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
   }
 
   await tellPage(`queue-run.ts · открыл ${card.title}`);
+  if (feedLight && feedDry(card.title, card.text) === false)
+    lightBare = false;
+
   dryStreak = nextDryStreak(dryStreak, card.title, card.text);
   const ended = feedEnded(dryStreak);
   const posted = await sendFound(base, key, [card]);
@@ -840,6 +844,19 @@ async function enterLight(base: string, key: string): Promise<ApplyPass> {
   return { started: false, stop: false, reason: '' };
 }
 
+async function napLight(): Promise<boolean> {
+  const again = lightBare;
+  if (await lightSleep() === false)
+    return false;
+
+  if (again === false)
+    return true;
+
+  await tellPage('queue-run.ts · за час ничего нормального, ещё час');
+
+  return lightSleep();
+}
+
 async function lightSleep(): Promise<boolean> {
   if (await cycleOpen() === false)
     return false;
@@ -955,8 +972,10 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
     return { note: 'сервер не записал круг', saved: found.saved, more: false, done: false, retry: true };
 
   const retry = found.done === false && found.saved === 0 && found.reason.length > 0;
-  if (feedLight && found.reason !== 'не прочиталась страница hh' && (found.done || found.saved > 0))
+  if (feedLight && found.reason !== 'не прочиталась страница hh' && (found.done || found.saved > 0)) {
     lightDue = true;
+    lightBare = true;
+  }
 
   if (feedMode === 'words' && found.reason !== 'не прочиталась страница hh' && (found.done || found.saved > 0))
     wordPageDone = true;
