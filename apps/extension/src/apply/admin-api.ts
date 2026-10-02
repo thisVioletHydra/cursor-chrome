@@ -57,6 +57,27 @@ export async function postWalk(base: string, key: string, walk: { read: number; 
   }
 }
 
+export async function claimRelook(base: string, key: string): Promise<QueueItem[] | null> {
+  try {
+    const res = await fetch(`${base}/api/queue`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ relook: 1 }),
+    });
+    if (res.ok === false)
+      return null;
+
+    const body = await res.json().catch(() => null) as { relook?: unknown } | null;
+    if (body === null || Array.isArray(body.relook) === false)
+      return [];
+
+    return body.relook.filter(isItem);
+  }
+  catch {
+    return null;
+  }
+}
+
 export async function fetchQueue(base: string, key: string): Promise<QueueItem[] | null> {
   const body = await getQueue(base, key);
   if (body === null)

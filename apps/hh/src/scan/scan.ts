@@ -9,7 +9,7 @@ import { fillKnownForm } from './form.ts';
 import { judge, packReport } from './judge.ts';
 import { searchVacancies } from './hh-api.ts';
 import { LOOK_PER_START, MODEL_PER_START, QUEUE_TARGET } from '../limits.ts';
-import { knownAmong, notePassed, readMemory, remember } from '../diary/memory.ts';
+import { dropPassed, knownAmong, notePassed, readMemory, remember } from '../diary/memory.ts';
 import { FRONT_TAKE, hasSlot, roleJunk, stepSlot, takeSlot, taste } from '../mix/mix.ts';
 import { modelFromEnv, modelsDown } from '../model/model.ts';
 import { pendingCount } from '../queue/queue.ts';
@@ -105,7 +105,9 @@ export async function scan(opts: ScanOpts): Promise<ScanRun> {
 
     if (memory !== null) {
       await remember([vacancy.id]);
-      if (final.verdict === 'skip')
+      if (final.verdict === 'apply')
+        await dropPassed([vacancy.id]);
+      else if (final.verdict === 'skip' || modelGap(final.reason) === false)
         await notePassed([{ id: vacancy.id, reason: final.reason, company: vacancy.company, title: vacancy.title }]);
     }
 
@@ -122,6 +124,10 @@ export async function scan(opts: ScanOpts): Promise<ScanRun> {
   }
 
   return { reports, already };
+}
+
+function modelGap(reason: string): boolean {
+  return reason === 'модель не смотрела' || reason === 'модель не ответила' || reason.startsWith('все модели недоступны');
 }
 
 async function queueRoomOrOpen(memory: Memory | null): Promise<number> {

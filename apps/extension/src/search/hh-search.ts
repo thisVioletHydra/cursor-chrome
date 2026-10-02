@@ -289,6 +289,68 @@ export async function collectVacancies(
   return { login: false, captcha: false, saved, more: false, done: wordDone, read, reason: '' };
 }
 
+export async function revealHiddenVacancy(tabId: number): Promise<boolean> {
+  try {
+    const results = await browser.scripting.executeScript({
+      target: { tabId },
+      func: showHiddenVacancy,
+    });
+
+    return results[0]?.result === true;
+  }
+  catch {
+    return false;
+  }
+}
+
+function showHiddenVacancy(): Promise<boolean> {
+  const find = (): HTMLElement | null => {
+    for (const node of document.querySelectorAll('button, a, [role="menuitem"]')) {
+      if (node instanceof HTMLElement && /показывать эту вакансию/i.test(node.textContent || ''))
+        return node;
+    }
+
+    return null;
+  };
+
+  const hit = find();
+  if (hit !== null) {
+    hit.click();
+
+    return Promise.resolve(true);
+  }
+
+  const more = document.querySelector<HTMLElement>('button[data-qa="vacancy__more-actions"], button[aria-label="Ещё"]');
+  if (more === null)
+    return Promise.resolve(false);
+
+  more.click();
+
+  return new Promise((resolve) => {
+    let left = 8;
+    const tick = (): void => {
+      const again = find();
+      if (again !== null) {
+        again.click();
+        resolve(true);
+
+        return;
+      }
+
+      left -= 1;
+      if (left < 0) {
+        more.click();
+        resolve(false);
+
+        return;
+      }
+
+      setTimeout(tick, 40);
+    };
+    setTimeout(tick, 40);
+  });
+}
+
 export async function vacancyShelved(tabId: number): Promise<boolean> {
   try {
     const results = await browser.scripting.executeScript({

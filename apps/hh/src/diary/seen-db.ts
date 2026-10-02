@@ -14,6 +14,8 @@ const INSERT_STEP = 5_000;
 const PASSED_LIMIT = 80;
 
 const LEGACY_HIDE = 'не подходит профессия';
+const RELOOK_REASON = 'пересмотр';
+const RELOOK_STALE_MS = 20 * 60 * 1000;
 
 export const HIDE_REASON = 'скрыл, уже видели';
 
@@ -152,7 +154,7 @@ export function countHidden(): number {
 }
 
 export function countPassed(): number {
-  const row = openDatabase().prepare(`SELECT COUNT(*) AS total FROM passed WHERE reason != '' AND reason != 'уже видели'`).get();
+  const row = openDatabase().prepare(`SELECT COUNT(*) AS total FROM passed WHERE reason != '' AND reason != 'уже видели' AND reason != 'пересмотр'`).get();
   if (row === undefined)
     return 0;
 
@@ -195,7 +197,7 @@ export function listPassed(limit = PASSED_LIMIT): PassedRow[] {
   const rows = openDatabase().prepare(`
     SELECT id, at, reason, company, title
     FROM passed
-    WHERE reason != '' AND reason != 'уже видели'
+    WHERE reason != '' AND reason != 'уже видели' AND reason != 'пересмотр'
     ORDER BY at DESC
     LIMIT ?
   `).all(cap);
@@ -204,7 +206,7 @@ export function listPassed(limit = PASSED_LIMIT): PassedRow[] {
     const id = textId(row.id);
     const at = wholeAt(row.at);
     const reason = sqlText(row.reason);
-    if (id === null || at === null || reason.length === 0 || reason === 'уже видели')
+    if (id === null || at === null || reason.length === 0 || reason === 'уже видели' || reason === RELOOK_REASON)
       continue;
 
     out.push({
@@ -285,12 +287,79 @@ function ensurePassed(opened: sqlite.DatabaseSync): void {
   opened.prepare('UPDATE passed SET reason = ? WHERE reason = ?').run(HIDE_REASON, LEGACY_HIDE);
 }
 
+export function claimRelook(busyIds: readonly string[], limit: number, now = Date.now()): PassedRow[] {
+  const cap = Math.min(8, Math.max(0, Math.floor(limit)));
+  if (cap === 0)
+    return [];
+
+  const opened = openDatabase();
+  const busy = uniqueNums(busyIds);
+  if (busy.length > 0) {
+    const marks = busy.map(() => '?').join(', ');
+    opened.prepare(`DELETE FROM passed WHERE reason IN (?, ?, ?) AND id IN (${marks})`).run(HIDE_REASON, LEGACY_HIDE, RELOOK_REASON, ...busy);
+  }
+
+  const picked = opened.prepare(`
+    SELECT id, at, reason, company, title
+    FROM passed
+    WHERE reason = ? OR (reason = ? AND at < ?)
+    ORDER BY at ASC
+    LIMIT ?
+  `).all(HIDE_REASON, RELOOK_REASON, now - RELOOK_STALE_MS, cap);
+  const rows: PassedRow[] = [];
+  for (const row of picked) {
+    const id = textId(row.id);
+    const at = wholeAt(row.at);
+    if (id === null || at === null)
+      continue;
+
+    rows.push({ id, at, reason: sqlText(row.reason), company: sqlText(row.company), title: sqlText(row.title) });
+  }
+
+  if (rows.length === 0)
+    return [];
+
+  const dropSeen = opened.prepare('DELETE FROM seen WHERE id = ?');
+  const dropHidden = opened.prepare('DELETE FROM hidden WHERE id = ?');
+  const claim = opened.prepare('UPDATE passed SET reason = ?, at = ? WHERE id = ?');
+  opened.exec('BEGIN');
+  try {
+    for (const row of rows) {
+      const id = numId(row.id);
+      if (id === null)
+        continue;
+
+      dropSeen.run(id);
+      dropHidden.run(id);
+      claim.run(RELOOK_REASON, now, id);
+    }
+
+    opened.exec('COMMIT');
+  }
+  catch (error) {
+    opened.exec('ROLLBACK');
+
+    throw error;
+  }
+
+  return rows;
+}
+
+export function forgetPassed(ids: readonly string[]): void {
+  const nums = uniqueNums(ids);
+  if (nums.length === 0)
+    return;
+
+  const marks = nums.map(() => '?').join(', ');
+  openDatabase().prepare(`DELETE FROM passed WHERE id IN (${marks})`).run(...nums);
+}
+
 function shownHideReason(reason: string): string {
   return reason === LEGACY_HIDE ? HIDE_REASON : reason;
 }
 
 function cannedHide(reason: string): boolean {
-  return reason === HIDE_REASON || reason === LEGACY_HIDE;
+  return reason === HIDE_REASON || reason === LEGACY_HIDE || reason === RELOOK_REASON;
 }
 
 function writePassed(

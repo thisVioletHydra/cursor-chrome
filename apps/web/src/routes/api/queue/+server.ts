@@ -1,7 +1,7 @@
 import type { State } from '@cursor-chrome/hh';
 import type { RequestHandler } from './$types';
 
-import { COVER_LETTER, DEFAULT_QUERY, HIDE_REASON, busyAmong, coveredWaiters, dayOpen, dropWaiters, forgetAllLinks, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, moscowDay, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readQueue, readState, rememberSearchPage, searchPages, splitQueries, stepWalk, takePilotStart, walkFrom, workHours, writeState } from '@cursor-chrome/hh';
+import { COVER_LETTER, DEFAULT_QUERY, HIDE_REASON, busyAmong, coveredWaiters, dayOpen, dropWaiters, forgetAllLinks, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, moscowDay, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readQueue, readState, rememberSearchPage, searchPages, splitQueries, stepWalk, takePilotStart, takeRelook, walkFrom, workHours, writeState } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { readAccount } from '$lib/server/secrets';
@@ -63,14 +63,31 @@ export const POST: RequestHandler = async ({ request }) => {
   if (login === null)
     return json({ error: 'нет' }, { status: 401 });
 
-  const body = await request.json().catch(() => null) as { ids?: unknown; links?: unknown; drop?: unknown; dropAll?: unknown; cursor?: unknown; resetPages?: unknown; gate?: unknown; opened?: unknown; hidden?: unknown; walk?: unknown } | null;
+  const body = await request.json().catch(() => null) as { ids?: unknown; links?: unknown; drop?: unknown; dropAll?: unknown; cursor?: unknown; resetPages?: unknown; gate?: unknown; opened?: unknown; hidden?: unknown; walk?: unknown; relook?: unknown } | null;
   if (body === null)
     return json({ error: 'пустое тело' }, { status: 400 });
+
+  if (typeof body.relook === 'number') {
+    const queue = await readQueue();
+    const busy = queue.filter(row => row.status === 'pending' || row.status === 'sent' || row.status === 'needsHuman').map(row => row.id);
+    const rows = await takeRelook(busy, body.relook);
+
+    return json({
+      relook: rows.map(row => ({
+        id: row.id,
+        company: row.company,
+        title: row.title,
+        url: `https://hh.ru/vacancy/${row.id}`,
+      })),
+    });
+  }
 
   if (body.hidden !== undefined) {
     const hidden = hiddenNotes(body.hidden);
     await noteHidden(hidden.map(row => row.id));
-    await notePassed(hidden);
+    const queue = await readQueue();
+    const busy = new Set(queue.filter(row => row.status === 'pending' || row.status === 'sent' || row.status === 'needsHuman').map(row => row.id));
+    await notePassed(hidden.filter(row => busy.has(row.id) === false));
     const ids = coveredWaiters(await readQueue(), hidden.map(row => row.id));
     if (ids.length > 0) {
       await forgetLinks(ids);

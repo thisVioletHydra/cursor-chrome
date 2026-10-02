@@ -1,6 +1,6 @@
 import type { Hunt, QueueItem } from './admin-api';
 
-import { dropKnown, dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, markRead, postFound, postHidden, postWalk, rememberPage, seenAmong } from './admin-api';
+import { claimRelook, dropKnown, dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, markRead, postFound, postHidden, postWalk, rememberPage, seenAmong } from './admin-api';
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 import { getFlags } from '../pilot/flags';
 import { pinnedCaptcha, tabShowsCaptcha } from '../tab/hh-captcha';
@@ -15,7 +15,7 @@ import { runHhApply } from './hh-apply-cmd';
 import { feedDry, feedEnded, nextDryStreak } from '../search/feed-dry';
 import { waiterLine } from '../hh/employer-ask';
 import { HIDE_POPUP_STUCK } from '../search/hide-popup';
-import { collectVacancies, hideOpenVacancy, readVacancyPage, releaseHidePopup, useFeedMode, useLightFeed, vacancyShelved, wordFallback } from '../search/hh-search';
+import { collectVacancies, hideOpenVacancy, readVacancyPage, releaseHidePopup, revealHiddenVacancy, useFeedMode, useLightFeed, vacancyShelved, wordFallback } from '../search/hh-search';
 import { requireTabId } from '../link/inject';
 import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
@@ -341,6 +341,22 @@ async function drain(): Promise<QueueRun> {
         break;
     }
 
+    const reviewed = await reviewHidden(base, key, run);
+    if (reviewed.started)
+      started = true;
+
+    if (reviewed.stop) {
+      run.reason = reviewed.reason;
+      break;
+    }
+
+    if (reviewed.held === true) {
+      if (await restCycle() === false)
+        break;
+
+      continue;
+    }
+
     const hunt = await fetchHunt(base, key);
     if (hangHalted()) {
       run.reason = 'расширение зависло';
@@ -558,7 +574,34 @@ async function noteSkip(count: number, pass: ApplyPass): Promise<ApplyPass> {
   return pass;
 }
 
-async function takeLink(base: string, key: string, run: QueueRun, link: { id: string; url: string }): Promise<ApplyPass> {
+async function reviewHidden(base: string, key: string, run: QueueRun): Promise<ApplyPass> {
+  let started = false;
+  for (let index = 0; index < 8; index += 1) {
+    const rows = await claimRelook(base, key);
+    if (rows === null)
+      return { started, stop: false, reason: '', held: true };
+
+    const link = rows[0];
+    if (link === undefined)
+      return { started, stop: false, reason: '' };
+
+    const name = link.title.trim() || link.id;
+    await tellPage(`queue-run.ts · пересмотр: ${name}`);
+    const step = await takeLink(base, key, run, link, true);
+    if (step.started)
+      started = true;
+
+    if (step.stop)
+      return { started, stop: true, reason: step.reason };
+
+    if (step.held === true)
+      return { started, stop: false, reason: '', held: true };
+  }
+
+  return { started, stop: false, reason: '' };
+}
+
+async function takeLink(base: string, key: string, run: QueueRun, link: { id: string; url: string }, reopen = false): Promise<ApplyPass> {
   if (await cycleOpen() === false)
     return { started: false, stop: false, reason: '', held: true };
 
@@ -587,7 +630,9 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
     return { started: false, stop: false, reason: '', held: true };
   }
 
-  if (await vacancyShelved(shown.tabId)) {
+  if (reopen)
+    await revealHiddenVacancy(shown.tabId);
+  else if (await vacancyShelved(shown.tabId)) {
     await tellPage(`queue-run.ts · уже скрыта: ${card.title}`);
     await postHidden(base, key, { id: link.id, reason: 'уже скрыта', title: card.title, company: card.company });
     await dropLinks(base, key, [link.id]);
