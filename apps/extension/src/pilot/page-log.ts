@@ -273,7 +273,7 @@ function planStall(): void {
     }
 
     const step = stallStep() || 'жду очередь';
-    if (step.includes('ищу вакансию') || step.includes('жду загрузку') || step.includes('жду страницу') || step.includes('не прочиталась') || step.includes('лайт, сплю час') || step.includes('читаю вакансию') || step.includes('открою вакансию') || step.includes('отправлю текст'))
+    if (step.includes('ищу вакансию') || step.includes('жду загрузку') || step.includes('жду страницу') || step.includes('не прочиталась') || step.includes('лайт, сплю час') || step.includes('чтение вакансии') || step.includes('читаю вакансию') || step.includes('открою вакансию') || step.includes('отправлю текст') || step.includes('~apply.'))
       return;
 
     if (queueRestStep(step))

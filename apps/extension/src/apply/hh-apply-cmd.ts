@@ -1,6 +1,8 @@
 import { handleNeedsHuman } from './human-review';
 import { tabShowsCaptcha } from '../tab/hh-captcha';
 import { ensureContent, requireTabId, workerTopMessage } from '../link/inject';
+import { tellPage } from '../pilot/page-log';
+import { waitMark, waitPulse } from '../pilot/wait-pulse';
 import { getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
@@ -18,6 +20,7 @@ type ApplyReply = {
 
 export async function runHhApply(): Promise<unknown> {
   const before = await workerHref();
+  const beat = applyBeat();
   try {
     return finishApply(await followNavigation(await workerTopMessage('run-apply')));
   }
@@ -32,6 +35,24 @@ export async function runHhApply(): Promise<unknown> {
 
     return again;
   }
+  finally {
+    clearInterval(beat);
+  }
+}
+
+function applyBeat(): ReturnType<typeof setInterval> {
+  const started = Date.now();
+
+  return setInterval(() => {
+    const sec = Math.max(1, Math.round((Date.now() - started) / 1000));
+    void tellPage(waitPulse(waitMark({
+      id: 'apply.form',
+      human: 'жду форму отклика',
+      budget: null,
+      next: 'apply.fill',
+      hold: true,
+    }), sec));
+  }, 15_000);
 }
 
 async function workerHref(): Promise<string> {
