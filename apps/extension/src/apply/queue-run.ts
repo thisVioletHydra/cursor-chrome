@@ -705,6 +705,9 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
 
   run.left += 1;
   const reply = await applyOne(item, true);
+  if (hangHalted())
+    return { started: true, stop: true, reason: 'расширение зависло' };
+
   if (captchaReply(reply)) {
     run.left -= 1;
     await holdCaptcha(false);

@@ -25,6 +25,7 @@ const PAGE_TICK = /^жду страницу, \d+ с$/;
 const STATE_PULSE = /^~([a-z][a-z0-9.]*)\|([^|]+)\|(-|\d+)\|(\d+)\|([a-z][a-z0-9.]*)\|([wsp])\|([01])$/;
 const MODE_TAG = /^\[(?:full|light|target)\]\s+/;
 const FROZEN_MS = 90_000;
+const APPLY_CAP_MS = 30 * 60_000;
 const STEP_MAX = 80;
 const STEP_PREFIX = /^(открыл|ищу|читаю|в очереди|в список|мимо,|сервер|админка|жду|уже видели)/;
 const HARD_SKIP = /^(удалёнку запрещают|удаленку запрещают|джуниор|1C или Bitrix ядром|Python основной бэк)$/i;
@@ -82,6 +83,14 @@ export async function watchPulse(line: string): Promise<boolean> {
 
   silenceNoted = false;
   const previous = pulse.line;
+  if (readingHang(text) && pulseElapsedMs(text) >= APPLY_CAP_MS) {
+    const hang = 'я завис: форма отклика, 30 мин';
+    pulse = { at: Date.now(), line: hang };
+    await mark('extension', hang, true);
+
+    return pilotStop();
+  }
+
   if (text.startsWith('я завис') && (queueRestHang(text) || readingHang(text))) {
     pulse = { at: Date.now(), line: previous };
 
@@ -243,7 +252,10 @@ async function silence(): Promise<void> {
     return;
 
   const where = shortStep(pulse.line) ? pulse.line : 'нет пульса';
-  if (queueWait(where) || lightNap(where) || readingHang(where))
+  if (lightNap(where))
+    return;
+
+  if (applyPastCap(where, pulse.at) === false && (queueWait(where) || readingHang(where)))
     return;
 
   if (where.includes('ищу вакансию') || searchTick(where) || where.includes('жду страницу') || where.includes('не прочиталась')) {
@@ -419,6 +431,24 @@ function readingHang(text: string): boolean {
     || text.includes('читаю вакансию')
     || text.includes('открою вакансию')
     || text.includes('отправлю текст');
+}
+
+function applyPastCap(text: string, at: number): boolean {
+  if (readingHang(text) === false && text.includes('форма отклика') === false)
+    return false;
+
+  if (pulseElapsedMs(text) >= APPLY_CAP_MS)
+    return true;
+
+  return at > 0 && Date.now() - at >= APPLY_CAP_MS;
+}
+
+function pulseElapsedMs(text: string): number {
+  const hit = text.match(/~[a-z][a-z0-9.]*\|[^|]+\|(?:-|\d+)\|(\d+)\|[a-z][a-z0-9.]*\|[wsp]\|[01]/);
+  if (hit === null)
+    return 0;
+
+  return Number(hit[1]) * 1000;
 }
 
 function searchTick(text: string): boolean {

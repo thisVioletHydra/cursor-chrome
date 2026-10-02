@@ -1,10 +1,12 @@
 import { handleNeedsHuman } from './human-review';
 import { tabShowsCaptcha } from '../tab/hh-captcha';
 import { ensureContent, requireTabId, workerTopMessage } from '../link/inject';
-import { tellPage } from '../pilot/page-log';
+import { haltHang, tellPage } from '../pilot/page-log';
 import { waitMark, waitPulse } from '../pilot/wait-pulse';
 import { getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
+
+const APPLY_CAP_MS = 30 * 60_000;
 
 type ApplyReply = {
   ok?: boolean;
@@ -21,10 +23,27 @@ type ApplyReply = {
 export async function runHhApply(): Promise<unknown> {
   const before = await workerHref();
   const beat = applyBeat();
+  let stuck = false;
+  const cap = applyCap(() => {
+    stuck = true;
+  });
+  try {
+    return await Promise.race([applyBody(before, () => stuck), cap.promise]);
+  }
+  finally {
+    cap.cancel();
+    clearInterval(beat);
+  }
+}
+
+async function applyBody(before: string, stuck: () => boolean): Promise<unknown> {
   try {
     return finishApply(await followNavigation(await workerTopMessage('run-apply')));
   }
   catch {
+    if (stuck())
+      return { ok: false, status: 'skip', reason: 'форма отклика зависла' };
+
     const tab = await requireWorkerTab();
     await waitTab(requireTabId(tab), 15_000);
     await ensureContent(tab);
@@ -35,9 +54,33 @@ export async function runHhApply(): Promise<unknown> {
 
     return again;
   }
-  finally {
-    clearInterval(beat);
-  }
+}
+
+function applyCap(mark: () => void): { promise: Promise<ApplyReply>; cancel: () => void } {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const promise = new Promise<ApplyReply>((resolve) => {
+    timer = setTimeout(() => {
+      mark();
+      void stopStuckApply().then(() => resolve({
+        ok: false,
+        status: 'skip',
+        reason: 'форма отклика зависла',
+      }));
+    }, APPLY_CAP_MS);
+  });
+
+  return {
+    promise,
+    cancel: () => {
+      if (timer !== undefined)
+        clearTimeout(timer);
+    },
+  };
+}
+
+async function stopStuckApply(): Promise<void> {
+  await tellPage('я завис: форма отклика, 30 мин');
+  await haltHang();
 }
 
 function applyBeat(): ReturnType<typeof setInterval> {
