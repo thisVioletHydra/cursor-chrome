@@ -95,10 +95,15 @@ export async function runQueue(): Promise<QueueRun> {
     markTeaWork(true);
     await browser.storage.local.set({ [BUSY_KEY]: true, [SOON_KEY]: false });
     await browser.runtime.sendMessage({ type: 'queue-busy' }).catch(() => {});
-    const run = await drain();
-    await rememberReport(run);
+    try {
+      const run = await drain();
+      await rememberReport(run);
 
-    return run;
+      return run;
+    }
+    catch {
+      return blank('вкладка hh закрыта');
+    }
   }
   finally {
     markTeaWork(false);
@@ -1182,7 +1187,7 @@ async function showVacancy(url: string, read?: { base: string; key: string; id: 
 
   const loaded = waitTab(tabId, 15_000);
   await Promise.race([
-    browser.tabs.update(tabId, { url, active: false }).then(() => undefined),
+    browser.tabs.update(tabId, { url, active: false }).then(() => undefined, () => undefined),
     new Promise<void>(resolve => setTimeout(resolve, 8_000)),
   ]);
   await loaded;

@@ -228,7 +228,11 @@ export async function requireWorkerTab(): Promise<chrome.tabs.Tab> {
   if (check.ok === false || typeof check.tabId !== 'number')
     throw new Error(`HH tab not ready: ${check.reason || 'unknown'}. Pin it in the Cursor Chrome popup.`);
 
-  return browser.tabs.get(check.tabId);
+  const tab = await browser.tabs.get(check.tabId).catch(() => null);
+  if (tab === null)
+    throw new Error('HH tab not ready: вкладка закрыта. Pin it in the Cursor Chrome popup.');
+
+  return tab;
 }
 
 export async function openHhBackground(): Promise<WorkerCheck> {
@@ -323,7 +327,13 @@ async function resumeHh(tabId: number, url?: string): Promise<WorkerCheck> {
 
   await wakeWorkerTab(tabId);
   const loaded = waitTab(tabId);
-  await browser.tabs.update(tabId, { url, active: false });
+  try {
+    await browser.tabs.update(tabId, { url, active: false });
+  }
+  catch {
+    return { ok: false, reason: 'вкладка закрыта', tabId };
+  }
+
   await loaded;
 
   return checkWorker();
@@ -443,7 +453,13 @@ async function pinLive(tabId: number): Promise<WorkerCheck> {
   // Пин выгруженной вкладки Хром снимает. Один раз показываем, пиним живую, потом отдаём фокус.
   const wake = tab.status !== 'complete' || tab.discarded === true || tab.frozen === true;
   if (wake) {
-    await browser.tabs.update(id, { active: true });
+    try {
+      await browser.tabs.update(id, { active: true });
+    }
+    catch {
+      return { ok: false, reason: 'вкладка закрыта', tabId: id };
+    }
+
     id = await liveId(id);
     await waitLoaded(id);
     id = await liveId(id);

@@ -442,29 +442,35 @@ export async function clearWait(): Promise<void> {
 }
 
 export async function holdQueueWait(): Promise<void> {
-  if (halted || queueRunning || resuming || currentWait !== null)
-    return;
+  try {
+    if (halted || queueRunning || resuming || currentWait !== null)
+      return;
 
-  const flags = await getFlags();
-  if (flags.autoQueue !== true)
-    return;
+    const flags = await getFlags();
+    if (flags.autoQueue !== true)
+      return;
 
-  const stored = await loadWait();
-  if (stored !== null && stored.until > Date.now()) {
-    currentWait = stored;
-    namedWait = true;
-    await postWaitSecond();
+    const stored = await loadWait();
+    if (stored !== null && stored.until > Date.now()) {
+      currentWait = stored;
+      namedWait = true;
+      await postWaitSecond();
 
-    return;
+      return;
+    }
+
+    await startWait('жду', IDLE_MS, '', waitMark({
+      id: 'queue.idle',
+      human: 'очередь',
+      budget: null,
+      next: 'queue.wake',
+      hold: true,
+    }));
   }
-
-  await startWait('жду', IDLE_MS, '', waitMark({
-    id: 'queue.idle',
-    human: 'очередь',
-    budget: null,
-    next: 'queue.wake',
-    hold: true,
-  }));
+  catch {
+    currentWait = null;
+    namedWait = false;
+  }
 }
 
 function enqueuePulse(line: string): Promise<void> {
@@ -669,7 +675,7 @@ if (inWorker()) {
       void pumpWait().then(() => {
         if (currentWait === null && queueRunning === false && resuming === false)
           return holdQueueWait();
-      });
+      }).catch(() => {});
     });
   });
 }

@@ -89,7 +89,7 @@ const clicks: Record<string, () => void> = {
   'go-main': () => show('main'),
   'go-history': () => show('history'),
   'go-settings': () => show('settings'),
-  'run-queue': () => void runQueue(),
+  'run-queue': () => void runQueue().catch(() => {}),
 };
 
 historyEl?.addEventListener('click', (event) => {

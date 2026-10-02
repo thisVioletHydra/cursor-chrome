@@ -42,7 +42,7 @@ bindPilotWake(async () => {
   clearHangHalt();
   await applyPilot({ type: 'enable' });
   holdSoon = false;
-  void runQueue();
+  void runQueue().catch(() => {});
 });
 
 browser.runtime.onInstalled.addListener(() => {
@@ -234,7 +234,7 @@ async function onQueueAlarm(): Promise<void> {
   if (again.autoQueue !== true)
     return;
 
-  void runQueue();
+  void runQueue().catch(() => {});
 }
 
 async function syncNegotiationsIfDue(): Promise<void> {
