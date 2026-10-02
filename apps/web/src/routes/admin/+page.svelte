@@ -374,7 +374,7 @@ const cards = $derived([
 ].flatMap(card => (card.light ? [{ href: card.href, light: card.light }] : [])));
 
 const figures = $derived([
-  { label: 'Сегодня', value: stats.today },
+  { label: 'Откликнуться', value: stats.today },
   { label: 'В очереди', value: stats.queued },
   { label: 'Ждут тебя', value: stats.waiting },
   { label: 'Приглашения', value: stats.invitations },
@@ -596,6 +596,14 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
 </section>
 
 <section class="mb-8">
+  <div class="mb-3 flex divide-x divide-white/10 overflow-x-auto rounded-lg border border-white/10 bg-[#151922]" aria-label="Сводка">
+    {#each figures as figure (figure.label)}
+      <div class="flex min-w-[5.25rem] flex-1 flex-col items-center gap-1 px-2 py-2">
+        <span class="text-center text-[10px] leading-none text-zinc-500">{figure.label}</span>
+        <span class="text-sm leading-none font-semibold text-white tabular-nums">{figure.value}</span>
+      </div>
+    {/each}
+  </div>
   <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
     <h2 class="text-base font-semibold">Логирование</h2>
     <button
@@ -894,12 +902,4 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
       {/if}
     </div>
   </form>
-  <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
-    {#each figures as figure (figure.label)}
-      <div class="stat rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
-        <div class="stat-title text-xs text-zinc-500">{figure.label}</div>
-        <div class="stat-value text-3xl font-semibold text-white">{figure.value}</div>
-      </div>
-    {/each}
-  </div>
 </section>

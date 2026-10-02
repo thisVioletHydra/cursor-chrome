@@ -1,6 +1,6 @@
 import type { LayoutServerLoad } from './$types';
 
-import { COVER_LETTER, hiddenCount, moscowDay, passedCount, PRESETS, providerName, readPassed, readQueue, readState, seenCount } from '@cursor-chrome/hh';
+import { COVER_LETTER, hiddenCount, passedCount, PRESETS, providerName, readMemory, readPassed, readQueue, readState, seenCount } from '@cursor-chrome/hh';
 import { boardFrom } from '$lib/server/board';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { redirect } from '@sveltejs/kit';
@@ -28,13 +28,12 @@ async function statsOf(preview: boolean) {
     };
   }
 
-  const [loaded, state, judged, hidden, passed, passedTotal] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount(), readPassed(), passedCount()]);
+  const [loaded, state, judged, hidden, passed, passedTotal, memory] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount(), readPassed(), passedCount(), readMemory()]);
   const queue = await pruneShelvedWaiters(loaded);
-  const day = moscowDay();
   const board = boardFrom(queue, passed);
 
   return {
-    today: queue.filter(row => row.status === 'sent' && moscowDay(new Date(row.doneAt ?? row.at)) === day).length,
+    today: memory.sent,
     queued: queue.filter(row => row.status === 'pending').length,
     judged,
     invitations: queue.filter(row => row.outcome === 'invitation').length,
