@@ -656,25 +656,28 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
 </section>
 
 <section class="mb-8">
-  <div class="mb-3 flex flex-wrap gap-2" role="group" aria-label="Список вакансий">
+  {#snippet chipCount(count: number)}
+    <span class="pointer-events-none absolute top-0 right-0 flex h-4 min-w-4 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-zinc-200 px-1 text-[10px] leading-none font-semibold text-[#10131a] tabular-nums">{count}</span>
+  {/snippet}
+  <div class="mb-3 flex flex-wrap gap-2 overflow-visible pt-2" role="group" aria-label="Список вакансий">
     <button
-      class="{chipClass} {board === 'accepted' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
+      class="relative {chipClass} {board === 'accepted' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
       type="button"
       aria-pressed={board === 'accepted'}
       onclick={() => showBoard('accepted')}
-    >Принятые <span class="tabular-nums">{stats.accepted ?? 0}</span></button>
+    >Принятые {@render chipCount(stats.accepted ?? 0)}</button>
     <button
-      class="{chipClass} {board === 'hidden' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
+      class="relative {chipClass} {board === 'hidden' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
       type="button"
       aria-pressed={board === 'hidden'}
       onclick={() => showBoard('hidden')}
-    >Скрытые <span class="tabular-nums">{stats.passedTotal ?? stats.passed.length}</span></button>
+    >Скрытые {@render chipCount(stats.passedTotal ?? stats.passed.length)}</button>
     <button
-      class="{chipClass} {board === 'waiting' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
+      class="relative {chipClass} {board === 'waiting' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
       type="button"
       aria-pressed={board === 'waiting'}
       onclick={() => showBoard('waiting')}
-    >Ждуны <span class="tabular-nums">{stats.waiting}</span></button>
+    >Ждуны {@render chipCount(stats.waiting)}</button>
     {#if board === 'waiting' && stats.waiting > 0}
       <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>
         <input type="hidden" name="all" value="1" />
@@ -727,30 +730,33 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
       {/if}
     {:else if board === 'waiting'}
       {#if stats.rows.some(row => row.status === 'needsHuman')}
-        <table class="table">
+        <table class="table table-fixed w-full">
           <thead class="sticky top-0 z-10">
             <tr class="bg-[#151922] text-xs text-zinc-500">
-              <th class="w-px"></th>
-              <th>Вакансия</th>
-              <th>Статус</th>
+              <th class="w-11"></th>
               <th>Причина</th>
-              <th>Когда</th>
+              <th class="w-[30%]">Вакансия</th>
+              <th class="w-28">Когда</th>
             </tr>
           </thead>
           <tbody>
             {#each stats.rows.filter(row => row.status === 'needsHuman') as row (row.id)}
               <tr>
-                <td class="w-px pr-10">
+                <td class="w-11 pr-0!">
                   <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>
                     <input type="hidden" name="id" value={row.id} />
                     <button class="btn btn-ghost btn-xs h-7 min-h-7 w-7 px-0 text-lg leading-none text-zinc-500 hover:text-white" type="submit" aria-label="Удалить" disabled={dropping}>×</button>
                   </form>
                 </td>
-                <td class="max-w-xs truncate pl-2">
-                  {@render vacancyLink(row.url, `${plainLabel(row.company)} · ${plainLabel(row.title)}`, row.at)}
+                <td class="pl-[0.8rem]!">
+                  <p class="line-clamp-2 text-sm leading-snug text-zinc-200" title={row.reason || 'не записано'}>{row.reason || 'не записано'}</p>
                 </td>
-                <td><span class="badge badge-sm {statusBadge[row.status] ?? 'badge-ghost'}">{statusText[row.status] ?? row.status}</span></td>
-                <td class="max-w-sm break-words whitespace-normal text-sm text-zinc-300">{row.reason || 'не записано'}</td>
+                <td class="overflow-hidden">
+                  <a class="block truncate text-xs underline-offset-4 hover:underline {rotten(row.at) ? 'text-zinc-600' : 'text-zinc-400'}" href={row.url} target="_blank" rel="noreferrer">{plainLabel(row.company)} · {plainLabel(row.title)}</a>
+                  {#if rotten(row.at)}
+                    <span class="text-xs text-zinc-600">протухло</span>
+                  {/if}
+                </td>
                 <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
               </tr>
             {/each}
