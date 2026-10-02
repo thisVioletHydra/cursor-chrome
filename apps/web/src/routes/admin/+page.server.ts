@@ -1,6 +1,6 @@
 import type { Actions, PageServerLoad } from './$types';
 
-import { restartAdmin, setHoursAdmin, setLiveAdmin } from '$lib/server/admin-actions';
+import { dropWaitingAdmin, restartAdmin, setHoursAdmin, setLiveAdmin } from '$lib/server/admin-actions';
 import { readAccount } from '$lib/server/secrets';
 import { readSession } from '$lib/server/session';
 
@@ -22,4 +22,5 @@ export const actions: Actions = {
   live: setLiveAdmin,
   restart: restartAdmin,
   hours: setHoursAdmin,
+  dropWaiting: dropWaitingAdmin,
 };

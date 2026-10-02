@@ -3,7 +3,7 @@ import type { Stored } from './secrets';
 
 import type { Provider } from '@cursor-chrome/hh';
 
-import { asProvider, COVER_LETTER, distillCorpus, parseRules, providerName, scoreAts, splitQueries, splitWords, suggestQueries, watchRestart } from '@cursor-chrome/hh';
+import { asProvider, COVER_LETTER, distillCorpus, dropWaiters, forgetLinks, notePassed, parseRules, providerName, readQueue, remember, scoreAts, splitQueries, splitWaiters, splitWords, suggestQueries, watchRestart } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
 import { chainOf, collapseChain, imitationFromFields, isCreator, newExtToken, publishSecrets, readAccount, readResume, withChain, writeAccount, writeAtsScan } from './secrets';
@@ -387,6 +387,39 @@ export async function setHoursAdmin({ request, cookies }: RequestEvent) {
   publishSecrets(login, next);
 
   return { ok: true, detail: 'Сохранено', hours: hhHours !== '0' };
+}
+
+export async function dropWaitingAdmin({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', ids: [] as string[] };
+
+  const form = await request.formData();
+  const all = form.get('all') === '1';
+  const id = String(form.get('id') ?? '').trim();
+  if (all === false && /^\d+$/.test(id) === false)
+    return { ok: false, detail: 'нет вакансии', ids: [] as string[] };
+
+  const picked = splitWaiters(await readQueue(), all ? null : [id]).taken;
+  if (picked.length === 0)
+    return { ok: false, detail: all ? 'ждунов нет' : 'уже не в ждунах', ids: [] as string[] };
+
+  const ids = picked.map(row => row.id);
+  await remember(ids);
+  await forgetLinks(ids);
+  await notePassed(picked.map(row => ({
+    id: row.id,
+    reason: 'убрал из ждунов',
+    company: row.company,
+    title: row.title,
+  })));
+  await dropWaiters(ids);
+
+  return {
+    ok: true,
+    detail: picked.length === 1 ? 'убрал в скрытые' : `убрал ${picked.length} в скрытые`,
+    ids,
+  };
 }
 
 export async function restartAdmin({ cookies }: RequestEvent) {

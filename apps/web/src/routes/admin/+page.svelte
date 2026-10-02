@@ -25,6 +25,9 @@ let copyTone = $state<'idle' | 'ok' | 'fail'>('idle');
 let copyTimer: ReturnType<typeof setTimeout> | undefined;
 let now = $state(Date.now());
 let board = $state<'accepted' | 'hidden' | 'waiting'>('accepted');
+let dropping = $state(false);
+let waitNote = $state('');
+let waitOk = $state(false);
 
 const copyClass = $derived(
   copyTone === 'ok'
@@ -383,6 +386,51 @@ function showBoard(next: 'accepted' | 'hidden' | 'waiting'): void {
   board = next;
 }
 
+function dropDetail(data: unknown): { ok: boolean; detail: string; ids: string[] } {
+  if (typeof data !== 'object' || data === null)
+    return { ok: false, detail: 'не вышло', ids: [] };
+
+  const detail = 'detail' in data && typeof data.detail === 'string' && data.detail.length > 0 ? data.detail : 'не вышло';
+  const ok = 'ok' in data && data.ok === true;
+  const ids = 'ids' in data && Array.isArray(data.ids) ? data.ids.filter((item): item is string => typeof item === 'string') : [];
+
+  return { ok, detail, ids };
+}
+
+function dropWait() {
+  dropping = true;
+  waitNote = '';
+
+  return async ({ result }) => {
+    dropping = false;
+    const parsed = dropDetail(result.type === 'success' ? result.data : null);
+    waitOk = parsed.ok;
+    waitNote = parsed.detail;
+    if (parsed.ok === false || parsed.ids.length === 0)
+      return;
+
+    const ids = new Set(parsed.ids);
+    const gone = stats.rows.filter(row => ids.has(row.id) && row.status === 'needsHuman');
+    const keptPassed = stats.passed.filter(row => ids.has(row.id) === false);
+    stats = {
+      ...stats,
+      waiting: Math.max(0, stats.waiting - parsed.ids.length),
+      rows: stats.rows.filter(row => ids.has(row.id) === false),
+      passed: [
+        ...gone.map(row => ({
+          id: row.id,
+          company: row.company,
+          title: row.title,
+          url: row.url,
+          reason: 'убрал из ждунов',
+          when: 'сейчас',
+        })),
+        ...keptPassed,
+      ],
+    };
+  };
+}
+
 function plainLabel(raw: string): string {
   return raw
     .replace(/<svg\b[\s\S]*$/i, ' ')
@@ -614,6 +662,17 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
       aria-pressed={board === 'waiting'}
       onclick={() => showBoard('waiting')}
     >Ждуны</button>
+    {#if board === 'waiting' && stats.waiting > 0}
+      <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>
+        <input type="hidden" name="all" value="1" />
+        <button class="{chipClass} border-white/15 bg-[#10131a] text-zinc-300 hover:text-white" type="submit" disabled={dropping}>
+          {dropping ? 'Убираю' : 'Очистить'}
+        </button>
+      </form>
+    {/if}
+    {#if waitNote}
+      <p class="self-center text-xs {waitOk ? 'text-emerald-400' : 'text-rose-300'}">{waitNote}</p>
+    {/if}
   </div>
   <div class="max-h-[26rem] overflow-x-hidden overflow-y-auto rounded-2xl border border-white/8 bg-[#151922]">
     {#if board === 'accepted'}
@@ -649,6 +708,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
               <th>Вакансия</th>
               <th>Статус</th>
               <th>Когда</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -659,6 +719,12 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
                 </td>
                 <td><span class="badge badge-sm {statusBadge[row.status] ?? 'badge-ghost'}">{statusText[row.status] ?? row.status}</span></td>
                 <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
+                <td class="w-px whitespace-nowrap">
+                  <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>
+                    <input type="hidden" name="id" value={row.id} />
+                    <button class="btn btn-ghost btn-xs h-7 min-h-7 px-2 text-zinc-400 hover:text-white" type="submit" disabled={dropping}>Удалить</button>
+                  </form>
+                </td>
               </tr>
             {/each}
           </tbody>

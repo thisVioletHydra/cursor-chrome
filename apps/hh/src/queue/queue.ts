@@ -98,6 +98,31 @@ export async function busyAmong(ids: readonly string[]): Promise<string[]> {
   return ids.filter(id => hit.has(id));
 }
 
+export function splitWaiters(queue: readonly QueueItem[], ids: readonly string[] | null): { kept: QueueItem[]; taken: QueueItem[] } {
+  const pick = ids === null ? null : new Set(ids);
+  const kept: QueueItem[] = [];
+  const taken: QueueItem[] = [];
+  for (const row of queue) {
+    if (row.status === 'needsHuman' && (pick === null || pick.has(row.id)))
+      taken.push(row);
+    else
+      kept.push(row);
+  }
+
+  return { kept, taken };
+}
+
+export async function dropWaiters(ids: readonly string[] | null): Promise<QueueItem[]> {
+  const queue = await readQueue();
+  const split = splitWaiters(queue, ids);
+  if (split.taken.length === 0)
+    return [];
+
+  await writeQueue(split.kept);
+
+  return split.taken;
+}
+
 export async function markDone(id: string, status: Exclude<QueueStatus, 'pending'>, hints: string[] = []): Promise<QueueItem | null> {
   const queue = await readQueue();
   const found = queue.find(row => row.id === id);
