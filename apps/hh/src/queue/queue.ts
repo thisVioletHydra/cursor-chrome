@@ -29,6 +29,7 @@ export type QueueItem = {
 };
 
 const MAX = 600;
+export const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const STATUSES: QueueStatus[] = ['pending', 'sent', 'needsHuman', 'dropped'];
 const OUTCOMES: Outcome[] = ['invitation', 'discard', 'response'];
 
@@ -96,6 +97,14 @@ export async function busyAmong(ids: readonly string[]): Promise<string[]> {
   }
 
   return ids.filter(id => hit.has(id));
+}
+
+export function isStale(at: number, now = Date.now()): boolean {
+  return Number.isFinite(at) && now - at >= WEEK_MS;
+}
+
+export function staleWaiters(queue: readonly QueueItem[], now = Date.now()): QueueItem[] {
+  return queue.filter(row => row.status === 'needsHuman' && isStale(row.doneAt ?? row.at, now));
 }
 
 export function splitWaiters(queue: readonly QueueItem[], ids: readonly string[] | null): { kept: QueueItem[]; taken: QueueItem[] } {

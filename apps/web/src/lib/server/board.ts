@@ -1,0 +1,36 @@
+import { WEEK_MS, type PassedRow, type QueueItem } from '@cursor-chrome/hh';
+
+const when = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Asia/Bishkek', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+export function boardFrom(queue: QueueItem[], passed: PassedRow[], now = Date.now()) {
+  const waiting = queue.filter(row => row.status === 'needsHuman');
+  const rest = queue.filter(row => row.status !== 'needsHuman');
+
+  return {
+    accepted: rest.length,
+    waiting: waiting.length,
+    stale: waiting.filter(row => now - (row.doneAt ?? row.at) >= WEEK_MS).length,
+    rows: [...waiting, ...rest].slice(0, 40).map((row) => {
+      const at = row.doneAt ?? row.at;
+
+      return {
+        id: row.id,
+        company: row.company,
+        title: row.title,
+        url: row.url,
+        status: row.status,
+        at,
+        when: when.format(at),
+      };
+    }),
+    passed: passed.map(row => ({
+      id: row.id,
+      company: row.company,
+      title: row.title,
+      url: `https://hh.ru/vacancy/${row.id}`,
+      reason: row.reason,
+      at: row.at,
+      when: when.format(row.at),
+    })),
+  };
+}

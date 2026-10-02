@@ -117,6 +117,14 @@ export function countHidden(): number {
   return countTable('hidden');
 }
 
+export function countPassed(): number {
+  const row = openDatabase().prepare(`SELECT COUNT(*) AS total FROM passed WHERE reason != '' AND reason != 'уже видели'`).get();
+  if (row === undefined)
+    return 0;
+
+  return numberOf(row.total);
+}
+
 export function insertSeen(ids: readonly string[], at: number): Promise<void> {
   return insertNums(uniqueNums(ids), at, 'seen');
 }

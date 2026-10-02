@@ -3,7 +3,7 @@ import type { Stored } from './secrets';
 
 import type { Provider } from '@cursor-chrome/hh';
 
-import { asProvider, COVER_LETTER, distillCorpus, dropWaiters, forgetLinks, notePassed, parseRules, providerName, readQueue, remember, scoreAts, splitQueries, splitWaiters, splitWords, suggestQueries, watchRestart } from '@cursor-chrome/hh';
+import { asProvider, COVER_LETTER, distillCorpus, dropWaiters, forgetLinks, notePassed, parseRules, providerName, readQueue, remember, scoreAts, splitQueries, splitWaiters, splitWords, staleWaiters, suggestQueries, watchRestart } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
 import { chainOf, collapseChain, imitationFromFields, isCreator, newExtToken, publishSecrets, readAccount, readResume, withChain, writeAccount, writeAtsScan } from './secrets';
@@ -396,20 +396,22 @@ export async function dropWaitingAdmin({ request, cookies }: RequestEvent) {
 
   const form = await request.formData();
   const all = form.get('all') === '1';
+  const stale = form.get('stale') === '1';
   const id = String(form.get('id') ?? '').trim();
-  if (all === false && /^\d+$/.test(id) === false)
+  if (all === false && stale === false && /^\d+$/.test(id) === false)
     return { ok: false, detail: 'нет вакансии', ids: [] as string[] };
 
-  const picked = splitWaiters(await readQueue(), all ? null : [id]).taken;
+  const queue = await readQueue();
+  const picked = stale ? staleWaiters(queue) : splitWaiters(queue, all ? null : [id]).taken;
   if (picked.length === 0)
-    return { ok: false, detail: all ? 'ждунов нет' : 'уже не в ждунах', ids: [] as string[] };
+    return { ok: false, detail: stale ? 'протухших нет' : all ? 'ждунов нет' : 'уже не в ждунах', ids: [] as string[] };
 
   const ids = picked.map(row => row.id);
   await remember(ids);
   await forgetLinks(ids);
   await notePassed(picked.map(row => ({
     id: row.id,
-    reason: 'убрал из ждунов',
+    reason: stale ? 'протухло' : 'убрал из ждунов',
     company: row.company,
     title: row.title,
   })));

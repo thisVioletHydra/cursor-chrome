@@ -78,7 +78,7 @@ async function refresh(mine: number): Promise<void> {
 
   const body = await res.json() as {
     polling?: boolean;
-    figures?: { today: number; queued: number; waiting: number; invitations: number; discards: number; waitingReply: number; hidden: number };
+    figures?: { today: number; queued: number; waiting: number; accepted?: number; stale?: number; passedTotal?: number; invitations: number; discards: number; waitingReply: number; hidden: number };
     rows?: typeof stats.rows;
     passed?: typeof stats.passed;
     autopilot?: { auto: boolean; lastNote: string; runAt: number };
@@ -397,7 +397,8 @@ function dropDetail(data: unknown): { ok: boolean; detail: string; ids: string[]
   return { ok, detail, ids };
 }
 
-function dropWait() {
+function dropWait({ formData }) {
+  const onlyStale = formData.get('stale') === '1';
   dropping = true;
   waitNote = '';
 
@@ -412,9 +413,12 @@ function dropWait() {
     const ids = new Set(parsed.ids);
     const gone = stats.rows.filter(row => ids.has(row.id) && row.status === 'needsHuman');
     const keptPassed = stats.passed.filter(row => ids.has(row.id) === false);
+    const staleCut = onlyStale ? parsed.ids.length : gone.filter(row => rotten(row.at)).length;
     stats = {
       ...stats,
       waiting: Math.max(0, stats.waiting - parsed.ids.length),
+      stale: Math.max(0, (stats.stale ?? 0) - staleCut),
+      passedTotal: (stats.passedTotal ?? stats.passed.length) + parsed.ids.length,
       rows: stats.rows.filter(row => ids.has(row.id) === false),
       passed: [
         ...gone.map(row => ({
@@ -422,7 +426,8 @@ function dropWait() {
           company: row.company,
           title: row.title,
           url: row.url,
-          reason: 'убрал из ждунов',
+          reason: onlyStale ? 'протухло' : 'убрал из ждунов',
+          at: Date.now(),
           when: 'сейчас',
         })),
         ...keptPassed,
@@ -454,7 +459,12 @@ function passedName(row: { company: string; title: string; id: string }): string
   return row.id;
 }
 
-const chipClass = 'inline-flex h-8 min-h-8 cursor-pointer items-center rounded-full border px-3 text-sm font-medium transition hover:border-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-[0.98]';
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const chipClass = 'inline-flex h-8 min-h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition hover:border-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-[0.98]';
+
+function rotten(at: number | undefined): boolean {
+  return typeof at === 'number' && now - at >= WEEK_MS;
+}
 
 const statusText: Record<string, string> = {
   pending: 'в очереди',
@@ -649,19 +659,19 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
       type="button"
       aria-pressed={board === 'accepted'}
       onclick={() => showBoard('accepted')}
-    >Принятые</button>
+    >Принятые <span class="tabular-nums">{stats.accepted ?? 0}</span></button>
     <button
       class="{chipClass} {board === 'hidden' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
       type="button"
       aria-pressed={board === 'hidden'}
       onclick={() => showBoard('hidden')}
-    >Скрытые</button>
+    >Скрытые <span class="tabular-nums">{stats.passedTotal ?? stats.passed.length}</span></button>
     <button
       class="{chipClass} {board === 'waiting' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
       type="button"
       aria-pressed={board === 'waiting'}
       onclick={() => showBoard('waiting')}
-    >Ждуны</button>
+    >Ждуны <span class="tabular-nums">{stats.waiting}</span></button>
     {#if board === 'waiting' && stats.waiting > 0}
       <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>
         <input type="hidden" name="all" value="1" />
@@ -669,11 +679,23 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
           {dropping ? 'Убираю' : 'Очистить'}
         </button>
       </form>
+      <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>
+        <input type="hidden" name="stale" value="1" />
+        <button class="{chipClass} border-white/15 bg-[#10131a] text-zinc-300 hover:text-white" type="submit" disabled={dropping || (stats.stale ?? 0) === 0}>
+          {dropping ? 'Убираю' : `Автоочистка ${stats.stale ?? 0}`}
+        </button>
+      </form>
     {/if}
     {#if waitNote}
       <p class="self-center text-xs {waitOk ? 'text-emerald-400' : 'text-rose-300'}">{waitNote}</p>
     {/if}
   </div>
+  {#snippet vacancyLink(href: string, label: string, at: number | undefined)}
+    <a class="underline-offset-4 hover:underline {rotten(at) ? 'text-zinc-500' : 'text-zinc-200'}" href={href} target="_blank" rel="noreferrer">{label}</a>
+    {#if rotten(at)}
+      <span class="ml-2 text-xs text-zinc-500">протухло</span>
+    {/if}
+  {/snippet}
   <div class="max-h-[26rem] overflow-x-hidden overflow-y-auto rounded-2xl border border-white/8 bg-[#151922]">
     {#if board === 'accepted'}
       {#if stats.rows.some(row => row.status !== 'needsHuman')}
@@ -689,7 +711,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
             {#each stats.rows.filter(row => row.status !== 'needsHuman') as row (row.id)}
               <tr>
                 <td class="max-w-xs truncate">
-                  <a class="text-zinc-200 underline-offset-4 hover:underline" href={row.url} target="_blank" rel="noreferrer">{plainLabel(row.company)} · {plainLabel(row.title)}</a>
+                  {@render vacancyLink(row.url, `${plainLabel(row.company)} · ${plainLabel(row.title)}`, row.at)}
                 </td>
                 <td><span class="badge badge-sm {statusBadge[row.status] ?? 'badge-ghost'}">{statusText[row.status] ?? row.status}</span></td>
                 <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
@@ -715,7 +737,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
             {#each stats.rows.filter(row => row.status === 'needsHuman') as row (row.id)}
               <tr>
                 <td class="max-w-xs truncate">
-                  <a class="text-zinc-200 underline-offset-4 hover:underline" href={row.url} target="_blank" rel="noreferrer">{plainLabel(row.company)} · {plainLabel(row.title)}</a>
+                  {@render vacancyLink(row.url, `${plainLabel(row.company)} · ${plainLabel(row.title)}`, row.at)}
                 </td>
                 <td><span class="badge badge-sm {statusBadge[row.status] ?? 'badge-ghost'}">{statusText[row.status] ?? row.status}</span></td>
                 <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
@@ -745,7 +767,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
           {#each stats.passed as row (row.id)}
             <tr>
               <td class="max-w-xs break-words whitespace-normal">
-                <a class="text-zinc-200 underline-offset-4 hover:underline" href={row.url} target="_blank" rel="noreferrer">{passedName(row)}</a>
+                {@render vacancyLink(row.url, passedName(row), row.at)}
               </td>
               <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
               <td class="max-w-xs break-words whitespace-normal text-sm text-zinc-300">{row.reason}</td>

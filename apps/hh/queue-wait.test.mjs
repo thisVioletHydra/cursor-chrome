@@ -1,4 +1,4 @@
-import { splitWaiters } from './src/queue/queue.ts';
+import { isStale, splitWaiters, staleWaiters, WEEK_MS } from './src/queue/queue.ts';
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -28,4 +28,17 @@ test('only waiting rows leave, and a single id does not take the rest', () => {
   const sent = splitWaiters(queue, ['2']);
   assert.equal(sent.taken.length, 0);
   assert.equal(sent.kept.length, 4);
+});
+
+test('a waiter is stale after a week, a fresh one stays', () => {
+  const now = 1_700_000_000_000;
+  assert.equal(isStale(now - WEEK_MS, now), true);
+  assert.equal(isStale(now - WEEK_MS + 1, now), false);
+  const queue = [
+    { ...row('1', 'needsHuman'), at: now - WEEK_MS },
+    { ...row('2', 'needsHuman'), at: now - WEEK_MS, doneAt: now },
+    { ...row('3', 'needsHuman'), at: now },
+    { ...row('4', 'sent'), at: now - WEEK_MS * 2 },
+  ];
+  assert.deepEqual(staleWaiters(queue, now).map(item => item.id), ['1']);
 });

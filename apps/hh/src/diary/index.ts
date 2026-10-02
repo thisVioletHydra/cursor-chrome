@@ -1,4 +1,4 @@
-export { dayOpen, forgetAllLinks, forgetLinks, forgetSearchPages, HIDE_REASON, heldAmong, hiddenCount, keepLinks, knownAmong, markSent, moscowDay, moscowHour, noteHidden, notePassed, readLinks, readMemory, readPassed, remember, rememberSearchPage, roomToday, searchPages, seenCount, storePath, workHours } from './memory.ts';
+export { dayOpen, forgetAllLinks, forgetLinks, forgetSearchPages, HIDE_REASON, heldAmong, hiddenCount, keepLinks, knownAmong, markSent, moscowDay, moscowHour, noteHidden, notePassed, passedCount, readLinks, readMemory, readPassed, remember, rememberSearchPage, roomToday, searchPages, seenCount, storePath, workHours } from './memory.ts';
 export type { PassedRow } from './memory.ts';
 export type { HeldLink, Memory } from './memory.ts';
 export { readState, writeState } from './state.ts';
