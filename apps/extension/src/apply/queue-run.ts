@@ -14,7 +14,7 @@ import { markPilotStop } from '../pilot/pilot-stop';
 import { runHhApply } from './hh-apply-cmd';
 import { feedEnded, nextDryStreak } from '../search/feed-dry';
 import { HIDE_POPUP_STUCK } from '../search/hide-popup';
-import { collectVacancies, hideOpenVacancy, readVacancyPage, releaseHidePopup, useLightFeed } from '../search/hh-search';
+import { collectVacancies, hideOpenVacancy, readVacancyPage, releaseHidePopup, useFeedMode, useLightFeed, wordFallback } from '../search/hh-search';
 import { requireTabId } from '../link/inject';
 import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
@@ -55,12 +55,20 @@ const TEST = /тест|тестов/i;
 
 const LIGHT_KEY = 'feedLight';
 const LIGHT_UNTIL_KEY = 'feedLightUntil';
+const MODE_KEY = 'feedMode';
+const WORD_KEY = 'feedWord';
 const LIGHT_SLEEP_MS = 60 * 60 * 1000;
+
+type FeedMode = 'feed' | 'words' | 'light';
 
 let running = false;
 let dryStreak = 0;
 let feedLight = false;
 let lightDue = false;
+let feedMode: FeedMode = 'feed';
+let wordAt = 0;
+let wordPageDone = false;
+let words: string[] = [];
 
 export function queueBusy(): boolean {
   return running;
@@ -195,12 +203,26 @@ export async function readPausedUntil(): Promise<number | null> {
 }
 
 async function loadLight(): Promise<void> {
-  const stored = await browser.storage.local.get(LIGHT_KEY);
-  feedLight = stored[LIGHT_KEY] === true;
+  const stored = await browser.storage.local.get([LIGHT_KEY, MODE_KEY, WORD_KEY]);
+  const savedMode = stored[MODE_KEY];
+  if (stored[LIGHT_KEY] === true || savedMode === 'light')
+    feedMode = 'light';
+  else if (savedMode === 'words')
+    feedMode = 'words';
+  else
+    feedMode = 'feed';
+
+  wordAt = typeof stored[WORD_KEY] === 'number' && stored[WORD_KEY] >= 0 ? stored[WORD_KEY] : 0;
+  feedLight = feedMode === 'light';
   if (feedLight === false)
     lightDue = false;
 
-  useLightFeed(feedLight);
+  if (feedMode === 'words' && words.length === 0)
+    words = wordFallback();
+
+  useFeedMode(feedMode, words[wordAt] ?? '');
+  if (feedLight)
+    useLightFeed(true);
 }
 
 async function dropBacklog(base: string, key: string): Promise<void> {
@@ -223,6 +245,18 @@ async function resetFeed(base: string, key: string): Promise<void> {
     }
 
     await finishLightNap();
+
+    return;
+  }
+
+  if (feedMode === 'words') {
+    try {
+      await dropBacklog(base, key);
+      await tellPage(`queue-run.ts · снова слово ${words[wordAt] ?? 'из списка'}`);
+    }
+    catch {
+      await tellPage('queue-run.ts · не сбросил слова');
+    }
 
     return;
   }
@@ -294,6 +328,11 @@ async function drain(): Promise<QueueRun> {
       continue;
     }
 
+    if (feedMode === 'words' && wordPageDone) {
+      if (await finishWordPage(base, key) === false)
+        break;
+    }
+
     if (feedLight && lightDue) {
       lightDue = false;
       if (await lightSleep() === false)
@@ -331,6 +370,13 @@ async function drain(): Promise<QueueRun> {
 
     if (filled.saved > 0)
       continue;
+
+    if (feedMode === 'words' && wordPageDone) {
+      if (await finishWordPage(base, key) === false)
+        break;
+
+      continue;
+    }
 
     if (feedLight && lightDue && filled.note !== 'не прочиталась страница hh') {
       lightDue = false;
@@ -550,8 +596,11 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
   }
 
   if (holdLink(posted)) {
-    if (ended && feedLight === false)
-      return enterLight(base, key);
+    if (ended) {
+      const left = await leaveFeed(base, key);
+      if (left !== null)
+        return left;
+    }
 
     return { started: false, stop: false, reason: '', held: true };
   }
@@ -571,14 +620,20 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
     if (ignore && 'tabId' in shown && await hideOpenVacancy(shown.tabId, link.id, row => postHidden(base, key, row)) === false)
       return { started: false, stop: true, reason: HIDE_POPUP_STUCK };
 
-    if (ended && feedLight === false)
-      return enterLight(base, key);
+    if (ended) {
+      const left = await leaveFeed(base, key);
+      if (left !== null)
+        return left;
+    }
 
     return { started: false, stop: false, reason: '' };
   }
 
-  if (ended && feedLight === false)
-    return enterLight(base, key);
+  if (ended) {
+    const left = await leaveFeed(base, key);
+    if (left !== null)
+      return left;
+  }
 
   const items = await fetchQueue(base, key);
   const item = items?.find(row => row.id === link.id);
@@ -682,13 +737,98 @@ function blank(reason: string): QueueRun {
   return { ok: false, sent: 0, human: 0, skipped: 0, left: 0, reason, lines: [] };
 }
 
+async function leaveFeed(base: string, key: string): Promise<ApplyPass | null> {
+  if (feedMode === 'light')
+    return null;
+
+  if (feedMode === 'words')
+    return nextWord(base, key);
+
+  return enterWords(base, key);
+}
+
+function noteWords(list: readonly string[]): void {
+  const clean = [...new Set(list.map(item => item.trim()).filter(item => item.length > 0 && item !== 'лента' && item.startsWith('-') === false))].slice(0, 20);
+  if (clean.length > 0)
+    words = clean;
+  else if (words.length === 0)
+    words = wordFallback();
+}
+
+function wordLine(list: readonly string[]): string {
+  const head = list.slice(0, 3).join(', ');
+  const tail = list.length > 3 ? '…' : '';
+
+  return `queue-run.ts · лента кончилась, слова: ${head}${tail}`;
+}
+
+async function saveMode(): Promise<void> {
+  await browser.storage.local.set({ [MODE_KEY]: feedMode, [WORD_KEY]: wordAt });
+}
+
+async function enterWords(base: string, key: string): Promise<ApplyPass> {
+  if (words.length === 0)
+    words = wordFallback();
+
+  dryStreak = 0;
+  wordPageDone = false;
+  wordAt = 0;
+  feedMode = 'words';
+  feedLight = false;
+  lightDue = false;
+  useFeedMode('words', words[0] ?? '');
+  await browser.storage.local.remove(LIGHT_KEY);
+  await saveMode();
+  await tellPage(wordLine(words));
+  try {
+    await dropBacklog(base, key);
+  }
+  catch {
+    await tellPage('queue-run.ts · не сбросил хвост ленты');
+  }
+
+  return { started: false, stop: false, reason: '' };
+}
+
+async function nextWord(base: string, key: string): Promise<ApplyPass> {
+  dryStreak = 0;
+  wordPageDone = false;
+  wordAt += 1;
+  if (wordAt >= words.length)
+    return enterLight(base, key);
+
+  useFeedMode('words', words[wordAt] ?? '');
+  await saveMode();
+  await tellPage(`queue-run.ts · дальше слово ${words[wordAt]}`);
+  try {
+    await dropBacklog(base, key);
+  }
+  catch {
+    await tellPage('queue-run.ts · не сбросил хвост слова');
+  }
+
+  return { started: false, stop: false, reason: '' };
+}
+
+async function finishWordPage(base: string, key: string): Promise<boolean> {
+  if (feedMode !== 'words' || wordPageDone === false)
+    return true;
+
+  wordPageDone = false;
+  await nextWord(base, key);
+
+  return cycleOpen();
+}
+
 async function enterLight(base: string, key: string): Promise<ApplyPass> {
   dryStreak = 0;
+  feedMode = 'light';
   feedLight = true;
   lightDue = false;
-  useLightFeed(true);
-  await browser.storage.local.set({ [LIGHT_KEY]: true });
-  await tellPage('queue-run.ts · всратые пошли, лайт: удалёнка за сутки, 10 штук, потом час');
+  wordPageDone = false;
+  useFeedMode('light');
+  await browser.storage.local.set({ [LIGHT_KEY]: true, [MODE_KEY]: 'light' });
+  await tellPage('queue-run.ts · слова прошли, лайт: удалёнка за сутки, 10 штук, потом час');
   try {
     await dropBacklog(base, key);
   }
@@ -775,6 +915,10 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
     return { note: 'сервер не прислал запрос', saved: 0, more: false, done: false, retry: true };
   }
 
+  noteWords(hunt.words);
+  if (feedMode === 'words')
+    useFeedMode('words', words[wordAt] ?? words[0] ?? '');
+
   const found = await collectVacancies(hunt.queries, hunt.pages, async (ids, links, cursor) => {
     const marks = await seenAmong(base, key, ids, links, cursor);
     if (marks === null)
@@ -812,6 +956,9 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
   const retry = found.done === false && found.saved === 0 && found.reason.length > 0;
   if (feedLight && found.reason !== 'не прочиталась страница hh' && (found.done || found.saved > 0))
     lightDue = true;
+
+  if (feedMode === 'words' && found.reason !== 'не прочиталась страница hh' && (found.done || found.saved > 0))
+    wordPageDone = true;
 
   return { note: found.reason, saved: found.saved, more: found.more, done: found.done, retry };
 }

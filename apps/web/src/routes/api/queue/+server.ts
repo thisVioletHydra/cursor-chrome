@@ -1,7 +1,7 @@
 import type { State } from '@cursor-chrome/hh';
 import type { RequestHandler } from './$types';
 
-import { COVER_LETTER, HIDE_REASON, busyAmong, dayOpen, forgetAllLinks, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, moscowDay, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readState, rememberSearchPage, searchPages, stepWalk, takePilotStart, walkFrom, workHours, writeState } from '@cursor-chrome/hh';
+import { COVER_LETTER, DEFAULT_QUERY, HIDE_REASON, busyAmong, dayOpen, forgetAllLinks, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, moscowDay, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readState, rememberSearchPage, searchPages, splitQueries, stepWalk, takePilotStart, walkFrom, workHours, writeState } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { readAccount } from '$lib/server/secrets';
@@ -15,6 +15,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
   const state = await walkToday(loaded);
   const letter = account.coverLetter || COVER_LETTER;
   const saved = ['лента'];
+  const words = splitQueries(account.hhQuery.trim() || DEFAULT_QUERY).filter(line => line.startsWith('-') === false).slice(0, 20);
   const stop = state.hung === true && state.auto === false;
   const auto = state.auto === true;
   const listen = url.searchParams.get('listen') === '1';
@@ -29,7 +30,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
     await writeState({ walkAt: spot });
 
   if (open === false)
-    return json({ items: [], links: [], letter, queries: saved, focus, depth: walked.left, phase: walked.phase, want: false, imitation: account.imitation, stop, hours, auto, start, day });
+    return json({ items: [], links: [], letter, queries: saved, words, focus, depth: walked.left, phase: walked.phase, want: false, imitation: account.imitation, stop, hours, auto, start, day });
 
   const queued = await pendingCount();
   const want = account.hhLive === '1' && state.auto && queued < QUEUE_TARGET;
@@ -41,6 +42,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
     pages,
     letter,
     queries: saved,
+    words,
     focus,
     depth: walked.left,
     phase: walked.phase,

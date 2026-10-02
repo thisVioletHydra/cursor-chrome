@@ -46,7 +46,7 @@ export async function setFlags(patch: Partial<Flags>): Promise<Flags> {
     await clearTeaClock();
 
   if (turningOn || turningOff)
-    await browser.storage.local.remove(['feedLight', 'feedLightUntil']);
+    await browser.storage.local.remove(['feedLight', 'feedLightUntil', 'feedMode', 'feedWord']);
 
   const live = await getFlags();
   if (turningOn && live.autoQueue === false && await pilotStopped())

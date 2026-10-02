@@ -106,6 +106,9 @@ test('the saved feed counts without a text query', () => {
   assert.equal(feedAddress(light), true);
   assert.equal(searchReady(light, html, '', 0, false), true);
   assert.equal(feedAddress('https://hh.ru/search/vacancy?ored_clusters=true&search_period=1'), false);
+  const word = 'https://hh.ru/search/vacancy?enable_snippets=true&ored_clusters=true&search_period=7&text=Frontend';
+  assert.equal(searchReady(word, html, 'Frontend', 0, false), true);
+  assert.equal(searchReady(word, html, 'React', 0, false), false);
 });
 
 test('a clamped deep page counts after the address changes', () => {

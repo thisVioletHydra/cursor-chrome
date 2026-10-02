@@ -17,10 +17,24 @@ const FEED_KEY = 'лента';
 const FEED = 'https://hh.ru/search/vacancy?enable_snippets=true&ored_clusters=true&search_period=7&hhtmFromLabel=search_order_button&hhtmFrom=vacancy_search_list';
 const LIGHT = 'https://hh.ru/search/vacancy?enable_snippets=true&ored_clusters=true&work_format=REMOTE&search_period=1&hhtmFromLabel=search_order_button&hhtmFrom=vacancy_search_list';
 const LIGHT_CAP = 10;
+const WORD_FALLBACK = ['Frontend', 'Vue.js', 'vue', 'TypeScript', 'JavaScript', 'React', 'Node.js', 'Fullstack', 'NestJS', 'GraphQL'];
+type FeedMode = 'feed' | 'words' | 'light';
+let feedMode: FeedMode = 'feed';
+let wordQuery = '';
 let lightOn = false;
 
+export function useFeedMode(mode: FeedMode, query = ''): void {
+  feedMode = mode;
+  wordQuery = query.trim();
+  lightOn = mode === 'light';
+}
+
 export function useLightFeed(on: boolean): void {
-  lightOn = on;
+  useFeedMode(on ? 'light' : 'feed');
+}
+
+export function wordFallback(): string[] {
+  return WORD_FALLBACK.slice();
 }
 const endedQuery = new Set<string>();
 let endedQuiet = false;
@@ -168,7 +182,7 @@ export async function collectVacancies(
       if (batch.length === 0)
         return finish(query, searchStep({ saved: 0, hasNext: more }), more);
 
-      const fitting = query === FEED_KEY ? batch : batch.filter(card => fitsTitle(card.title, queries));
+      const fitting = query === FEED_KEY || feedMode === 'words' ? batch : batch.filter(card => fitsTitle(card.title, queries));
       const marks = await knownOnPage(
         batch.map(card => card.id),
         fitting.map(card => ({ id: card.id, url: card.url, title: card.title })),
@@ -221,9 +235,9 @@ export async function collectVacancies(
       await tellPage('hh-search.ts · не прочиталась страница hh');
     }
 
-    const focus = FEED_KEY;
-    const stored = lightOn ? 0 : storedPage(pages[focus]);
-    await tellPage(lightOn ? 'hh-search.ts · лайт, первые 10' : `hh-search.ts · ${focus}, стр. ${stored + 1}`);
+    const focus = feedMode === 'words' && wordQuery.length > 0 ? wordQuery : FEED_KEY;
+    const stored = lightOn || feedMode === 'words' ? 0 : storedPage(pages[focus]);
+    await tellPage(lightOn ? 'hh-search.ts · лайт, первые 10' : feedMode === 'words' ? `hh-search.ts · слово ${wordQuery}` : `hh-search.ts · ${focus}, стр. ${stored + 1}`);
     const hit = await harvest(focus, stored, null, false);
     if (hit === 'login')
       return true;
@@ -238,7 +252,7 @@ export async function collectVacancies(
       return false;
 
     read += 1;
-    if (lightOn) {
+    if (lightOn || feedMode === 'words') {
       wordDone = true;
 
       return false;
@@ -332,8 +346,9 @@ function searchUrl(query: string, page: number): string {
 
   const url = new URL(SEARCH);
   url.searchParams.set('text', query);
-  url.searchParams.set('search_period', '3');
-  url.searchParams.set('order_by', 'publication_time');
+  url.searchParams.set('enable_snippets', 'true');
+  url.searchParams.set('ored_clusters', 'true');
+  url.searchParams.set('search_period', '7');
 
   return putSearchPage(url.toString(), page);
 }
@@ -597,6 +612,11 @@ function resumePath(url: string): boolean {
 
 export function huntSearchUrl(queries: readonly string[]): string {
   void queries;
+  if (lightOn)
+    return putSearchPage(LIGHT, FIRST_PAGE);
+
+  if (feedMode === 'words' && wordQuery.length > 0)
+    return searchUrl(wordQuery, FIRST_PAGE);
 
   return putSearchPage(FEED, FIRST_PAGE);
 }
