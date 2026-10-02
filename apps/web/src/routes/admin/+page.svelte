@@ -682,12 +682,6 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
     >Ждуны {@render chipCount(stats.waiting)}</button>
     {#if board === 'waiting' && stats.waiting > 0}
       <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>
-        <input type="hidden" name="all" value="1" />
-        <button class="{chipClass} border-white/15 bg-[#10131a] text-zinc-300 hover:text-white" type="submit" disabled={dropping}>
-          {dropping ? 'Убираю' : 'Очистить'}
-        </button>
-      </form>
-      <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>
         <input type="hidden" name="stale" value="1" />
         <button class="{chipClass} border-white/15 bg-[#10131a] text-zinc-300 hover:text-white" type="submit" disabled={dropping || (stats.stale ?? 0) === 0}>
           {dropping ? 'Убираю' : `Автоочистка ${stats.stale ?? 0}`}
@@ -696,6 +690,14 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
     {/if}
     {#if waitNote}
       <p class="self-center text-xs {waitOk ? 'text-emerald-400' : 'text-rose-300'}">{waitNote}</p>
+    {/if}
+    {#if board === 'waiting' && stats.waiting > 0}
+      <form class="ml-auto self-center" method="POST" action="?/dropWaiting" use:enhance={dropWait}>
+        <input type="hidden" name="all" value="1" />
+        <button class="cursor-pointer bg-transparent px-1 text-sm text-rose-400/70 hover:text-rose-300 disabled:cursor-wait disabled:opacity-50" type="submit" disabled={dropping}>
+          {dropping ? 'Убираю' : 'Очистить'}
+        </button>
+      </form>
     {/if}
   </div>
   {#snippet vacancyLink(href: string, label: string, at: number | undefined)}
