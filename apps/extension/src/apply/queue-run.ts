@@ -1181,7 +1181,10 @@ async function showVacancy(url: string, read?: { base: string; key: string; id: 
   }
 
   const loaded = waitTab(tabId, 15_000);
-  await browser.tabs.update(tabId, { url, active: false });
+  await Promise.race([
+    browser.tabs.update(tabId, { url, active: false }).then(() => undefined),
+    new Promise<void>(resolve => setTimeout(resolve, 8_000)),
+  ]);
   await loaded;
   const here = await browser.tabs.get(tabId).catch(() => null);
   const opened = here?.url || '';

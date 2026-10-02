@@ -20,6 +20,7 @@ export type WaitPulse = {
 };
 
 const PULSE = /^~([a-z][a-z0-9.]*)\|([^|]+)\|(-|\d+)\|(\d+)\|([a-z][a-z0-9.]*)\|([wsp])\|([01])$/;
+const MODE_TAG = /^\[(?:full|light|target)\]\s+/;
 
 export function waitMark(mark: {
   id: string;
@@ -55,7 +56,7 @@ export function waitPulse(mark: WaitMark, elapsed: number): string {
 }
 
 export function readWaitPulse(text: string): WaitPulse | null {
-  const hit = PULSE.exec(text);
+  const hit = PULSE.exec(text.replace(MODE_TAG, ''));
   if (hit === null)
     return null;
 

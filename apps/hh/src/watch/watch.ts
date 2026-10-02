@@ -390,8 +390,12 @@ function queueWait(text: string): boolean {
   return text === 'жду очередь' || /^жду \d+$/.test(text) || stateHold(text);
 }
 
+function bareStep(text: string): string {
+  return text.replace(/\[(?:full|light|target)\]\s+/g, '');
+}
+
 function queueRestHang(text: string): boolean {
-  if (queueWait(text) || lightNap(text))
+  if (queueWait(bareStep(text)) || lightNap(text))
     return true;
 
   if (text.startsWith('я завис: ') === false)
@@ -402,7 +406,7 @@ function queueRestHang(text: string): boolean {
   if (at < 0)
     return false;
 
-  return queueWait(body.slice(0, at)) || lightNap(body.slice(0, at));
+  return queueWait(bareStep(body.slice(0, at))) || lightNap(body.slice(0, at));
 }
 
 function lightNap(text: string): boolean {

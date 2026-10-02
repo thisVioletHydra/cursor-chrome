@@ -686,11 +686,13 @@ async function readHideFace(tabId: number): Promise<HideFace | 'resume' | null> 
 
 async function hideCall(tabId: number, op: string, id: string): Promise<unknown> {
   try {
-    const results = await browser.scripting.executeScript({
+    const results = await within(browser.scripting.executeScript({
       target: { tabId },
       func: hideDom,
       args: [op, id],
-    });
+    }), 8_000);
+    if (results === null)
+      return null;
 
     return results[0]?.result;
   }

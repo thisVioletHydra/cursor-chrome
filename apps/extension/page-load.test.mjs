@@ -1,5 +1,5 @@
-import { FLIP_MAX_MS, FLIP_MIN_MS, HIDE_MAX_MS, HIDE_MIN_MS, PAGE_LOAD_MS, endedAfter, feedAddress, flipWaitMs, foldLiveLine, hideWaitMs, landedPage, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchHasNext, searchReady, searchStep } from './src/search/page-load.ts';
-import { pulseLines, waitMark, waitPulse } from './src/pilot/wait-pulse.ts';
+import { FLIP_MAX_MS, FLIP_MIN_MS, HIDE_MAX_MS, HIDE_MIN_MS, PAGE_LOAD_MS, endedAfter, feedAddress, flipWaitMs, foldLiveLine, hideWaitMs, landedPage, liveTick, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchHasNext, searchReady, searchStep } from './src/search/page-load.ts';
+import { pulseHolds, pulseLines, waitMark, waitPulse } from './src/pilot/wait-pulse.ts';
 import { feedDry, feedEnded, nextDryStreak } from './src/search/feed-dry.ts';
 import { tagLine } from './src/pilot/log-mode.ts';
 import { descriptionText } from './src/search/vacancy-text.ts';
@@ -172,6 +172,17 @@ test('a named wait replaces the same pulse', () => {
   assert.deepEqual(foldLiveLine(['жду 29'], first), [first]);
   assert.deepEqual(foldLiveLine([first], next), [next]);
   assert.deepEqual(foldLiveLine(['уже видели, 20'], first), ['уже видели, 20', first]);
+  const read = waitPulse(waitMark({
+    id: 'apply.read',
+    human: 'чтение вакансии',
+    budget: 33,
+    next: 'apply.open',
+    hold: true,
+  }), 33);
+  const tagged = `[target] ${read}`;
+  assert.equal(liveTick(tagged), true);
+  assert.equal(pulseHolds(tagged), true);
+  assert.deepEqual(foldLiveLine([tagged], read), [read]);
   const hunt = waitPulse(waitMark({
     id: 'search.hunt',
     human: 'ищу вакансию',
