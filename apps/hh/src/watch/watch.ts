@@ -23,6 +23,7 @@ const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
 const SEARCH_TICK = /^ищу вакансию, \d+ с$/;
 const PAGE_TICK = /^жду страницу, \d+ с$/;
 const STATE_PULSE = /^~([a-z][a-z0-9.]*)\|([^|]+)\|(-|\d+)\|(\d+)\|([a-z][a-z0-9.]*)\|([wsp])\|([01])$/;
+const MODE_TAG = /^\[(?:full|light|target)\]\s+/;
 const FROZEN_MS = 90_000;
 const STEP_MAX = 80;
 const STEP_PREFIX = /^(открыл|ищу|читаю|в очереди|в список|мимо,|сервер|админка|жду|уже видели)/;
@@ -75,7 +76,7 @@ export function startWatch(send: (text: string) => Promise<void>): void {
 }
 
 export async function watchPulse(line: string): Promise<boolean> {
-  const text = clip(line);
+  const text = clip(line.replace(MODE_TAG, ''));
   if (text.length === 0)
     return pilotStop();
 

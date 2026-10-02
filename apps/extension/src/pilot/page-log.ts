@@ -172,7 +172,7 @@ export async function tellPage(line: string): Promise<void> {
   if (raw.length === 0)
     return;
 
-  const text = raw === 'сервер молчит' || raw.startsWith('я завис') ? raw : tagLine(runMode, raw);
+  const text = raw.startsWith('~') || raw === 'сервер молчит' || raw.startsWith('я завис') ? raw : tagLine(runMode, raw);
 
   if (stallText(text) && hangLive === false)
     return;
