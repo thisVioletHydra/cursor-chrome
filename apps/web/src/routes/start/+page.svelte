@@ -50,10 +50,13 @@ function enable() {
 
 <svelte:head>
   <title>Старт</title>
+  <link rel="preload" as="image" href="/start-land.jpg" fetchpriority="high" />
+  <style>
+    html, body { background: #d7e6f3 url('/start-land.jpg') center / cover no-repeat; }
+  </style>
 </svelte:head>
 
-<div class="relative min-h-dvh overflow-hidden text-zinc-950">
-  <img class="absolute inset-0 h-full w-full object-cover" src="/start-land.jpg" alt="" />
+<div class="relative min-h-dvh overflow-hidden bg-[#d7e6f3] bg-cover bg-center text-zinc-950" style="background-image: url('/start-land.jpg')">
 
   <header class="absolute top-0 left-0 z-20 p-5">
     <span class="grid size-8 place-items-center rounded-full bg-black text-white" aria-hidden="true">
