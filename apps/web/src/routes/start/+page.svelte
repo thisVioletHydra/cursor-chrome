@@ -88,15 +88,6 @@ function arrived(event: TransitionEvent) {
 
 <div class="relative min-h-dvh overflow-hidden bg-[#d7e6f3] bg-cover bg-center text-zinc-950" style="background-image: url('/start-land.jpg')">
 
-  <header class="absolute top-0 left-0 z-20 p-5">
-    <span class="grid size-8 place-items-center rounded-full bg-black text-white" aria-hidden="true">
-      <svg class="size-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-        <circle cx="8" cy="8" r="5.2" />
-        <path d="M8 4.8v3.4l2.2 1.3" />
-      </svg>
-    </span>
-  </header>
-
   <main class="relative z-10 mx-auto flex min-h-dvh w-full max-w-xl flex-col items-center px-4 pt-[16vh] pb-36 text-center">
     {#if open === null}
       <h1 class="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">Подключение</h1>
