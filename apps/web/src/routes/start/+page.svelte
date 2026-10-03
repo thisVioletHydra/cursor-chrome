@@ -1,4 +1,7 @@
 <script lang="ts">
+import { goto } from '$app/navigation';
+import NavIcon from '../admin/NavIcon.svelte';
+
 const steps = [
   { chip: 'Шаг 1', name: 'Вход' },
   { chip: 'Шаг 2', name: 'Браузер' },
@@ -6,21 +9,28 @@ const steps = [
   { chip: 'Шаг 4', name: 'Ключ' },
 ] as const;
 
-const figures = [
-  ['Откликнуться', '0'],
-  ['В очереди', '0'],
-  ['Ждут тебя', '0'],
-  ['Приглашения', '0'],
-  ['Отказы', '0'],
-  ['Скрытые', '0'],
+const nav = [
+  ['Главная', 'home'],
+  ['Telegram', 'plane'],
+  ['Модель', 'spark'],
+  ['HeadHunter', 'briefcase'],
+  ['Extension', 'puzzle'],
+  ['Сопроводительное', 'letter'],
+  ['ATS', 'doc'],
+  ['Billing', 'card'],
+  ['Конфиг', 'file'],
+  ['Имитация', 'person'],
 ] as const;
 
+let { data } = $props();
 let open = $state<number | null>(null);
 let cleared = $state(0);
 let weekOpen = $state(false);
 let key = $state('');
 let eye = $state(false);
 let started = $state(false);
+let rising = $state(false);
+let left = false;
 
 const pasted = $derived(key.trim().length > 0);
 
@@ -45,6 +55,26 @@ function enable() {
     return;
 
   started = true;
+}
+
+function pass() {
+  if (rising)
+    return;
+
+  rising = true;
+}
+
+function arrived(event: TransitionEvent) {
+  if (left || rising === false || event.target !== event.currentTarget || event.propertyName !== 'transform')
+    return;
+
+  left = true;
+  const jump = () => goto('/admin');
+  const view = document as Document & { startViewTransition?: (cb: () => Promise<void>) => void };
+  if (view.startViewTransition)
+    view.startViewTransition(jump);
+  else
+    void jump();
 }
 </script>
 
@@ -140,22 +170,49 @@ function enable() {
     {/if}
   </main>
 
-  <div class="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center" aria-hidden="true">
-    <div class="w-[min(56rem,94vw)] translate-y-[78%] rounded-t-3xl border border-white/80 bg-white/85 px-4 pt-4 shadow-[0_-12px_40px_rgba(15,23,42,0.18)] backdrop-blur-xl">
-      <div class="flex divide-x divide-black/10 overflow-hidden rounded-xl border border-black/10 bg-white/70">
-        {#each figures as figure (figure[0])}
-          <div class="flex min-w-0 flex-1 flex-col items-center gap-1 px-2 py-2">
-            <span class="text-center text-[10px] leading-none text-zinc-500">{figure[0]}</span>
-            <span class="text-sm leading-none font-semibold tabular-nums">{figure[1]}</span>
-          </div>
-        {/each}
+  <div
+    class="admin-rise pointer-events-none fixed inset-0 z-30"
+    class:up={rising}
+    style:view-transition-name={rising ? 'admin-app' : undefined}
+    ontransitionend={arrived}
+    aria-hidden="true"
+  >
+    <div class="grid h-full grid-cols-[200px_1fr] overflow-hidden bg-[#0b0d12] text-zinc-100">
+      <aside class="flex h-full flex-col overflow-hidden border-r border-white/8 bg-[#10131a] px-4 py-6">
+        <nav class="flex flex-col gap-1">
+          {#each nav as item, index (item[0])}
+            <span class="flex min-w-0 items-center gap-2 rounded-xl px-2 py-1.5 text-sm {index === 0 ? 'bg-indigo-500/30 text-white ring-1 ring-inset ring-indigo-400/60' : 'text-zinc-400'}">
+              <NavIcon name={item[1]} class={index === 0 ? 'text-indigo-300' : ''} />
+              <span class="min-w-0 flex-1 truncate">{item[0]}</span>
+            </span>
+          {/each}
+        </nav>
+        <span class="mt-auto flex items-center gap-2 rounded-xl px-2 py-2">
+          <svg class="size-5 shrink-0" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8" />
+          </svg>
+          <span class="min-w-0 flex-1 truncate text-sm text-zinc-200">{data.login}</span>
+        </span>
+      </aside>
+      <div class="px-5 py-6 lg:px-10 lg:py-8">
+        <p class="text-xs tracking-wide text-zinc-500 uppercase">Обзор</p>
+        <h2 class="mt-1 text-3xl font-semibold tracking-tight">Сервисы</h2>
       </div>
-      <h2 class="mt-3 text-left text-base font-semibold">Логирование</h2>
     </div>
   </div>
 </div>
 
-<div class="fixed right-3 bottom-28 z-40">
+{#if rising === false}
+  <button
+    class="fixed bottom-28 left-3 z-20 rounded-full border border-white/50 bg-black/40 px-4 py-2 text-sm text-white shadow-sm backdrop-blur-md"
+    type="button"
+    onclick={pass}
+  >
+    Мы авторизовались · PASS
+  </button>
+{/if}
+
+<div class="fixed right-3 bottom-28 z-20">
   {#if eye}
     <div class="mb-2 w-64 rounded-xl border border-amber-400/30 bg-[#1c212b] p-3 text-left text-sm text-zinc-200 shadow-lg">
       <p class="text-xs tracking-wide text-amber-200/80 uppercase">Только тебе</p>
@@ -180,3 +237,18 @@ function enable() {
     Глаз
   </button>
 </div>
+
+<style>
+  .admin-rise {
+    transform: translateY(calc(100% - 8.5rem));
+    transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1), border-radius 0.9s ease;
+    border-radius: 1.5rem 1.5rem 0 0;
+    overflow: hidden;
+    box-shadow: 0 -18px 50px rgba(15, 23, 42, 0.28);
+  }
+
+  .admin-rise.up {
+    transform: translateY(0);
+    border-radius: 0;
+  }
+</style>
