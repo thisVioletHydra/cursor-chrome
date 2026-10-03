@@ -235,7 +235,7 @@ function arrived(event: TransitionEvent) {
     width: min(1200px, 70vw);
     height: 100dvh;
     transform: translate(-50%, calc(100% - 5.25rem));
-    transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1), border-radius 0.9s ease;
+    transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1), width 0.9s cubic-bezier(0.22, 1, 0.36, 1), border-radius 0.9s ease;
     border-radius: 1.5rem 1.5rem 0 0;
     overflow: hidden;
     box-shadow: 0 -18px 50px rgba(15, 23, 42, 0.28);
@@ -248,6 +248,7 @@ function arrived(event: TransitionEvent) {
   }
 
   .admin-rise.up {
+    width: 100%;
     transform: translate(-50%, 0);
     border-radius: 0;
   }
