@@ -114,7 +114,7 @@ function arrived(event: TransitionEvent) {
       {#each steps as item, index (item.chip)}
         <li>
           <button
-            class="rounded-full border border-white/50 bg-black/35 px-3.5 py-1.5 text-sm text-white shadow-sm backdrop-blur-md transition hover:bg-black/50 {open === index ? 'bg-black/55' : ''}"
+            class="rounded-full border border-white/30 bg-zinc-950/80 px-3.5 py-1.5 text-sm text-white shadow-sm backdrop-blur-md transition hover:bg-zinc-950 {open === index ? 'ring-1 ring-white/70' : ''}"
             type="button"
             aria-label="{item.chip}. {item.name}"
             onclick={() => go(index)}
@@ -124,6 +124,16 @@ function arrived(event: TransitionEvent) {
         </li>
       {/each}
     </ol>
+
+    {#if rising === false}
+      <button
+        class="mt-4 rounded-full border border-white/30 bg-zinc-950/80 px-4 py-2 text-sm text-white backdrop-blur-md"
+        type="button"
+        onclick={pass}
+      >
+        Мы авторизовались · PASS
+      </button>
+    {/if}
 
     {#if open !== null}
       <section class="mt-5 w-full rounded-3xl border border-white/70 bg-white/75 px-5 py-5 text-left shadow-xl backdrop-blur-xl">
@@ -202,17 +212,7 @@ function arrived(event: TransitionEvent) {
   </div>
 </div>
 
-{#if rising === false}
-  <button
-    class="fixed bottom-28 left-3 z-20 rounded-full border border-white/50 bg-black/40 px-4 py-2 text-sm text-white shadow-sm backdrop-blur-md"
-    type="button"
-    onclick={pass}
-  >
-    Мы авторизовались · PASS
-  </button>
-{/if}
-
-<div class="fixed right-3 bottom-28 z-20">
+<div class="fixed top-5 right-5 z-40">
   {#if eye}
     <div class="mb-2 w-64 rounded-xl border border-amber-400/30 bg-[#1c212b] p-3 text-left text-sm text-zinc-200 shadow-lg">
       <p class="text-xs tracking-wide text-amber-200/80 uppercase">Только тебе</p>
@@ -240,7 +240,7 @@ function arrived(event: TransitionEvent) {
 
 <style>
   .admin-rise {
-    transform: translateY(calc(100% - 8.5rem));
+    transform: translateY(calc(100% - 5.25rem));
     transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1), border-radius 0.9s ease;
     border-radius: 1.5rem 1.5rem 0 0;
     overflow: hidden;
