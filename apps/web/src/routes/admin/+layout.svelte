@@ -67,6 +67,7 @@ const current = (href: string, exact: boolean) => {
         <div class="absolute bottom-full left-0 z-30 mb-2 w-full rounded-xl border border-white/10 bg-[#1c212b] p-1 shadow-lg">
           <p class="px-3 py-2 text-sm text-zinc-400">Баланс · {data.billing.infinite ? '∞' : `${data.billing.balance} ₽`}</p>
           {#if data.canPreview}
+            <a class="flex w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-200 transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400" href="/start">Демка входа</a>
             <form method="POST" action="/admin/preview">
               <button class="flex w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-200 transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400" type="submit">{data.preview ? 'Свой аккаунт' : 'Гость · 200'}</button>
             </form>
