@@ -44,7 +44,7 @@ const current = (href: string, exact: boolean) => {
 };
 </script>
 
-<div class="mx-auto grid h-dvh w-[min(1200px,70vw)] grid-cols-[200px_1fr] overflow-hidden bg-[#0b0d12] text-zinc-100 max-[900px]:w-[calc(100%-1.5rem)]" style="view-transition-name: admin-app">
+<div class="grid h-dvh grid-cols-[200px_1fr] overflow-hidden bg-[#0b0d12] text-zinc-100" style="view-transition-name: admin-app">
   <aside class="flex h-full flex-col overflow-hidden border-r border-white/8 bg-[#10131a] px-4 py-6">
     <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
       <nav class="flex flex-col gap-1">

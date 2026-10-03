@@ -114,7 +114,7 @@ function arrived(event: TransitionEvent) {
       {#each steps as item, index (item.chip)}
         <li>
           <button
-            class="rounded-full border border-white/30 bg-zinc-950/80 px-3.5 py-1.5 text-sm text-white shadow-sm backdrop-blur-md transition hover:bg-zinc-950 {open === index ? 'ring-1 ring-white/70' : ''}"
+            class="rounded-full border border-white/50 bg-black/35 px-3.5 py-1.5 text-sm text-white shadow-sm backdrop-blur-md transition hover:bg-black/50 {open === index ? 'bg-black/55' : ''}"
             type="button"
             aria-label="{item.chip}. {item.name}"
             onclick={() => go(index)}
@@ -127,7 +127,7 @@ function arrived(event: TransitionEvent) {
 
     {#if rising === false}
       <button
-        class="mt-4 rounded-full border border-white/30 bg-zinc-950/80 px-4 py-2 text-sm text-white backdrop-blur-md"
+        class="mt-4 rounded-full border border-white/50 bg-black/35 px-4 py-2 text-sm text-white shadow-sm backdrop-blur-md transition hover:bg-black/50"
         type="button"
         onclick={pass}
       >
