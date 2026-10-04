@@ -2,7 +2,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import type { RawData } from 'ws';
 
-import { watchNote } from '@cursor-chrome/hh';
+import { runTenant, watchNote } from '@cursor-chrome/hh';
 import { WebSocket, WebSocketServer } from 'ws';
 import { extLogin } from './ext-auth';
 
@@ -22,8 +22,8 @@ type LinkHost = {
 const linkServer = new WebSocketServer({ noServer: true, maxPayload: 1024 });
 
 let attached = false;
-let openSockets = 0;
-let lostNoted = false;
+const sockets = new Map<string, number>();
+const lostNoted = new Set<string>();
 // Деплой сервера закрывает сокет. Это не смерть расширения.
 let shuttingDown = false;
 
@@ -73,20 +73,18 @@ async function acceptPeer(peer: WebSocket): Promise<void> {
   }
 
   if (peer.readyState !== WebSocket.OPEN) {
-    noteGone();
+    noteGone(login);
 
     return;
   }
 
-  holdPeer(peer);
+  holdPeer(peer, login);
 }
 
-function holdPeer(peer: WebSocket): void {
-  openSockets += 1;
-  if (lostNoted) {
-    lostNoted = false;
-    watchNote('extension', BACK);
-  }
+function holdPeer(peer: WebSocket, login: string): void {
+  sockets.set(login, (sockets.get(login) ?? 0) + 1);
+  if (lostNoted.delete(login))
+    runNote(login, BACK);
 
   let alive = true;
   const timer = setInterval(() => {
@@ -106,17 +104,25 @@ function holdPeer(peer: WebSocket): void {
   });
   peer.on('close', () => {
     clearInterval(timer);
-    openSockets = Math.max(0, openSockets - 1);
-    noteGone();
+    const left = Math.max(0, (sockets.get(login) ?? 1) - 1);
+    sockets.set(login, left);
+    if (left === 0)
+      noteGone(login);
   });
 }
 
-function noteGone(): void {
-  if (openSockets > 0 || lostNoted || shuttingDown)
+function noteGone(login: string): void {
+  if ((sockets.get(login) ?? 0) > 0 || lostNoted.has(login) || shuttingDown)
     return;
 
-  lostNoted = true;
-  watchNote('extension', LOST);
+  lostNoted.add(login);
+  runNote(login, LOST);
+}
+
+function runNote(login: string, text: string): void {
+  runTenant(login, () => {
+    watchNote('extension', text);
+  });
 }
 
 function firstText(peer: WebSocket): Promise<string | null> {

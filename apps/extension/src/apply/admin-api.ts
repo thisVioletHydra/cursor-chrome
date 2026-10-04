@@ -20,6 +20,7 @@ export type Hunt = {
   want: boolean;
   pages: Record<string, number>;
   day: boolean;
+  week: boolean;
 };
 
 export { keepWorkHours } from './hours-flag';
@@ -39,6 +40,7 @@ export async function fetchHunt(base: string, key: string, advance = false): Pro
     want: body.want === true,
     pages: pagesOf(body.pages),
     day: body.day !== false,
+    week: body.week !== false,
   };
 }
 
@@ -250,7 +252,7 @@ export async function dropLinks(base: string, key: string, ids: readonly string[
   }
 }
 
-async function getQueue(base: string, key: string, advance = false): Promise<{ items?: unknown; links?: unknown; pages?: unknown; letter?: unknown; queries?: unknown; words?: unknown; focus?: unknown; depth?: unknown; phase?: unknown; want?: unknown; imitation?: unknown; hours?: unknown; day?: unknown } | null> {
+async function getQueue(base: string, key: string, advance = false): Promise<{ items?: unknown; links?: unknown; pages?: unknown; letter?: unknown; queries?: unknown; words?: unknown; focus?: unknown; depth?: unknown; phase?: unknown; want?: unknown; imitation?: unknown; hours?: unknown; day?: unknown; week?: unknown } | null> {
   const stamp = pilotStamp();
   try {
     const path = advance ? '/api/queue?cycle=1' : '/api/queue';
@@ -265,7 +267,7 @@ async function getQueue(base: string, key: string, advance = false): Promise<{ i
       return null;
     }
 
-    const body = await res.json() as { items?: unknown; letter?: unknown; queries?: unknown; words?: unknown; focus?: unknown; depth?: unknown; phase?: unknown; want?: unknown; imitation?: unknown; stop?: unknown; hours?: unknown; day?: unknown };
+    const body = await res.json() as { items?: unknown; letter?: unknown; queries?: unknown; words?: unknown; focus?: unknown; depth?: unknown; phase?: unknown; want?: unknown; imitation?: unknown; stop?: unknown; hours?: unknown; day?: unknown; week?: unknown };
     noteHours(body);
 
     if (body.stop === true && stamp === pilotStamp() && await remoteStopCounts())

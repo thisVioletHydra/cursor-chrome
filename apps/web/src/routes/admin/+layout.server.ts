@@ -6,7 +6,7 @@ import { telegramOn } from '@cursor-chrome/telegram';
 import { redirect } from '@sveltejs/kit';
 import { coolLeft, pruneShelvedWaiters } from '$lib/server/admin-actions';
 import { guestLinks, storedLinks } from '$lib/server/checks';
-import { chainOf, collapseChain, DEFAULT_QUERY, GUEST_BALANCE, isCreator, publishSecrets, readAccount, VACANCY_RUB, withChain, writeAccount } from '$lib/server/secrets';
+import { chainOf, collapseChain, DEFAULT_QUERY, ensureAccount, GUEST_BALANCE, isCreator, publishSecrets, readAccount, VACANCY_RUB, withChain, writeAccount } from '$lib/server/secrets';
 
 async function statsOf(preview: boolean) {
   if (preview) {
@@ -45,16 +45,16 @@ async function statsOf(preview: boolean) {
     autopilot: { auto: state.auto, lastNote: state.lastNote, runAt: state.auto ? state.runAt : 0 },
   };
 }
-import { allowedLogins, readSession } from '$lib/server/session';
+import { githubLogin, readSession } from '$lib/server/session';
 
 export const load: LayoutServerLoad = async ({ cookies }) => {
   const session = readSession(cookies.get('session'));
-  if (session === null || allowedLogins().includes(session.login) === false)
+  if (session === null || githubLogin(session.login) === false)
     redirect(303, '/');
 
   const creator = isCreator(session.login);
   const preview = creator && cookies.get('preview') === 'guest';
-  const account = await readAccount(session.login);
+  const account = preview ? await readAccount(session.login) : await ensureAccount(session.login);
   if (preview === false) {
     const raw = chainOf(account);
     const collapsed = collapseChain(raw);

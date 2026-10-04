@@ -7,7 +7,7 @@ import { asProvider, COVER_LETTER, coveredWaiters, distillCorpus, dropWaiters, f
 import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
 import { chainOf, collapseChain, imitationFromFields, isCreator, newExtToken, publishSecrets, readAccount, readResume, withChain, writeAccount, writeAtsScan } from './secrets';
-import { allowedLogins, readSession } from './session';
+import { githubLogin, readSession } from './session';
 
 const sections = ['telegram', 'model', 'hh'] as const;
 type Section = typeof sections[number];
@@ -16,7 +16,7 @@ const coolUntil = new Map<Section, number>();
 
 function guard(cookies: RequestEvent['cookies']): string {
   const session = readSession(cookies.get('session'));
-  if (session === null || allowedLogins().includes(session.login) === false)
+  if (session === null || githubLogin(session.login) === false)
     error(401, 'нет');
 
   return session.login;

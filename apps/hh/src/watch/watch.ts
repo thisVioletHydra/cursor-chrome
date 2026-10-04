@@ -1,6 +1,7 @@
 import { storePath, workHours } from '../diary/memory.ts';
 import { readState, writeState } from '../diary/state.ts';
 import { parseJsonLoose, writeJsonAtomic } from '../diary/store.ts';
+import { ownerLogin, runTenant, tenantLogin } from '../diary/tenant.ts';
 
 import path from 'node:path';
 import process from 'node:process';
@@ -31,28 +32,85 @@ const STEP_PREFIX = /^(открыл|ищу|читаю|в очереди|в сп�
 const HARD_SKIP = /^(удалёнку запрещают|удаленку запрещают|джуниор|1C или Bitrix ядром|Python основной бэк)$/i;
 const SKIP_ESSAY = /вакансия требует|стек не сов|скип,|удал[её]нку запрещают|не наш стек/i;
 
-let tickText = '';
-let tickAt = 0;
-let rows: WatchRow[] = [];
-let pulse = { at: 0, line: '' };
-const deaths = new Set<string>();
-let captchaTold = false;
-let lastStage = '';
-let hangTold = false;
-let silenceNoted = false;
-let pilotStart = false;
-let startedAt = 0;
-let stepped = false;
-let resumeGen = 0;
+type Bag = {
+  tickText: string;
+  tickAt: number;
+  rows: WatchRow[];
+  pulse: { at: number; line: string };
+  deaths: Set<string>;
+  captchaTold: boolean;
+  lastStage: string;
+  hangTold: boolean;
+  silenceNoted: boolean;
+  pilotStart: boolean;
+  startedAt: number;
+  stepped: boolean;
+  resumeGen: number;
+  loaded: boolean;
+  live: boolean | null;
+  hours: boolean | null;
+};
+
+const bags = new Map<string, Bag>();
 let timer: ReturnType<typeof setInterval> | undefined;
 let notify: (text: string) => Promise<void> = async () => {};
-let loaded = false;
 let hooks = false;
+
+function freshBag(): Bag {
+  return {
+    tickText: '',
+    tickAt: 0,
+    rows: [],
+    pulse: { at: 0, line: '' },
+    deaths: new Set(),
+    captchaTold: false,
+    lastStage: '',
+    hangTold: false,
+    silenceNoted: false,
+    pilotStart: false,
+    startedAt: 0,
+    stepped: false,
+    resumeGen: 0,
+    loaded: false,
+    live: null,
+    hours: null,
+  };
+}
+
+function watchKey(): string {
+  const login = tenantLogin();
+  if (login.length === 0 || ownerLogin(login))
+    return '';
+
+  return login;
+}
+
+function bag(): Bag {
+  const key = watchKey();
+  let found = bags.get(key);
+  if (found === undefined) {
+    found = freshBag();
+    bags.set(key, found);
+  }
+
+  if (found.loaded === false) {
+    found.loaded = true;
+    void load();
+  }
+
+  return found;
+}
+
+export function bindWatch(live: boolean, hours: boolean): void {
+  const state = bag();
+  state.live = live;
+  state.hours = hours;
+}
 
 export function startWatch(send: (text: string) => Promise<void>): void {
   notify = send;
-  if (loaded === false) {
-    loaded = true;
+  if (bag().loaded === false) {
+    bag().loaded = true;
     void load();
   }
 
@@ -60,7 +118,7 @@ export function startWatch(send: (text: string) => Promise<void>): void {
     return;
 
   timer = setInterval(() => {
-    void silence();
+    void silenceAll();
   }, 60_000);
   timer.unref?.();
   if (hooks)
@@ -81,32 +139,32 @@ export async function watchPulse(line: string): Promise<boolean> {
   if (text.length === 0)
     return pilotStop();
 
-  silenceNoted = false;
-  const previous = pulse.line;
+  bag().silenceNoted = false;
+  const previous = bag().pulse.line;
   if (readingHang(text) && pulseElapsedMs(text) >= APPLY_CAP_MS) {
     const hang = 'я завис: форма отклика, 30 мин';
-    pulse = { at: Date.now(), line: hang };
+    bag().pulse = { at: Date.now(), line: hang };
     await mark('extension', hang, true);
 
     return pilotStop();
   }
 
   if (text.startsWith('я завис') && (queueRestHang(text) || readingHang(text))) {
-    pulse = { at: Date.now(), line: previous };
+    bag().pulse = { at: Date.now(), line: previous };
 
     return pilotStop();
   }
 
   if (frozenTick(text)) {
     if (queueWait(text)) {
-      pulse = { at: Date.now(), line: text };
+      bag().pulse = { at: Date.now(), line: text };
 
       return pilotStop();
     }
 
-    const mins = Math.max(1, Math.round((Date.now() - tickAt) / 60_000));
+    const mins = Math.max(1, Math.round((Date.now() - bag().tickAt) / 60_000));
     const hang = `я завис: ${text}, ${mins} мин`;
-    pulse = { at: Date.now(), line: hang };
+    bag().pulse = { at: Date.now(), line: hang };
     await mark('extension', hang, true);
 
     return pilotStop();
@@ -114,7 +172,7 @@ export async function watchPulse(line: string): Promise<boolean> {
 
   noteTick(text);
   if (searchHang(text)) {
-    pulse = { at: Date.now(), line: 'ищу вакансию' };
+    bag().pulse = { at: Date.now(), line: 'ищу вакансию' };
     await mark('extension', 'не прочиталась страница hh', false);
 
     return false;
@@ -122,7 +180,7 @@ export async function watchPulse(line: string): Promise<boolean> {
 
   const step = shortStep(text);
   const kept = shortStep(previous) ? previous : '';
-  pulse = { at: Date.now(), line: step ? text : kept };
+  bag().pulse = { at: Date.now(), line: step ? text : kept };
   if (text.startsWith('я завис') || text === 'сервер молчит') {
     if (holdHang())
       return pilotStop();
@@ -142,8 +200,8 @@ export async function watchPulse(line: string): Promise<boolean> {
   }
 
   if (tickLine(text)) {
-    stepped = true;
-    const last = rows[rows.length - 1];
+    bag().stepped = true;
+    const last = bag().rows[bag().rows.length - 1];
     if (last !== undefined && last.death === false && tickLine(last.text) && last.text !== text) {
       last.text = text;
       last.at = Date.now();
@@ -154,7 +212,7 @@ export async function watchPulse(line: string): Promise<boolean> {
   }
 
   if (text !== 'жду очередь')
-    stepped = true;
+    bag().stepped = true;
 
   await mark('extension', text, false, true);
 
@@ -174,97 +232,109 @@ const CAPTCHA_FIRST = 'hh показал капчу. Бот на паузе, п�
 const CAPTCHA_AGAIN = 'hh всё ещё показывает капчу. Бот на паузе, пока не решишь её сам и не включишь бота снова.';
 
 export async function watchRestart(): Promise<void> {
-  captchaTold = false;
-  resumeGen += 1;
+  bag().captchaTold = false;
+  bag().resumeGen += 1;
   dropHangDeaths();
-  hangTold = false;
-  silenceNoted = false;
-  startedAt = Date.now();
-  stepped = false;
+  bag().hangTold = false;
+  bag().silenceNoted = false;
+  bag().startedAt = Date.now();
+  bag().stepped = false;
   // Свежий пульс, иначе проверка тишины сразу снова выключит автопилот.
-  pulse = { at: Date.now(), line: shortStep(pulse.line) ? pulse.line : '' };
-  pilotStart = true;
+  bag().pulse = { at: Date.now(), line: shortStep(bag().pulse.line) ? bag().pulse.line : '' };
+  bag().pilotStart = true;
   try {
     await writeState({ auto: true });
   }
   catch (error) {
-    pilotStart = false;
-    startedAt = 0;
+    bag().pilotStart = false;
+    bag().startedAt = 0;
 
     throw error;
   }
 }
 
 export async function watchStop(): Promise<void> {
-  pilotStart = false;
-  startedAt = 0;
-  stepped = false;
+  bag().pilotStart = false;
+  bag().startedAt = 0;
+  bag().stepped = false;
   await writeState({ auto: false });
 }
 
 export async function watchCaptcha(again: boolean): Promise<void> {
   await watchStop();
-  if (again === false && captchaTold)
+  if (again === false && bag().captchaTold)
     return;
 
   await mark('extension', CAPTCHA_LINE, false);
   const text = again ? CAPTCHA_AGAIN : CAPTCHA_FIRST;
   await notify(text);
-  captchaTold = true;
+  bag().captchaTold = true;
 }
 
 export function takePilotStart(): boolean {
-  if (pilotStart === false)
+  if (bag().pilotStart === false)
     return false;
 
-  pilotStart = false;
+  bag().pilotStart = false;
 
   return true;
 }
 
 export function watchView(): { pulse: { at: number; line: string }; rows: WatchRow[] } {
   return {
-    pulse: { at: pulse.at, line: shortStep(pulse.line) ? pulse.line : '' },
-    rows: rows.slice(-40),
+    pulse: { at: bag().pulse.at, line: shortStep(bag().pulse.line) ? bag().pulse.line : '' },
+    rows: bag().rows.slice(-40),
   };
+}
+
+async function silenceAll(): Promise<void> {
+  const keys = [...bags.keys()];
+  if (keys.includes('') === false)
+    keys.unshift('');
+
+  for (const key of keys) {
+    const login = key.length === 0 ? 'thisVioletHydra' : key;
+    await runTenant(login, () => silence());
+  }
 }
 
 async function silence(): Promise<void> {
   const state = await readState().catch(() => null);
-  const live = process.env.HH_LIVE === '1';
+  const savedLive = bag().live;
+  const live = savedLive === null ? process.env.HH_LIVE === '1' : savedLive;
   if (asleep(state, live)) {
-    silenceNoted = false;
+    bag().silenceNoted = false;
 
     return;
   }
 
-  if (startedAt > 0 && Date.now() - startedAt < START_GRACE_MS)
+  if (bag().startedAt > 0 && Date.now() - bag().startedAt < START_GRACE_MS)
     return;
 
-  const stale = pulse.at === 0 || Date.now() - pulse.at > SILENCE_MS;
+  const stale = bag().pulse.at === 0 || Date.now() - bag().pulse.at > SILENCE_MS;
   if (stale === false) {
-    silenceNoted = false;
+    bag().silenceNoted = false;
 
     return;
   }
 
-  if (silenceNoted)
+  if (bag().silenceNoted)
     return;
 
-  const where = shortStep(pulse.line) ? pulse.line : 'нет пульса';
+  const where = shortStep(bag().pulse.line) ? bag().pulse.line : 'нет пульса';
   if (lightNap(where))
     return;
 
-  if (applyPastCap(where, pulse.at) === false && (queueWait(where) || readingHang(where)))
+  if (applyPastCap(where, bag().pulse.at) === false && (queueWait(where) || readingHang(where)))
     return;
 
   if (where.includes('ищу вакансию') || searchTick(where) || where.includes('жду страницу') || where.includes('не прочиталась')) {
-    silenceNoted = true;
+    bag().silenceNoted = true;
     try {
       await mark('extension', 'не прочиталась страница hh', false);
     }
     catch (error) {
-      silenceNoted = false;
+      bag().silenceNoted = false;
 
       throw error;
     }
@@ -272,15 +342,15 @@ async function silence(): Promise<void> {
     return;
   }
 
-  silenceNoted = true;
+  bag().silenceNoted = true;
 
-  const mins = Math.max(1, Math.round((Date.now() - (tickAt || pulse.at)) / 60_000));
+  const mins = Math.max(1, Math.round((Date.now() - (bag().tickAt || bag().pulse.at)) / 60_000));
   const text = frozenTick(where) ? `я завис: ${where}, ${mins} мин` : `замолчало на шаге ${where}`;
   try {
     await mark('extension', text, true);
   }
   catch (error) {
-    silenceNoted = false;
+    bag().silenceNoted = false;
 
     throw error;
   }
@@ -306,44 +376,44 @@ async function mark(who: WatchWho, text: string, death: boolean, stage = false):
   const key = `${who}:${clean}`;
   const hang = death && who === 'extension' && hangLine(clean);
   if (death) {
-    if (deaths.has(key)) {
+    if (bag().deaths.has(key)) {
       if (hang)
         await holdPilot();
 
       return;
     }
 
-    deaths.add(key);
+    bag().deaths.add(key);
   }
-  else if (key === lastStage) {
+  else if (key === bag().lastStage) {
     return;
   }
   else {
-    lastStage = key;
+    bag().lastStage = key;
     if (stage) {
-      deaths.clear();
-      hangTold = false;
+      bag().deaths.clear();
+      bag().hangTold = false;
     }
   }
 
-  const tellHang = hang && hangTold === false;
+  const tellHang = hang && bag().hangTold === false;
   if (hang)
-    hangTold = true;
+    bag().hangTold = true;
 
   if (hang) {
-    const gen = resumeGen;
+    const gen = bag().resumeGen;
     try {
       await writeState({ auto: false, hung: true });
     }
     catch (error) {
-      deaths.delete(key);
+      bag().deaths.delete(key);
       if (tellHang)
-        hangTold = false;
+        bag().hangTold = false;
 
       throw error;
     }
 
-    if (gen !== resumeGen) {
+    if (gen !== bag().resumeGen) {
       await writeState({ auto: true });
 
       return;
@@ -364,12 +434,12 @@ async function mark(who: WatchWho, text: string, death: boolean, stage = false):
     }
   }
 
-  rows.push({ at: Date.now(), who, text: clean, death });
+  bag().rows.push({ at: Date.now(), who, text: clean, death });
   trim();
   await save();
   if (hang) {
-    deaths.add(key);
-    hangTold = true;
+    bag().deaths.add(key);
+    bag().hangTold = true;
     if (tellHang)
       await notify('Расширение зависло. Автопилот выключен. Иди чини.').catch(() => undefined);
 
@@ -384,14 +454,14 @@ async function mark(who: WatchWho, text: string, death: boolean, stage = false):
 
 // Минуту после старта «я завис» ещё от прошлого раза. Позже он гасит, только если шаг уже был.
 function holdHang(): boolean {
-  if (startedAt === 0)
+  if (bag().startedAt === 0)
     return false;
 
-  const age = Date.now() - startedAt;
+  const age = Date.now() - bag().startedAt;
   if (age < HANG_BLIND_MS)
     return true;
 
-  return age < START_GRACE_MS && stepped === false;
+  return age < START_GRACE_MS && bag().stepped === false;
 }
 
 function hangLine(text: string): boolean {
@@ -487,53 +557,53 @@ function searchHang(text: string): boolean {
 function noteTick(text: string): void {
   if (secondTick(text) === false) {
     if (text !== 'жду очередь' && text.startsWith('я завис') === false) {
-      tickText = '';
-      tickAt = 0;
+      bag().tickText = '';
+      bag().tickAt = 0;
     }
 
     return;
   }
 
-  if (text === tickText)
+  if (text === bag().tickText)
     return;
 
-  tickText = text;
-  tickAt = Date.now();
+  bag().tickText = text;
+  bag().tickAt = Date.now();
 }
 
 function tickMoving(): boolean {
-  return tickAt > 0 && Date.now() - tickAt < FROZEN_MS && secondTick(tickText);
+  return bag().tickAt > 0 && Date.now() - bag().tickAt < FROZEN_MS && secondTick(bag().tickText);
 }
 
 function frozenTick(text: string): boolean {
-  return secondTick(text) && text === tickText && tickAt > 0 && Date.now() - tickAt >= FROZEN_MS;
+  return secondTick(text) && text === bag().tickText && bag().tickAt > 0 && Date.now() - bag().tickAt >= FROZEN_MS;
 }
 
 function dropHangDeaths(): void {
-  for (const key of deaths) {
+  for (const key of bag().deaths) {
     if (key.startsWith('extension:') === false)
       continue;
 
     if (hangLine(key.slice('extension:'.length)))
-      deaths.delete(key);
+      bag().deaths.delete(key);
   }
 }
 
 async function holdPilot(): Promise<void> {
-  const tell = hangTold === false;
+  const tell = bag().hangTold === false;
   if (tell)
-    hangTold = true;
+    bag().hangTold = true;
 
-  const gen = resumeGen;
+  const gen = bag().resumeGen;
   const state = await readState().catch(() => null);
-  if (gen !== resumeGen)
+  if (gen !== bag().resumeGen)
     return;
 
   if (state !== null && state.auto === false && state.hung === true)
     return;
 
   await writeState({ auto: false, hung: true });
-  if (gen !== resumeGen) {
+  if (gen !== bag().resumeGen) {
     await writeState({ auto: true });
 
     return;
@@ -550,18 +620,19 @@ function asleep(state: { auto: boolean } | null, live: boolean): boolean {
   if (state.auto === false)
     return true;
 
-  if (process.env.HH_HOURS === '0')
+  const hoursOn = bag().hours;
+  if (hoursOn === false || (hoursOn === null && process.env.HH_HOURS === '0'))
     return false;
 
   return workHours() === false;
 }
 
 function trim(): void {
-  while (rows.length > MAX_ROWS)
-    rows.shift();
+  while (bag().rows.length > MAX_ROWS)
+    bag().rows.shift();
 
-  while (rows.length > 1 && JSON.stringify(rows).length > MAX_BYTES)
-    rows.shift();
+  while (bag().rows.length > 1 && JSON.stringify(bag().rows).length > MAX_BYTES)
+    bag().rows.shift();
 }
 
 function file(): string {
@@ -584,7 +655,7 @@ async function load(): Promise<void> {
 
   const loadedRows = parsed.value.flatMap(rowOf).map(asShown).slice(-MAX_ROWS);
   const next = collapse(loadedRows);
-  rows = next;
+  bag().rows = next;
   replay();
   trim();
   if (next.length < loadedRows.length)
@@ -606,7 +677,7 @@ function rowOf(value: unknown): WatchRow[] {
 }
 
 async function save(): Promise<void> {
-  await writeJsonAtomic(file(), rows);
+  await writeJsonAtomic(file(), bag().rows);
 }
 
 function broken(row: Partial<WatchRow>): boolean {
@@ -649,19 +720,19 @@ function collapse(list: WatchRow[]): WatchRow[] {
 }
 
 function replay(): void {
-  deaths.clear();
-  hangTold = false;
-  lastStage = '';
-  for (const row of rows) {
+  bag().deaths.clear();
+  bag().hangTold = false;
+  bag().lastStage = '';
+  for (const row of bag().rows) {
     const key = `${row.who}:${row.text}`;
     if (row.death === false) {
-      lastStage = key;
-      deaths.clear();
-      hangTold = false;
+      bag().lastStage = key;
+      bag().deaths.clear();
+      bag().hangTold = false;
       continue;
     }
 
-    deaths.add(key);
+    bag().deaths.add(key);
   }
 }
 
@@ -688,9 +759,9 @@ function twinRow(text: string): WatchRow | null {
   if (body.length < 12)
     return null;
 
-  const from = Math.max(0, rows.length - 40);
-  for (let index = rows.length - 1; index >= from; index -= 1) {
-    const row = rows[index];
+  const from = Math.max(0, bag().rows.length - 40);
+  for (let index = bag().rows.length - 1; index >= from; index -= 1) {
+    const row = bag().rows[index];
     if (row === undefined || row.death)
       continue;
 

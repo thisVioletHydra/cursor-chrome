@@ -1,7 +1,8 @@
 import type { RequestHandler } from './$types';
 
 import { error, redirect } from '@sveltejs/kit';
-import { allowedLogins, signSession } from '$lib/server/session';
+import { ensureAccount, isCreator } from '$lib/server/secrets';
+import { githubLogin, signSession } from '$lib/server/session';
 
 import process from 'node:process';
 
@@ -35,8 +36,10 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
     },
   });
   const user = await userRes.json() as { login?: string };
-  if (!user.login || allowedLogins().includes(user.login) === false)
+  if (!user.login || githubLogin(user.login) === false)
     error(403, 'этот GitHub сюда не входит');
+
+  await ensureAccount(user.login);
 
   cookies.set('session', signSession(user.login), {
     path: '/',
@@ -45,5 +48,5 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
     secure: url.protocol === 'https:',
     maxAge: 60 * 60 * 24 * 7,
   });
-  redirect(303, '/admin');
+  redirect(303, isCreator(user.login) ? '/admin' : '/start');
 };

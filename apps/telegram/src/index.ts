@@ -282,6 +282,21 @@ export function startAutopilot(): void {
   return;
 }
 
+export async function notifyToken(botToken: string, text: string): Promise<void> {
+  if (botToken.length === 0)
+    return;
+
+  const chatId = await readOwnerFile(ownerFile());
+  if (chatId === null)
+    return;
+
+  await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text }),
+  }).catch(() => undefined);
+}
+
 export async function notifyOwner(text: string): Promise<void> {
   const chatId = await readOwner();
   if (chatId === null || token().length === 0) {

@@ -3,7 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { corpusState, parseRules } from '@cursor-chrome/hh';
 import { distillAdmin, saveCorpusAdmin, saveFilterAdmin, saveQueryAdmin, saveResumeAdmin, saveRulesAdmin, suggestQueryAdmin, unlinkAdmin, verifyAdmin } from '$lib/server/admin-actions';
 import { isCreator, readAccount } from '$lib/server/secrets';
-import { allowedLogins, readSession } from '$lib/server/session';
+import { githubLogin, readSession } from '$lib/server/session';
 
 const emptyRules = {
   stopWords: '',
@@ -17,7 +17,7 @@ const emptyRules = {
 
 export const load: PageServerLoad = async ({ cookies }) => {
   const session = readSession(cookies.get('session'));
-  if (session === null || allowedLogins().includes(session.login) === false)
+  if (session === null || githubLogin(session.login) === false)
     return emptyRules;
 
   if (isCreator(session.login) && cookies.get('preview') === 'guest')

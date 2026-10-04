@@ -1,5 +1,6 @@
 import type { Buckets, Slot } from '../mix/mix.ts';
 import type { Memory } from '../diary/memory.ts';
+import type { Provider } from '../model/model.ts';
 import type { Model, Report, Vacancy } from './rules.ts';
 import type { Rules } from './score.ts';
 
@@ -23,6 +24,7 @@ export type ScanOpts = {
   dry: boolean;
   live: boolean;
   model?: Model | null;
+  chain?: Provider[];
   rules?: Rules;
   load?: (query: string, limit: number) => Promise<Vacancy[]>;
   signal?: AbortSignal;
@@ -32,6 +34,7 @@ export async function scan(opts: ScanOpts): Promise<ScanRun> {
   const load = opts.load ?? searchVacancies;
   const rules = opts.rules ?? rulesFromEnv();
   const model = opts.model === undefined ? modelFromEnv() : opts.model;
+  const chain = opts.chain;
   const dry = opts.dry || opts.live === false;
   const memory = opts.live ? await readMemory() : null;
   let room = await queueRoomOrOpen(memory);
@@ -100,7 +103,7 @@ export async function scan(opts: ScanOpts): Promise<ScanRun> {
     }
 
     const final = opts.live && report.verdict === 'apply'
-      ? await finish(vacancy, report, scoreOf(vacancy, rules))
+      ? await finish(vacancy, report, scoreOf(vacancy, rules), chain)
       : report;
 
     if (memory !== null) {
@@ -143,9 +146,9 @@ async function queueRoom(memory: Memory): Promise<number> {
   return Math.min(QUEUE_TARGET - queued, memory.cap - memory.sent - queued);
 }
 
-async function finish(vacancy: Vacancy, report: Report, score: number): Promise<Report> {
+async function finish(vacancy: Vacancy, report: Report, score: number, chain: Provider[] | undefined): Promise<Report> {
   if (vacancy.formUrl.length > 0) {
-    const form = await fillKnownForm(vacancy.formUrl);
+    const form = await fillKnownForm(vacancy.formUrl, chain);
     if (form === 'human')
       return packReport(vacancy, 'human', 'форма', false);
   }

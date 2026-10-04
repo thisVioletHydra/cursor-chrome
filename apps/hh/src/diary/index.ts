@@ -4,3 +4,4 @@ export type { HeldLink, Memory } from './memory.ts';
 export { readState, writeState } from './state.ts';
 export type { State } from './state.ts';
 export { parseJsonLoose, writeJsonAtomic } from './store.ts';
+export { ownerLogin, runTenant, tenantLogin } from './tenant.ts';

@@ -4,7 +4,8 @@ import { markDone, markFailed, markSent, notePassed, readQueue, remember, watchC
 import { notifyVacancy } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
-import { takeVacancy } from '$lib/server/secrets';
+import { readAccount, takeVacancy } from '$lib/server/secrets';
+import { noteWeekClick } from '$lib/server/week';
 
 type Body = {
   vacancyId?: string;
@@ -74,8 +75,10 @@ export const POST: RequestHandler = async ({ request }) => {
   else
     await remember([id]);
 
-  if (status === 'sent' && fresh)
+  if (status === 'sent' && fresh) {
     await takeVacancy(login, { company, url });
+    await noteWeekClick(login, await readAccount(login));
+  }
 
   if (fresh) {
     notifyVacancy({

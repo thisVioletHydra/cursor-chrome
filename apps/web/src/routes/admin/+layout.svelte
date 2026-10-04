@@ -5,7 +5,7 @@ import NavIcon from './NavIcon.svelte';
 let { data, children } = $props();
 let accountOpen = $state(false);
 
-const items: { href: string; label: string; exact: boolean; icon?: string }[] = [
+const items = $derived([
   { href: '/admin', label: 'Главная', exact: true, icon: 'home' },
   { href: '/admin/telegram', label: 'Telegram', exact: false, icon: 'plane' },
   { href: '/admin/model', label: 'Модель', exact: false, icon: 'spark' },
@@ -16,7 +16,8 @@ const items: { href: string; label: string; exact: boolean; icon?: string }[] = 
   { href: '/admin/billing', label: 'Billing', exact: false, icon: 'card' },
   { href: '/admin/config', label: 'Конфиг', exact: false, icon: 'file' },
   { href: '/admin/imitation', label: 'Имитация', exact: false, icon: 'person' },
-];
+  { href: '/admin/people', label: 'Люди', exact: false, icon: 'person' },
+].filter(item => (item.href !== '/admin/model' && item.href !== '/admin/people') || data.canPreview));
 
 const iconByLabel: Record<string, string> = {
   'Главная': 'home',

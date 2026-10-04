@@ -2,11 +2,11 @@ import type { RequestHandler } from './$types';
 
 import { error, redirect } from '@sveltejs/kit';
 import { isCreator } from '$lib/server/secrets';
-import { allowedLogins, readSession } from '$lib/server/session';
+import { githubLogin, readSession } from '$lib/server/session';
 
 export const POST: RequestHandler = ({ cookies, request, url }) => {
   const session = readSession(cookies.get('session'));
-  if (session === null || allowedLogins().includes(session.login) === false || isCreator(session.login) === false)
+  if (session === null || githubLogin(session.login) === false || isCreator(session.login) === false)
     error(403, 'нет');
 
   const back = request.headers.get('referer') ?? '';

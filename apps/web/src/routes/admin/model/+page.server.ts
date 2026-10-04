@@ -1,10 +1,14 @@
 import type { Actions, PageServerLoad } from './$types';
 
 import { readProbeLog } from '@cursor-chrome/hh';
+import { redirect } from '@sveltejs/kit';
 import { addProviderAdmin, raiseProviderAdmin, removeProviderAdmin, unlinkAdmin } from '$lib/server/admin-actions';
 
 export const load: PageServerLoad = async ({ parent }) => {
-  const { preview } = await parent();
+  const { preview, canPreview } = await parent();
+  if (canPreview === false)
+    redirect(303, '/start');
+
   if (preview)
     return { probes: [] };
 

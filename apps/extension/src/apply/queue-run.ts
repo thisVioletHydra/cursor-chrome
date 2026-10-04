@@ -652,6 +652,12 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
   dryStreak = nextDryStreak(dryStreak, card.title, card.text);
   const ended = feedEnded(dryStreak);
   const posted = await sendFound(base, key, [card]);
+  if (posted.reason === 'неделя кончилась') {
+    await stopForWeek();
+
+    return { started: false, stop: true, reason: 'неделя кончилась' };
+  }
+
   if (posted.reason === 'день закрыт') {
     await stopForToday();
 
@@ -975,7 +981,20 @@ async function stopForToday(): Promise<void> {
   await tellPage(decided.status);
 }
 
+async function stopForWeek(): Promise<void> {
+  await markPilotStop();
+  const decided = await applyPilot({ type: 'stop', reason: 'week' });
+  await applyPilot({ type: 'close-tab' });
+  await tellPage(decided.status);
+}
+
 async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: string } | { note: string; saved: number; more: boolean; done: boolean; retry: boolean }> {
+  if (hunt.week === false) {
+    await stopForWeek();
+
+    return { stop: 'неделя кончилась' };
+  }
+
   if (hunt.day === false) {
     await stopForToday();
 

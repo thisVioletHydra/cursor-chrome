@@ -36,6 +36,10 @@ export function readSession(raw: string | undefined): Session | null {
   return session;
 }
 
+export function githubLogin(login: string): boolean {
+  return /^[A-Za-z0-9-]{1,39}$/.test(login);
+}
+
 export function allowedLogins(): string[] {
   const raw = process.env.ADMIN_GITHUB_LOGINS || 'thisVioletHydra';
   return raw.split(',').map(item => item.trim()).filter(Boolean);

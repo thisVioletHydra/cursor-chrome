@@ -95,12 +95,15 @@ export function chainFromEnv(): Provider[] {
   return mistral.length > 0 ? [asProvider({ id: 'mistral', key: mistral, model: process.env.MISTRAL_MODEL }) as Provider] : [];
 }
 
-export function modelFromEnv(): Model | null {
-  const chain = chainFromEnv();
+export function modelFromChain(chain: Provider[]): Model | null {
   if (chain.length === 0)
     return null;
 
   return async vacancy => parseVerdict((await askChain(chain, modelPrompt(vacancy))).text);
+}
+
+export function modelFromEnv(): Model | null {
+  return modelFromChain(chainFromEnv());
 }
 
 export async function completion(provider: Provider, prompt: string, opts: { timeoutMs?: number; maxTokens?: number } = {}): Promise<string> {

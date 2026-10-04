@@ -83,13 +83,13 @@ export async function submitForm(url: string, answers: Record<string, string>): 
   return res.ok || res.status === 200 || res.type === 'opaqueredirect';
 }
 
-export async function fillKnownForm(url: string): Promise<'sent' | 'human'> {
-  const chain = chainFromEnv();
+export async function fillKnownForm(url: string, chain: Provider[] | undefined = undefined): Promise<'sent' | 'human'> {
+  const keys = chain ?? chainFromEnv();
   const form = await readForm(url);
-  if (form.blocked || form.questions.length === 0 || chain.length === 0)
+  if (form.blocked || form.questions.length === 0 || keys.length === 0)
     return 'human';
 
-  const answers = await answerForm(chain, form.questions);
+  const answers = await answerForm(keys, form.questions);
   if (answers === null)
     return 'human';
 

@@ -5,6 +5,7 @@ import { COVER_LETTER, DEFAULT_QUERY, HIDE_REASON, busyAmong, coveredWaiters, da
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { readAccount } from '$lib/server/secrets';
+import { weekOpen } from '$lib/server/week';
 
 export const GET: RequestHandler = async ({ request, url }) => {
   const login = await extLogin(request);
@@ -22,7 +23,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
   const start = listen ? takePilotStart() : false;
   const hours = account.hhHours !== '0';
   const day = dayOpen(memory);
-  const open = (hours === false || workHours()) && day;
+  const week = weekOpen(login, account);
+  const open = (hours === false || workHours()) && day && week;
   const walked = walkFrom(state);
   const spot = saved.length === 0 || walked.at < saved.length ? walked.at : 0;
   const focus = saved[spot] ?? '';
@@ -30,7 +32,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
     await writeState({ walkAt: spot });
 
   if (open === false)
-    return json({ items: [], links: [], letter, queries: saved, words, focus, depth: walked.left, phase: walked.phase, want: false, imitation: account.imitation, stop, hours, auto, start, day });
+    return json({ items: [], links: [], letter, queries: saved, words, focus, depth: walked.left, phase: walked.phase, want: false, imitation: account.imitation, stop, hours, auto, start, day, week });
 
   const queued = await pendingCount();
   const want = account.hhLive === '1' && state.auto && queued < QUEUE_TARGET;
@@ -53,6 +55,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
     auto,
     start,
     day: true,
+    week: true,
   });
 }
 

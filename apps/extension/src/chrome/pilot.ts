@@ -13,7 +13,7 @@ export type Pilot = {
 
 export type PilotFault = '502' | 'timeout' | 'unreachable';
 
-export type PilotStop = 'user' | 'captcha' | 'hang' | 'daily' | 'feed';
+export type PilotStop = 'user' | 'captcha' | 'hang' | 'daily' | 'feed' | 'week';
 
 export type PilotTouch = 'pin' | 'wake' | 'restore' | 'popup' | 'discarded' | 'tab';
 
@@ -33,6 +33,7 @@ const STOP_STATUS: Record<PilotStop, string> = {
   hang: 'я завис',
   daily: 'лимит на сегодня',
   feed: 'вакансии походу закончились',
+  week: 'неделя кончилась',
 };
 
 const SERVER_STATUS: Record<PilotFault, string> = {

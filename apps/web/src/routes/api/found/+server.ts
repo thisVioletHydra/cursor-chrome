@@ -1,11 +1,12 @@
 import type { Vacancy } from '@cursor-chrome/hh';
 import type { RequestHandler } from './$types';
 
-import { dayOpen, LOOK_PER_START, parseRules, pendingCount, QUEUE_TARGET, readMemory, readState, scan, watchDeath, watchNote, workHours } from '@cursor-chrome/hh';
+import { dayOpen, LOOK_PER_START, modelFromChain, parseRules, pendingCount, QUEUE_TARGET, readMemory, readState, scan, watchDeath, watchNote, workHours } from '@cursor-chrome/hh';
 import { chargeQueued } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
-import { DEFAULT_QUERY, readAccount } from '$lib/server/secrets';
+import { chainOf, DEFAULT_QUERY, readAccount } from '$lib/server/secrets';
+import { weekOpen } from '$lib/server/week';
 
 type Incoming = {
   id?: unknown;
@@ -28,6 +29,9 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const [account, state, memory] = await Promise.all([readAccount(login), readState(), readMemory()]);
   const queued = await pendingCount();
+  if (weekOpen(login, account) === false)
+    return json({ ok: true, added: 0, reason: 'неделя кончилась' });
+
   const hoursOk = account.hhHours === '0' || workHours();
   const closed = closedReason(account.hhLive === '1', state.auto, hoursOk, dayOpen(memory), queued < QUEUE_TARGET);
   if (closed.length > 0)
@@ -43,12 +47,15 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const query = account.hhQuery.trim() || DEFAULT_QUERY;
   const list = parsed;
+  const chain = chainOf(account);
   let result: Awaited<ReturnType<typeof scan>>;
   try {
     result = await scan({
       query,
       dry: false,
       live: true,
+      model: modelFromChain(chain),
+      chain,
       rules: savedRules(account.hhRules),
       load: async () => list,
     });

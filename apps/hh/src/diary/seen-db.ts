@@ -1,4 +1,5 @@
 import { SEND_PER_DAY } from '../limits.ts';
+import { ownerLogin, tenantLogin } from './tenant.ts';
 import { parseJsonLoose } from './store.ts';
 
 import fsPromises from 'node:fs/promises';
@@ -44,9 +45,31 @@ export function storePath(): string {
 }
 
 export async function openStore(): Promise<void> {
-  if (database === null) {
-    await fsPromises.mkdir(dataDir(), { recursive: true });
-    const opened = new sqlite.DatabaseSync(storePath(), { timeout: 5_000 });
+  const file = storePath();
+  if (databases.has(file) && migratedPaths.has(file))
+    return;
+
+  const pending = opening.get(file);
+  if (pending !== undefined) {
+    await pending;
+
+    return;
+  }
+
+  const job = openFile(file);
+  opening.set(file, job);
+  try {
+    await job;
+  }
+  finally {
+    opening.delete(file);
+  }
+}
+
+async function openFile(file: string): Promise<void> {
+  if (databases.has(file) === false) {
+    await fsPromises.mkdir(path.dirname(file), { recursive: true });
+    const opened = new sqlite.DatabaseSync(file, { timeout: 5_000 });
     opened.exec(`
       PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS seen (
@@ -75,14 +98,14 @@ export async function openStore(): Promise<void> {
     `);
     ensureLinkTitle(opened);
     ensurePassed(opened);
-    database = opened;
+    databases.set(file, opened);
   }
 
-  if (migrated)
+  if (migratedPaths.has(file))
     return;
 
   await migrateSeenFile();
-  migrated = true;
+  migratedPaths.add(file);
 }
 
 export function readDay(day: string): DayRoll | null {
@@ -267,8 +290,9 @@ function capOf(value: unknown): number | null {
   return value;
 }
 
-let database: sqlite.DatabaseSync | null = null;
-let migrated = false;
+const databases = new Map<string, sqlite.DatabaseSync>();
+const migratedPaths = new Set<string>();
+const opening = new Map<string, Promise<void>>();
 
 function ensurePassed(opened: sqlite.DatabaseSync): void {
   opened.exec(`
@@ -428,6 +452,18 @@ function clampPage(value: unknown): number | null {
 }
 
 function dataDir(): string {
+  const root = baseDir();
+  const login = tenantLogin();
+  if (login.length === 0 || ownerLogin(login))
+    return root;
+
+  if (/^[A-Za-z0-9-]{1,39}$/.test(login) === false)
+    return root;
+
+  return path.join(root, 'tenants', login);
+}
+
+function baseDir(): string {
   if (process.env.HH_STORE)
     return path.dirname(process.env.HH_STORE);
 
@@ -446,10 +482,11 @@ export function hhDatabase(): sqlite.DatabaseSync {
 }
 
 function openDatabase(): sqlite.DatabaseSync {
-  if (database === null)
+  const opened = databases.get(storePath());
+  if (opened === undefined)
     throw new Error('база не открыта');
 
-  return database;
+  return opened;
 }
 
 function rollOf(row: Record<string, sqlite.SQLOutputValue> | undefined): DayRoll | null {

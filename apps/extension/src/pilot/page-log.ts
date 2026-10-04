@@ -680,6 +680,20 @@ if (inWorker()) {
   });
 }
 
+const DEVICE_KEY = 'hhDevice';
+
+async function deviceId(): Promise<string> {
+  const stored = await browser.storage.local.get(DEVICE_KEY);
+  const saved = stored[DEVICE_KEY];
+  if (typeof saved === 'string' && /^[A-Za-z0-9-]{8,80}$/.test(saved))
+    return saved;
+
+  const next = crypto.randomUUID().replace(/-/g, '').slice(0, 24);
+  await browser.storage.local.set({ [DEVICE_KEY]: next });
+
+  return next;
+}
+
 async function postPulse(line: string): Promise<void> {
   if (halted || line.trim().length === 0)
     return;
@@ -690,7 +704,7 @@ async function postPulse(line: string): Promise<void> {
   const stamp = pilotStamp();
   const body = await pilotFetch('/api/pulse', {
     method: 'POST',
-    body: JSON.stringify({ line }),
+    body: JSON.stringify({ line, device: await deviceId() }),
     signal: AbortSignal.timeout(8_000),
   });
   if (body === null || stamp !== pilotStamp())

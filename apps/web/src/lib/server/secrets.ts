@@ -63,6 +63,10 @@ export type Account = Stored & {
   balance: number;
   history: Charge[];
   imitation: Imitation;
+  weekAt: number;
+  weekMinutes: number;
+  weekClicks: number;
+  weekDevices: Record<string, number>;
 };
 
 export const CREATOR = 'thisVioletHydra';
@@ -88,6 +92,10 @@ const empty = (): Account => ({
   balance: 0,
   history: [],
   imitation: { ...IMITATION },
+  weekAt: 0,
+  weekMinutes: 0,
+  weekClicks: 0,
+  weekDevices: {},
 });
 
 export function isCreator(login: string): boolean {
@@ -144,6 +152,10 @@ export async function readAccount(login: string): Promise<Account> {
     balance: typeof raw.balance === 'number' ? raw.balance : 0,
     history: chargesOf(raw.history),
     imitation: imitationOf(raw.imitation),
+    weekAt: atLeastZero(raw.weekAt),
+    weekMinutes: atLeastZero(raw.weekMinutes),
+    weekClicks: atLeastZero(raw.weekClicks),
+    weekDevices: devicesOf(raw.weekDevices),
   };
   if (parsed.salvaged) {
     console.error(`account ${login}: восстановил из битого файла, перезаписал`);
@@ -155,6 +167,48 @@ export async function readAccount(login: string): Promise<Account> {
 
 export async function writeAccount(login: string, next: Account): Promise<void> {
   await writeJsonAtomic(accountPath(login), next);
+  await rememberToken(login, next.extToken);
+}
+
+export async function ensureAccount(login: string): Promise<Account> {
+  const safe = safeLogin(login);
+  if (await accountFileStat(safe) === null) {
+    const created = empty();
+    created.extToken = newExtToken();
+    await writeAccount(safe, created);
+  }
+
+  return readAccount(safe);
+}
+
+export async function listLogins(): Promise<string[]> {
+  try {
+    const names = await fsPromises.readdir(path.join(rootDir(), 'accounts'));
+    return names.flatMap(name => name.endsWith('.json') ? [name.slice(0, -5)] : []).filter(name => /^[A-Za-z0-9-]{1,39}$/.test(name));
+  }
+  catch {
+    return [];
+  }
+}
+
+export async function loginForToken(given: string): Promise<string | null> {
+  if (given.length === 0)
+    return null;
+
+  const index = await readTokenIndex();
+  const hinted = index[given];
+  if (typeof hinted === 'string' && await tokenMatches(hinted, given))
+    return hinted;
+
+  const logins = await listLogins();
+  for (const login of logins) {
+    if (await tokenMatches(login, given)) {
+      await rememberToken(login, given);
+      return login;
+    }
+  }
+
+  return null;
 }
 
 export type AtsScan = {
@@ -456,6 +510,68 @@ function whole(value: unknown, min: number, max: number): number | null {
   return value;
 }
 
+function atLeastZero(value: unknown): number {
+  if (typeof value !== 'number' || Number.isFinite(value) === false || value < 0)
+    return 0;
+
+  return value;
+}
+
+function devicesOf(value: unknown): Record<string, number> {
+  if (typeof value !== 'object' || value === null)
+    return {};
+
+  const out: Record<string, number> = {};
+  for (const [key, stamp] of Object.entries(value)) {
+    if (/^[A-Za-z0-9-]{8,80}$/.test(key) === false)
+      continue;
+
+    const at = atLeastZero(stamp);
+    if (at > 0)
+      out[key] = at;
+  }
+
+  return out;
+}
+
+function tokenIndexPath(): string {
+  return path.join(rootDir(), 'ext-tokens.json');
+}
+
+async function readTokenIndex(): Promise<Record<string, string>> {
+  try {
+    const parsed = JSON.parse(await fsPromises.readFile(tokenIndexPath(), 'utf8')) as unknown;
+    if (typeof parsed !== 'object' || parsed === null)
+      return {};
+
+    return parsed as Record<string, string>;
+  }
+  catch {
+    return {};
+  }
+}
+
+async function rememberToken(login: string, token: string): Promise<void> {
+  const index = await readTokenIndex();
+  for (const [saved, owner] of Object.entries(index)) {
+    if (owner === login && saved !== token)
+      delete index[saved];
+  }
+
+  if (token.length > 0)
+    index[token] = login;
+
+  await writeJsonAtomic(tokenIndexPath(), index);
+}
+
+async function tokenMatches(login: string, given: string): Promise<boolean> {
+  const saved = (await readAccount(login)).extToken;
+  if (saved.length === 0 || saved.length !== given.length)
+    return false;
+
+  return crypto.timingSafeEqual(Buffer.from(saved), Buffer.from(given));
+}
+
 function chargesOf(value: unknown): Charge[] {
   if (Array.isArray(value) === false)
     return [];
@@ -474,18 +590,11 @@ function chargesOf(value: unknown): Charge[] {
 
 export async function takeVacancy(login: string, item: { company: string; url: string }): Promise<boolean> {
   const account = await readAccount(login);
-  const creator = isCreator(login);
-  if (creator === false && account.balance < VACANCY_RUB)
-    return false;
-
-  if (creator === false)
-    account.balance -= VACANCY_RUB;
-
   account.history = [{
     at: Date.now(),
     company: item.company,
     url: item.url,
-    rub: creator ? 0 : VACANCY_RUB,
+    rub: 0,
   }, ...account.history].slice(0, 80);
   await writeAccount(login, account);
 

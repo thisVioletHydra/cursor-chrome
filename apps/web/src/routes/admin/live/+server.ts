@@ -5,11 +5,11 @@ import { telegramOn } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { pruneShelvedWaiters } from '$lib/server/admin-actions';
 import { boardFrom } from '$lib/server/board';
-import { allowedLogins, readSession } from '$lib/server/session';
+import { githubLogin, readSession } from '$lib/server/session';
 
 export const GET: RequestHandler = async ({ cookies }) => {
   const session = readSession(cookies.get('session'));
-  if (session === null || allowedLogins().includes(session.login) === false)
+  if (session === null || githubLogin(session.login) === false)
     return json({ error: 'нет' }, { status: 401 });
 
   const [loaded, state, judged, hidden, passed, passedTotal, memory] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount(), readPassed(), passedCount(), readMemory()]);

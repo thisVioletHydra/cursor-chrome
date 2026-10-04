@@ -4,7 +4,7 @@ export { asAtsFlags, atsFirst, atsSource, scoreAts } from './ats.ts';
 export type { AtsFlag } from './ats.ts';
 export { corpusOn, corpusState, distillCorpus, keepVacancy } from './corpus.ts';
 export { COVER_LETTER, FACTS } from './copy.ts';
-export { asProvider, askChain, chainFromEnv, modelsDown, parseChain, pingChain, PRESETS, presetOf, probeProvider, providerName } from './model.ts';
+export { asProvider, askChain, chainFromEnv, modelFromChain, modelsDown, parseChain, pingChain, PRESETS, presetOf, probeProvider, providerName } from './model.ts';
 export type { Preset, Provider, ProviderId } from './model.ts';
 export { readProbeLog } from './probe-log.ts';
 export type { ProbeNote } from './probe-log.ts';
