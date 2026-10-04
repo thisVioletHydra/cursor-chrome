@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { channelName } from './channel-feed';
 
 export type Secrets = {
   telegramToken: string;
@@ -67,6 +68,7 @@ export type Account = Stored & {
   weekMinutes: number;
   weekClicks: number;
   weekDevices: Record<string, number>;
+  feedChannel: string;
 };
 
 export const CREATOR = 'thisVioletHydra';
@@ -96,6 +98,7 @@ const empty = (): Account => ({
   weekMinutes: 0,
   weekClicks: 0,
   weekDevices: {},
+  feedChannel: '',
 });
 
 export function isCreator(login: string): boolean {
@@ -156,6 +159,7 @@ export async function readAccount(login: string): Promise<Account> {
     weekMinutes: atLeastZero(raw.weekMinutes),
     weekClicks: atLeastZero(raw.weekClicks),
     weekDevices: devicesOf(raw.weekDevices),
+    feedChannel: channelName(typeof raw.feedChannel === 'string' ? raw.feedChannel : '') ?? '',
   };
   if (parsed.salvaged) {
     console.error(`account ${login}: восстановил из битого файла, перезаписал`);
