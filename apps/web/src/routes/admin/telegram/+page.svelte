@@ -114,6 +114,7 @@ function taken(value: unknown): { name: string; posts: ChannelPost[] } | null {
   </ol>
 </section>
 
+{#if data.preview === false}
 <section class="mt-8 max-w-3xl">
   <h2 class="text-lg font-medium text-white">Лента</h2>
   <p class="mt-1 text-sm text-zinc-400">Вставь ссылку на открытый канал или группу.</p>
@@ -166,6 +167,7 @@ function taken(value: unknown): { name: string; posts: ChannelPost[] } | null {
     {/await}
   {/if}
 </section>
+{/if}
 
 {#snippet rows(posts: ChannelPost[], name: string)}
   <p class="text-sm text-zinc-500">

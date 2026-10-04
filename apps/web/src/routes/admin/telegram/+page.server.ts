@@ -7,7 +7,11 @@ import { channelName, channelProblem, channelWeek } from '$lib/server/channel-fe
 import { isCreator, readAccount, writeAccount } from '$lib/server/secrets';
 import { githubLogin, readSession } from '$lib/server/session';
 
-export const load: PageServerLoad = async ({ cookies }) => {
+export const load: PageServerLoad = async ({ cookies, parent }) => {
+  const { preview } = await parent();
+  if (preview)
+    return { owner: false, feed: '', channel: { posts: Promise.resolve([]) } };
+
   const session = readSession(cookies.get('session'));
   const login = session !== null && githubLogin(session.login) ? session.login : '';
   const feed = login === '' ? '' : (await readAccount(login)).feedChannel;
@@ -41,6 +45,9 @@ export const actions: Actions = {
     if (session === null || githubLogin(session.login) === false)
       error(401, 'нет');
 
+    if (isCreator(session.login) && cookies.get('preview') === 'guest')
+      return fail(403, { detail: 'это просмотр' });
+
     const form = await request.formData();
     const link = String(form.get('link') ?? '');
     const problem = channelProblem(link);
@@ -55,12 +62,9 @@ export const actions: Actions = {
     if (posts === null)
       return fail(404, { detail: 'Открытой ленты нет. Закрытую группу так не прочитать.' });
 
-    const preview = isCreator(session.login) && cookies.get('preview') === 'guest';
-    if (preview === false) {
-      const account = await readAccount(session.login);
-      account.feedChannel = name;
-      await writeAccount(session.login, account);
-    }
+    const account = await readAccount(session.login);
+    account.feedChannel = name;
+    await writeAccount(session.login, account);
 
     return { name, posts };
   },
