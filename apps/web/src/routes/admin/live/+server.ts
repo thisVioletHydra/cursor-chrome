@@ -5,12 +5,38 @@ import { telegramOn } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { pruneShelvedWaiters } from '$lib/server/admin-actions';
 import { boardFrom } from '$lib/server/board';
+import { isCreator } from '$lib/server/secrets';
 import { githubLogin, readSession } from '$lib/server/session';
+
+const blank = {
+  polling: false,
+  figures: {
+    today: 0,
+    queued: 0,
+    waiting: 0,
+    accepted: 0,
+    stale: 0,
+    passedTotal: 0,
+    invitations: 0,
+    discards: 0,
+    waitingReply: 0,
+    hidden: 0,
+  },
+  rows: [],
+  passed: [],
+  autopilot: { auto: false, lastNote: '', runAt: 0 },
+  judged: 0,
+  pulse: { line: '' },
+  log: [],
+};
 
 export const GET: RequestHandler = async ({ cookies }) => {
   const session = readSession(cookies.get('session'));
   if (session === null || githubLogin(session.login) === false)
     return json({ error: 'нет' }, { status: 401 });
+
+  if (isCreator(session.login) && cookies.get('preview') === 'guest')
+    return json(blank);
 
   const [loaded, state, judged, hidden, passed, passedTotal, memory] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount(), readPassed(), passedCount(), readMemory()]);
   const queue = await pruneShelvedWaiters(loaded);

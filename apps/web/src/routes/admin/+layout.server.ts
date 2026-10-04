@@ -6,27 +6,64 @@ import { telegramOn } from '@cursor-chrome/telegram';
 import { redirect } from '@sveltejs/kit';
 import { coolLeft, pruneShelvedWaiters } from '$lib/server/admin-actions';
 import { guestLinks, storedLinks } from '$lib/server/checks';
-import { chainOf, collapseChain, DEFAULT_QUERY, ensureAccount, GUEST_BALANCE, isCreator, publishSecrets, readAccount, VACANCY_RUB, withChain, writeAccount } from '$lib/server/secrets';
+import { chainOf, collapseChain, DEFAULT_QUERY, ensureAccount, GUEST_BALANCE, isCreator, publishSecrets, VACANCY_RUB, withChain, writeAccount } from '$lib/server/secrets';
+import { githubLogin, readSession } from '$lib/server/session';
+
+function emptyStats() {
+  return {
+    today: 0,
+    waiting: 0,
+    queued: 0,
+    judged: 0,
+    rows: [],
+    invitations: 0,
+    discards: 0,
+    waitingReply: 0,
+    hidden: 0,
+    accepted: 0,
+    stale: 0,
+    passedTotal: 0,
+    passed: [],
+    autopilot: { auto: false, lastNote: '', runAt: 0 },
+  };
+}
+
+function guestShell() {
+  return {
+    login: 'гость',
+    preview: true,
+    canPreview: true,
+    links: guestLinks(),
+    polling: false,
+    billing: {
+      infinite: false,
+      balance: GUEST_BALANCE,
+      vacancyRub: VACANCY_RUB,
+      history: [],
+    },
+    locks: { telegram: 0, hh: 0 },
+    providers: [],
+    presets: PRESETS.map(preset => ({ id: preset.id, name: preset.name, model: preset.model, keysUrl: preset.keysUrl, free: preset.free })),
+    resumeId: '',
+    hhQuery: '',
+    hasExtToken: false,
+    extToken: '',
+    coverLetter: '',
+    ready: {
+      telegram: false,
+      model: false,
+      resume: false,
+      queries: false,
+      extension: false,
+      live: false,
+    },
+    stats: emptyStats(),
+  };
+}
 
 async function statsOf(preview: boolean) {
-  if (preview) {
-    return {
-      today: 0,
-      waiting: 0,
-      queued: 0,
-      judged: 0,
-      rows: [],
-      invitations: 0,
-      discards: 0,
-      waitingReply: 0,
-      hidden: 0,
-      accepted: 0,
-      stale: 0,
-      passedTotal: 0,
-      passed: [],
-      autopilot: { auto: false, lastNote: '', runAt: 0 },
-    };
-  }
+  if (preview)
+    return emptyStats();
 
   const [loaded, state, judged, hidden, passed, passedTotal, memory] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount(), readPassed(), passedCount(), readMemory()]);
   const queue = await pruneShelvedWaiters(loaded);
@@ -45,7 +82,6 @@ async function statsOf(preview: boolean) {
     autopilot: { auto: state.auto, lastNote: state.lastNote, runAt: state.auto ? state.runAt : 0 },
   };
 }
-import { githubLogin, readSession } from '$lib/server/session';
 
 export const load: LayoutServerLoad = async ({ cookies }) => {
   const session = readSession(cookies.get('session'));
@@ -54,7 +90,10 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
 
   const creator = isCreator(session.login);
   const preview = creator && cookies.get('preview') === 'guest';
-  const account = preview ? await readAccount(session.login) : await ensureAccount(session.login);
+  if (preview)
+    return guestShell();
+
+  const account = await ensureAccount(session.login);
   if (preview === false) {
     const raw = chainOf(account);
     const collapsed = collapseChain(raw);
@@ -65,8 +104,10 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
       account.modelChain = next.modelChain;
     }
   }
+
   const links = preview ? guestLinks() : await storedLinks(session.login);
   const telegram = links.find(item => item.name === 'Телега');
+
   return {
     login: preview ? 'гость' : session.login,
     preview,

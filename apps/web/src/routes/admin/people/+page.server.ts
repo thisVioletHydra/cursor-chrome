@@ -6,9 +6,12 @@ import { githubLogin, readSession } from '$lib/server/session';
 import { weekLoad, weekOpen } from '$lib/server/week';
 
 export const load: PageServerLoad = async ({ parent }) => {
-  const { canPreview } = await parent();
+  const { canPreview, preview } = await parent();
   if (canPreview === false)
     redirect(303, '/admin');
+
+  if (preview)
+    return { people: [] };
 
   const logins = await listLogins();
   const people = [];
@@ -30,7 +33,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 export const actions: Actions = {
   open: async ({ request, cookies }) => {
     const session = readSession(cookies.get('session'));
-    if (session === null || isCreator(session.login) === false)
+    if (session === null || isCreator(session.login) === false || cookies.get('preview') === 'guest')
       return fail(403, { reason: 'нет' });
 
     const form = await request.formData();

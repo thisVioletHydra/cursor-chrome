@@ -55,6 +55,9 @@ $effect(() => {
 
 onMount(() => {
   alive = true;
+  if (data.preview)
+    return;
+
   const mine = ++seenView;
   const timer = setInterval(() => {
     void refresh(mine);
