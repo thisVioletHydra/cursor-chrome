@@ -6,6 +6,7 @@ export type ChannelPost = {
   location: string;
   salary: string;
   description: string;
+  body: string;
   apply: string;
   post: string;
 };

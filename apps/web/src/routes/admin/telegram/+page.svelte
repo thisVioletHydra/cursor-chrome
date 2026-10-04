@@ -17,7 +17,9 @@ let connectError = $state('');
 let draft = $state(data.feed === '' ? '' : `https://t.me/${data.feed}`);
 let busy = $state(false);
 let problem = $state('');
+let editing = $state(false);
 let opened = $state<{ name: string; posts: ChannelPost[] } | null>(null);
+const channel = $derived(opened?.name ?? data.feed);
 
 const when = new Intl.DateTimeFormat('ru-RU', {
   timeZone: 'Asia/Bishkek',
@@ -115,85 +117,97 @@ function taken(value: unknown): { name: string; posts: ChannelPost[] } | null {
 </section>
 
 {#if data.preview === false}
-<section class="mt-8 max-w-3xl">
-  <h2 class="text-lg font-medium text-white">Лента</h2>
-  <p class="mt-1 text-sm text-zinc-400">Вставь ссылку на открытый канал или группу.</p>
-  <form
-    class="mt-4 flex flex-col gap-3 sm:flex-row"
-    method="POST"
-    action="?/feed"
-    use:enhance={() => {
-      busy = true;
-      problem = '';
-      return async ({ result }) => {
-        busy = false;
-        if (result.type === 'failure') {
-          problem = typeof result.data?.detail === 'string' ? result.data.detail : 'Канал не открылся.';
-          return;
-        }
-
-        if (result.type === 'success')
-          opened = taken(result.data);
-      };
-    }}
-  >
-    <input
-      class="input input-bordered h-11 min-w-0 flex-1 border-white/10 bg-black/30 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
-      name="link"
-      placeholder="https://t.me/frontend_remote"
-      autocomplete="off"
-      spellcheck="false"
-      bind:value={draft}
-    />
-    <button class="btn btn-primary h-11" type="submit" disabled={busy}>{busy ? 'Читаю…' : 'Ок'}</button>
-  </form>
-  {#if problem}
-    <p class="mt-3 text-sm text-rose-300">{problem}</p>
-  {/if}
-
-  {#if busy === false && opened}
-    <div class="mt-6" transition:slide={{ duration: 420 }}>
-      {@render rows(opened.posts, opened.name)}
-    </div>
-  {:else if busy === false && data.feed}
-    {#await data.channel.posts}
-      <p class="mt-6 text-sm text-zinc-500">Читаю ленту…</p>
-    {:then posts}
-      <div class="mt-6" transition:slide={{ duration: 420 }}>
-        {@render rows(posts, data.feed)}
+  {#if channel !== '' && editing === false}
+    <div class="mt-8 flex items-center gap-3 rounded-2xl border border-white/8 bg-[#151922] px-4 py-3" transition:slide={{ duration: 280 }}>
+      <svg class="size-9 shrink-0 text-sky-400" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M4 9.2v5.6h3.1L12 19.2V4.8L7.1 9.2H4zm9.4-2.4a5.2 5.2 0 0 1 0 10.4V6.8zm2.6-2.5a8.2 8.2 0 0 1 0 15.4V4.3z" />
+      </svg>
+      <div class="min-w-0">
+        <a class="block truncate text-sm text-indigo-300 underline-offset-4 hover:underline" href="https://t.me/{channel}" target="_blank" rel="noreferrer">@{channel}</a>
+        <p class="mt-0.5 flex items-center gap-1.5 text-xs text-zinc-500">
+          <span class="size-1.5 rounded-full bg-emerald-400"></span>
+          подключена
+        </p>
       </div>
-    {:catch}
-      <p class="mt-6 text-sm text-rose-300">Канал не открылся.</p>
-    {/await}
+      <button class="ml-auto cursor-pointer rounded-lg px-3 py-1.5 text-sm text-zinc-300 transition hover:bg-white/10 focus-visible:bg-white/10 focus-visible:outline-none" type="button" onclick={() => editing = true}>Сменить</button>
+    </div>
+  {:else}
+    <form
+      class="mt-8"
+      method="POST"
+      action="?/feed"
+      transition:slide={{ duration: 280 }}
+      use:enhance={() => {
+        busy = true;
+        problem = '';
+        return async ({ result }) => {
+          busy = false;
+          if (result.type === 'failure') {
+            problem = typeof result.data?.detail === 'string' ? result.data.detail : 'Канал не открылся.';
+            return;
+          }
+
+          if (result.type === 'success') {
+            opened = taken(result.data);
+            editing = false;
+          }
+        };
+      }}
+    >
+      <h2 class="text-lg font-medium text-white">Лента</h2>
+      <p class="mt-1 text-sm text-zinc-400">Вставь ссылку на открытый канал или группу.</p>
+      <div class="mt-4 flex flex-col gap-3 sm:flex-row">
+        <input
+          class="input input-bordered h-11 min-w-0 flex-1 border-white/10 bg-black/30 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
+          name="link"
+          placeholder="https://t.me/frontend_remote"
+          autocomplete="off"
+          spellcheck="false"
+          bind:value={draft}
+        />
+        <button class="btn btn-primary h-11" type="submit" disabled={busy}>{busy ? 'Читаю…' : 'Ок'}</button>
+      </div>
+      {#if problem}
+        <p class="mt-3 text-sm text-rose-300">{problem}</p>
+      {/if}
+    </form>
   {/if}
-</section>
+
+  {#if channel !== '' && busy === false}
+    {#if opened}
+      <div transition:slide={{ duration: 420 }}>
+        {@render rows(opened.posts)}
+      </div>
+    {:else}
+      {#await data.channel.posts}
+        <p class="mt-6 text-sm text-zinc-500">Читаю ленту…</p>
+      {:then posts}
+        <div transition:slide={{ duration: 420 }}>
+          {@render rows(posts)}
+        </div>
+      {:catch}
+        <p class="mt-6 text-sm text-rose-300">Канал не открылся.</p>
+      {/await}
+    {/if}
+  {/if}
 {/if}
 
-{#snippet rows(posts: ChannelPost[], name: string)}
-  <p class="text-sm text-zinc-500">
-    <a class="text-indigo-300 underline-offset-4 hover:underline" href="https://t.me/{name}" target="_blank" rel="noreferrer">@{name}</a>
-    · {posts.length} за 7 дней
-  </p>
+{#snippet rows(posts: ChannelPost[])}
+  <p class="mt-6 text-sm text-zinc-500">{posts.length} за 7 дней</p>
   {#if posts.length === 0}
     <p class="mt-4 text-sm text-zinc-500">За неделю пусто.</p>
   {:else}
-    <ul class="mt-2 flex flex-col">
+    <ul class="mt-3 flex flex-col gap-3">
       {#each posts as post (post.id)}
-        <li class="border-b border-white/8 py-4">
-          <p class="text-xs text-zinc-500">{when.format(post.at)}{post.company ? ` · ${post.company}` : ''}</p>
-          <h3 class="mt-1 text-base font-medium text-white">{post.title}</h3>
-          {#if post.location || post.salary}
-            <p class="mt-1 text-sm text-zinc-400">{[post.location, post.salary].filter(Boolean).join(' · ')}</p>
+        <li class="rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+          <p class="text-xs text-zinc-500">{[when.format(post.at), post.company, post.location, post.salary].filter(Boolean).join(' · ')}</p>
+          <h3 class="mt-1 text-lg font-medium text-white">{post.title}</h3>
+          {#if post.body}
+            <p class="mt-3 whitespace-pre-line text-sm leading-6 text-zinc-200">{post.body}</p>
           {/if}
-          {#if post.description}
-            <p class="mt-2 line-clamp-3 text-sm text-zinc-300">{post.description}</p>
+          {#if post.apply}
+            <a class="mt-3 inline-block text-sm text-indigo-300 underline-offset-4 hover:underline" href={post.apply} target="_blank" rel="noreferrer">Вакансия</a>
           {/if}
-          <p class="mt-2 flex gap-4 text-sm">
-            {#if post.apply}
-              <a class="text-indigo-300 underline-offset-4 hover:underline" href={post.apply} target="_blank" rel="noreferrer">Вакансия</a>
-            {/if}
-            <a class="text-zinc-400 underline-offset-4 hover:underline" href={post.post} target="_blank" rel="noreferrer">Пост</a>
-          </p>
         </li>
       {/each}
     </ul>

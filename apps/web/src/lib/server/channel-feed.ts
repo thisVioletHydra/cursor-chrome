@@ -1,8 +1,10 @@
 import type { ChannelPost } from '../channel-post';
 
+import { readFeed, writeFeed } from './feed-store';
+
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const FRESH_MS = 6 * 60 * 60 * 1000;
 const MAX_PAGES = 45;
-const CACHE_MS = 10 * 60 * 1000;
 const NAME = /^[A-Za-z][A-Za-z0-9_]{3,31}$/;
 
 const cached = new Map<string, { at: number; posts: ChannelPost[] }>();
@@ -37,14 +39,14 @@ export function channelProblem(input: string): string {
 export function channelWeek(name: string): Promise<ChannelPost[]> {
   const key = name.toLowerCase();
   const hit = cached.get(key);
-  if (hit !== undefined && Date.now() - hit.at < CACHE_MS)
+  if (hit !== undefined && Date.now() - hit.at < FRESH_MS)
     return Promise.resolve(hit.posts);
 
   const running = pending.get(key);
   if (running !== undefined)
     return running;
 
-  const job = pullWeek(key).then((posts) => {
+  const job = loadWeek(key).then((posts) => {
     cached.set(key, { at: Date.now(), posts });
     return posts;
   }, (error: unknown) => {
@@ -57,9 +59,22 @@ export function channelWeek(name: string): Promise<ChannelPost[]> {
   return job;
 }
 
-async function pullWeek(channel: string): Promise<ChannelPost[]> {
+async function loadWeek(channel: string): Promise<ChannelPost[]> {
+  const saved = await readFeed(channel);
+  const reusable = saved !== null && saved.posts.every(post => typeof post.body === 'string') ? saved.posts : [];
+  if (saved !== null && reusable.length === saved.posts.length && Date.now() - saved.at < FRESH_MS)
+    return reusable;
+
+  const posts = await pullWeek(channel, reusable);
+  await writeFeed(channel, posts).catch(() => undefined);
+
+  return posts;
+}
+
+async function pullWeek(channel: string, previous: ChannelPost[]): Promise<ChannelPost[]> {
   const cutoff = Date.now() - WEEK_MS;
-  const posts: ChannelPost[] = [];
+  const known = new Set(previous.map(post => post.id));
+  const fresh: ChannelPost[] = [];
   const seen = new Set<number>();
   let before: number | null = null;
 
@@ -69,30 +84,31 @@ async function pullWeek(channel: string): Promise<ChannelPost[]> {
       : `https://t.me/s/${channel}?before=${before}`;
     const html = await readPage(url);
     const batch = parsePage(html, channel).filter(post => seen.has(post.id) === false);
-    if (page === 0 && batch.length === 0)
+    if (page === 0 && batch.length === 0 && previous.length === 0)
       throw new Error('открытой ленты нет');
 
     if (batch.length === 0)
       break;
 
-    let crossed = false;
+    let stop = false;
     for (const post of batch) {
       seen.add(post.id);
-      if (post.at < cutoff) {
-        crossed = true;
+      if (known.has(post.id) || post.at < cutoff) {
+        stop = true;
         continue;
       }
 
-      posts.push(post);
+      fresh.push(post);
     }
 
     const oldest = batch.reduce((min, post) => Math.min(min, post.id), batch[0]?.id ?? 0);
-    if (crossed || oldest === before)
+    if (stop || oldest === before)
       break;
 
     before = oldest;
   }
 
+  const posts = [...fresh, ...previous.filter(post => post.at >= cutoff)];
   posts.sort((left, right) => right.at - left.at || right.id - left.id);
 
   return posts;
@@ -128,7 +144,7 @@ function parsePost(channel: string, chunk: string): ChannelPost[] {
   const location = shown(field(text, 'Location'));
   const salary = shown(field(text, 'Salary'));
   const description = shown(field(text, 'Description'));
-  const rest = text.split('\n').slice(1).join('\n');
+  const body = messageBody(text, title);
 
   return [{
     id,
@@ -137,10 +153,23 @@ function parsePost(channel: string, chunk: string): ChannelPost[] {
     company,
     location,
     salary,
-    description: description || (company ? '' : rest),
+    description,
+    body,
     apply,
     post: `https://t.me/${channel}/${id}`,
   }];
+}
+
+function messageBody(text: string, title: string): string {
+  const rows = text.split('\n').flatMap((row) => {
+    const clean = row.replace(/\s*Apply now:.*$/i, '').replace(/\s*APPLY via Telegram.*$/i, '').trim();
+    if (clean === '' || clean === 'APPLY NOW' || clean === title)
+      return [];
+
+    return [clean];
+  });
+
+  return rows.join('\n');
 }
 
 function keptPost(channel: string, slug: string | undefined, id: number, at: number): boolean {
