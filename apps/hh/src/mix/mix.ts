@@ -14,11 +14,11 @@ export type QueryCursor = {
   queryPass: number;
 };
 
-export const FRONT_TAKE = 3;
-export const LESS_TAKE = 2;
+export const FRONT_TAKE = 7;
+export const LESS_TAKE = 3;
 
-const LESS = /(?:^|[^\p{L}\p{N}])(?:backend|back\s*end|бэкенд|бекенд|fullstack|full\s*stack|фул+ст[еэ]к|node(?:\s*js)?|nest(?:\s*js)?|php|python|java|express)(?=$|[^\p{L}\p{N}])/iu;
-const ROLE_LESS = /(?:^|[^\p{L}\p{N}])(?:backend|back\s*end|бэкенд|бекенд|fullstack|full\s*stack|фул+ст[еэ]к)(?=$|[^\p{L}\p{N}])/iu;
+const NODE = /(?:^|[^\p{L}\p{N}])(?:node(?:\s*js)?|nest(?:\s*js)?|express)(?=$|[^\p{L}\p{N}])/iu;
+const PLAIN_BACK = /(?:^|[^\p{L}\p{N}])(?:backend|back\s*end|бэкенд|бекенд|fullstack|full\s*stack|фул+ст[еэ]к|php|python|java)(?=$|[^\p{L}\p{N}])/iu;
 const FRONT = /(?:^|[^\p{L}\p{N}])(?:frontend|front\s*end|фронтенд|фронтэнд|vue|react|graphql)(?=$|[^\p{L}\p{N}])/iu;
 const SCRIPT = /(?:^|[^\p{L}\p{N}])(?:javascript|typescript)(?=$|[^\p{L}\p{N}])/iu;
 const JUNK = /(?:^|[^\p{L}\p{N}])(?:qa|aqa|manager|sourcer|analyst|support|саппорт)(?=$|[^\p{L}\p{N}])|(?:^|[^\p{L}\p{N}])(?:quality assurance|тестиров|менеджер|сорсер|аналитик|робототех|robotics|техподдерж|курьер|водител|риелтор|риэлтор|недвижимост|мерчендайзер|колл-?центр|коллцентр|кассир|продавец|кладовщик|грузчик|комплектовщик)/iu
@@ -31,11 +31,14 @@ export function taste(title: string, foundBy: string): Taste {
   if (roleJunk(title))
     return 'out';
 
-  if (lessQuery(title) || lessQuery(foundBy))
-    return 'less';
-
   if (frontHit(title) || frontHit(foundBy))
     return 'front';
+
+  if (nodeHit(title) || nodeHit(foundBy))
+    return 'less';
+
+  if (plainBackend(title) || plainBackend(foundBy))
+    return 'out';
 
   if (scriptHit(title) || scriptHit(foundBy))
     return 'front';
@@ -95,7 +98,7 @@ export function mixBatch<T>(items: readonly T[], tasteOf: (item: T) => Taste): T
   return ordered;
 }
 
-// Один цикл ходит по текущему срезу 3+2. Следующий срез только по явной просьбе, не по таймеру.
+// Один цикл ходит по текущему срезу 7 фронт + 3 Node. Следующий срез только по явной просьбе, не по таймеру.
 export function serveQueries(queries: readonly string[], cursor: QueryCursor, advance = false): { queries: string[]; cursor: QueryCursor } {
   if (advance === false) {
     const shown = sliceQueries(queries, cursor.frontAt, cursor.lessAt);
@@ -119,7 +122,7 @@ export function serveQueries(queries: readonly string[], cursor: QueryCursor, ad
 }
 
 function sliceQueries(queries: readonly string[], frontAt: number, lessAt: number): { queries: string[]; frontAt: number; lessAt: number } {
-  const front = queries.filter(query => lessQuery(query) === false);
+  const front = queries.filter(query => lessQuery(query) === false && plainBackend(query) === false);
   const less = queries.filter(query => lessQuery(query));
   const used = new Set<string>();
   const picked: string[] = [];
@@ -188,19 +191,22 @@ function positiveMod(value: number, size: number): number {
   return ((value % size) + size) % size;
 }
 
-function lessHit(text: string): boolean {
-  return LESS.test(fold(text));
+function nodeHit(text: string): boolean {
+  return NODE.test(fold(text));
 }
 
-// Слова фронта в той же строке не отдают весь запрос в бэкенд из-за nest или node.
-function lessQuery(text: string): boolean {
-  if (ROLE_LESS.test(fold(text)))
-    return true;
-
-  if (frontHit(text) || scriptHit(text))
+function plainBackend(text: string): boolean {
+  if (frontHit(text) || nodeHit(text))
     return false;
 
-  return lessHit(text);
+  return PLAIN_BACK.test(fold(text));
+}
+
+function lessQuery(text: string): boolean {
+  if (frontHit(text))
+    return false;
+
+  return nodeHit(text);
 }
 
 function frontHit(text: string): boolean {
