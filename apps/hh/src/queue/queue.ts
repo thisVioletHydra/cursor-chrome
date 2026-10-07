@@ -99,8 +99,15 @@ export async function busyAmong(ids: readonly string[]): Promise<string[]> {
   return ids.filter(id => hit.has(id));
 }
 
+const BISHKEK_MS = 6 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function bishkekDay(at: number): number {
+  return Math.floor((at + BISHKEK_MS) / DAY_MS);
+}
+
 export function isStale(at: number, now = Date.now()): boolean {
-  return Number.isFinite(at) && now - at >= WEEK_MS;
+  return Number.isFinite(at) && bishkekDay(now) - bishkekDay(at) >= 7;
 }
 
 export function staleWaiters(queue: readonly QueueItem[], now = Date.now()): QueueItem[] {
@@ -144,7 +151,8 @@ export async function markDone(id: string, status: Exclude<QueueStatus, 'pending
   if (found === undefined)
     return null;
 
-  const next: QueueItem = { ...found, status, doneAt: Date.now(), hints };
+  const doneAt = found.status === status && typeof found.doneAt === 'number' ? found.doneAt : Date.now();
+  const next: QueueItem = { ...found, status, doneAt, hints };
   await writeQueue(queue.map(row => (row.id === id ? next : row)));
 
   return next;

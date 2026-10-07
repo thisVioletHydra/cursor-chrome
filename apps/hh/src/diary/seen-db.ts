@@ -391,6 +391,13 @@ function cannedHide(reason: string): boolean {
   return reason === HIDE_REASON || reason === LEGACY_HIDE || reason === RELOOK_REASON;
 }
 
+function replaces(prior: string, reason: string): boolean {
+  if (reason === 'протухло')
+    return prior !== reason;
+
+  return cannedHide(prior) && reason !== prior;
+}
+
 function writePassed(
   select: sqlite.StatementSync,
   insert: sqlite.StatementSync,
@@ -418,7 +425,7 @@ function writePassed(
   const keptTitle = sqlText(existing.title);
   const nextCompany = keptCompany.length > 0 ? keptCompany : company;
   const nextTitle = keptTitle.length > 0 ? keptTitle : title;
-  if (cannedHide(prior) && reason !== prior) {
+  if (replaces(prior, reason)) {
     replace.run(at, reason, nextCompany, nextTitle, id);
 
     return;

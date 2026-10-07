@@ -20,14 +20,16 @@ test('relook opens a canned hide and leaves a real skip', async () => {
   assert.deepEqual(claimed.map(row => row.id), ['137776562']);
   assert.deepEqual(await db.lookupSeen(['137776562', '3']), ['3']);
   assert.deepEqual(db.claimRelook([], 8).map(row => row.id), []);
-  db.savePassed([{ id: '9', reason: 'скрыл, уже видели', company: '', title: '' }]);
-  assert.deepEqual(db.listPassed().map(row => row.id), ['2']);
-  assert.equal(db.countPassed(), 1);
   const again = db.claimRelook([], 8, Date.now() + 21 * 60 * 1000);
   assert.equal(again[0]?.id, '137776562');
   db.forgetPassed(['137776562']);
-  assert.equal(db.listPassed().some(row => row.id === '137776562'), false);
+  db.savePassed([{ id: '9', reason: 'скрыл, уже видели', company: '', title: '' }]);
+  assert.equal(db.listPassed().some(row => row.id === '9'), false);
   assert.equal(db.listPassed().some(row => row.reason === 'стоп-слово «php»'), true);
+  assert.equal(db.countPassed(), 1);
+  db.savePassed([{ id: '11', reason: 'вопросы работодателя', company: 'Фирма', title: 'Frontend' }]);
+  db.savePassed([{ id: '11', reason: 'протухло', company: 'Фирма', title: 'Frontend' }]);
+  assert.equal(db.listPassed().find(item => item.id === '11')?.reason, 'протухло');
 });
 
 test.after(() => {

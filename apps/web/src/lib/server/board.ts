@@ -1,4 +1,6 @@
-import { WEEK_MS, type PassedRow, type QueueItem } from '@cursor-chrome/hh';
+import type { PassedRow, QueueItem } from '@cursor-chrome/hh';
+
+import { isStale } from '@cursor-chrome/hh';
 
 const when = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Asia/Bishkek', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const GENERIC = new Set(['вопросы работодателя', 'вопросы работодателя, обязательные поля']);
@@ -15,7 +17,7 @@ function newer(left: QueueItem, right: QueueItem): number {
 }
 
 export function boardFrom(queue: QueueItem[], passed: PassedRow[], now = Date.now()) {
-  const waiting = queue.filter(row => row.status === 'needsHuman' && now - (row.doneAt ?? row.at) < WEEK_MS);
+  const waiting = queue.filter(row => row.status === 'needsHuman' && isStale(row.doneAt ?? row.at, now) === false);
   const clicks = queue.filter(row => row.status === 'sent').sort(newer);
 
   return {

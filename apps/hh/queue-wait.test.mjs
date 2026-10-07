@@ -1,4 +1,4 @@
-import { coveredWaiters, isStale, splitWaiters, staleWaiters, WEEK_MS } from './src/queue/queue.ts';
+import { coveredWaiters, isStale, splitWaiters, staleWaiters } from './src/queue/queue.ts';
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -37,14 +37,16 @@ test('a hidden match leaves waiting, a fresh question stays', () => {
 });
 
 test('a waiter is stale after a week, a fresh one stays', () => {
-  const now = 1_700_000_000_000;
-  assert.equal(isStale(now - WEEK_MS, now), true);
-  assert.equal(isStale(now - WEEK_MS + 1, now), false);
+  const now = Date.parse('2026-10-08T05:19:00+06:00');
+  const week = Date.parse('2026-10-01T17:14:00+06:00');
+  const fresh = Date.parse('2026-10-02T04:00:00+06:00');
+  assert.equal(isStale(week, now), true);
+  assert.equal(isStale(fresh, now), false);
   const queue = [
-    { ...row('1', 'needsHuman'), at: now - WEEK_MS },
-    { ...row('2', 'needsHuman'), at: now - WEEK_MS, doneAt: now },
+    { ...row('1', 'needsHuman'), at: week },
+    { ...row('2', 'needsHuman'), at: week, doneAt: now },
     { ...row('3', 'needsHuman'), at: now },
-    { ...row('4', 'sent'), at: now - WEEK_MS * 2 },
+    { ...row('4', 'sent'), at: week },
   ];
   assert.deepEqual(staleWaiters(queue, now).map(item => item.id), ['1']);
 });

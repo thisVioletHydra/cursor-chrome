@@ -174,7 +174,7 @@ const liveStep = $derived.by(() => {
 
 const journalRows = $derived([...logSnap.rows].reverse());
 const acceptedPool = $derived(stats.rows.filter(row => row.status === 'sent'));
-const waitingPool = $derived(stats.rows.filter(row => row.status === 'needsHuman'));
+const waitingPool = $derived(stats.rows.filter(row => row.status === 'needsHuman' && rotten(row.at) === false));
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -385,7 +385,7 @@ const cards = $derived([
 const figures = $derived([
   { label: 'Откликнуться', value: stats.today },
   { label: 'В очереди', value: stats.queued },
-  { label: 'Ждут тебя', value: stats.waiting },
+  { label: 'Ждут тебя', value: waitingPool.length },
   { label: 'Приглашения', value: stats.invitations },
   { label: 'Отказы', value: stats.discards },
   { label: 'Скрытые', value: stats.hidden },
@@ -468,12 +468,17 @@ function passedName(row: { company: string; title: string; id: string }): string
   return row.id;
 }
 
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const BISHKEK_MS = 6 * 60 * 60 * 1000;
 const chipClass = 'relative inline-flex h-9 min-h-9 cursor-pointer items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition hover:border-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-[0.98]';
 const binClass = 'inline-flex h-7 min-h-7 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-[0.98]';
 
+function bishkekDay(at: number): number {
+  return Math.floor((at + BISHKEK_MS) / DAY_MS);
+}
+
 function rotten(at: number | undefined): boolean {
-  return typeof at === 'number' && now - at >= WEEK_MS;
+  return typeof at === 'number' && Number.isFinite(at) && bishkekDay(now) - bishkekDay(at) >= 7;
 }
 
 const statusText: Record<string, string> = {
@@ -698,7 +703,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
         type="button"
         aria-pressed={board === 'waiting'}
         onclick={() => showBoard('waiting')}
-      >Ждуны {@render chipCount(stats.waiting)}</button>
+      >Ждуны {@render chipCount(waitingPool.length)}</button>
     </div>
     <div class="flex items-center gap-4">
       {#if waitNote}
@@ -770,10 +775,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
                   </form>
                 </td>
                 <td class="overflow-hidden pl-[0.8rem]!">
-                  <a class="block truncate text-xs underline-offset-4 hover:underline {rotten(row.at) ? 'text-zinc-600' : 'text-zinc-400'}" href={row.url} target="_blank" rel="noreferrer">{plainLabel(row.company)} · {plainLabel(row.title)}</a>
-                  {#if rotten(row.at)}
-                    <span class="text-xs text-zinc-600">протухло</span>
-                  {/if}
+                  <a class="block truncate text-xs underline-offset-4 hover:underline text-zinc-400" href={row.url} target="_blank" rel="noreferrer">{plainLabel(row.company)} · {plainLabel(row.title)}</a>
                 </td>
                 <td>
                   <p class="line-clamp-2 text-sm leading-snug text-zinc-200" title={row.reason || 'не записано'}>{row.reason || 'не записано'}</p>
