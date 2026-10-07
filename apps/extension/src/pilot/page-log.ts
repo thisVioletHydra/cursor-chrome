@@ -704,7 +704,7 @@ async function postPulse(line: string): Promise<void> {
   const stamp = pilotStamp();
   const body = await pilotFetch('/api/pulse', {
     method: 'POST',
-    body: JSON.stringify({ line, device: await deviceId() }),
+    body: JSON.stringify({ line, device: await deviceId(), version: browser.runtime.getManifest().version }),
     signal: AbortSignal.timeout(8_000),
   });
   if (body === null || stamp !== pilotStamp())

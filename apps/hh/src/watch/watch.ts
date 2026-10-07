@@ -38,6 +38,7 @@ type Bag = {
   tickAt: number;
   rows: WatchRow[];
   pulse: { at: number; line: string };
+  clientVersion: string;
   deaths: Set<string>;
   captchaTold: boolean;
   lastStage: string;
@@ -63,6 +64,7 @@ function freshBag(): Bag {
     tickAt: 0,
     rows: [],
     pulse: { at: 0, line: '' },
+    clientVersion: '',
     deaths: new Set(),
     captchaTold: false,
     lastStage: '',
@@ -135,11 +137,28 @@ export function startWatch(send: (text: string) => Promise<void>): void {
   });
 }
 
-export async function watchPulse(line: string): Promise<boolean> {
+const EXTENSION_QUIET_MS = 3 * 60_000;
+
+export function extensionLamp(expected: string, auto: boolean, now = Date.now()): 'ok' | 'stale' | 'quiet' {
+  const seen = bag();
+  if (seen.pulse.at === 0)
+    return auto ? 'stale' : 'quiet';
+
+  if (expected.length > 0 && seen.clientVersion !== expected)
+    return 'stale';
+
+  if (auto && now - seen.pulse.at > EXTENSION_QUIET_MS)
+    return 'stale';
+
+  return 'ok';
+}
+
+export async function watchPulse(line: string, version = ''): Promise<boolean> {
   const text = clip(line.replace(MODE_TAG, ''));
   if (text.length === 0)
     return pilotStop();
 
+  bag().clientVersion = version.trim();
   bag().silenceNoted = false;
   const previous = bag().pulse.line;
   if (readingHang(text) && pulseElapsedMs(text) >= APPLY_CAP_MS) {

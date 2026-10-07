@@ -1,10 +1,11 @@
 import type { RequestHandler } from './$types';
 
-import { hiddenCount, parkStaleWaiters, passedCount, readMemory, readPassed, readQueue, readState, seenCount, watchView } from '@cursor-chrome/hh';
+import { extensionLamp, hiddenCount, parkStaleWaiters, passedCount, readMemory, readPassed, readQueue, readState, seenCount, watchView } from '@cursor-chrome/hh';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { pruneShelvedWaiters } from '$lib/server/admin-actions';
 import { boardFrom } from '$lib/server/board';
+import { extensionBuild } from '$lib/server/extension-build';
 import { isCreator } from '$lib/server/secrets';
 import { githubLogin, readSession } from '$lib/server/session';
 
@@ -27,6 +28,7 @@ const blank = {
   autopilot: { auto: false, lastNote: '', runAt: 0 },
   judged: 0,
   pulse: { line: '' },
+  extensionLamp: 'quiet',
   log: [],
 };
 
@@ -63,6 +65,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
     autopilot: { auto: state.auto, lastNote: state.lastNote, runAt: state.auto ? state.runAt : 0 },
     judged,
     pulse: watch.pulse,
+    extensionLamp: extensionLamp(await extensionBuild(), state.auto),
     log: watch.rows,
   });
 };

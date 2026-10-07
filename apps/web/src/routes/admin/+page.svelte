@@ -25,6 +25,7 @@ let copyTone = $state<'idle' | 'ok' | 'fail'>('idle');
 let copyTimer: ReturnType<typeof setTimeout> | undefined;
 let now = $state(Date.now());
 let board = $state<'accepted' | 'hidden' | 'waiting'>('accepted');
+let extensionLamp = $state<'ok' | 'stale' | 'quiet'>(data.extensionLamp === 'stale' || data.extensionLamp === 'quiet' ? data.extensionLamp : 'ok');
 let dropping = $state(false);
 let waitNote = $state('');
 let waitOk = $state(false);
@@ -87,6 +88,7 @@ async function refresh(mine: number): Promise<void> {
     autopilot?: { auto: boolean; lastNote: string; runAt: number };
     judged?: number;
     pulse?: { line?: string };
+    extensionLamp?: string;
     log?: unknown;
   };
   if (mine !== seenView)
@@ -97,6 +99,8 @@ async function refresh(mine: number): Promise<void> {
       stats = { ...stats, ...body.figures, rows: body.rows ?? stats.rows, passed: body.passed ?? stats.passed, judged: body.judged ?? stats.judged, autopilot: body.autopilot ?? stats.autopilot };
 
     polling = body.polling === true;
+    if (body.extensionLamp === 'ok' || body.extensionLamp === 'stale' || body.extensionLamp === 'quiet')
+      extensionLamp = body.extensionLamp;
   }
 
   notePulse(typeof body.pulse?.line === 'string' ? body.pulse.line : '');
@@ -493,7 +497,7 @@ const checks = $derived([
   { ok: data.ready.extension, label: 'Ссылка расширения выпущена', miss: 'Ссылки нет. Выпусти её в', href: '/admin/extension', link: 'Extension' },
   { ok: data.ready.live, label: 'Боевой режим', miss: 'Боевой режим выключен. Включи его кнопкой ниже.', href: '', link: '' },
 ]);
-const allGreen = $derived(checks.every(row => row.ok));
+const allGreen = $derived(checks.every(row => row.ok) && extensionLamp !== 'stale');
 
 function restartDetail(data: unknown): { ok: boolean; detail: string } {
   if (typeof data !== 'object' || data === null)
@@ -597,6 +601,12 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
         {/if}
       </li>
     {/each}
+    <li>
+      <div class="flex items-center gap-2">
+        <span class="size-2 shrink-0 rounded-full {extensionLamp === 'stale' ? 'bg-amber-300' : extensionLamp === 'ok' ? 'bg-emerald-400' : 'bg-zinc-600'}"></span>
+        <span class={extensionLamp === 'stale' ? 'text-xs text-amber-200' : 'text-xs text-zinc-400'}>{extensionLamp === 'stale' ? 'обнови расширение браузера' : 'Расширение'}</span>
+      </div>
+    </li>
   </ul>
   </div>
 </section>

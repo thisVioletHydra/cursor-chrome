@@ -1,12 +1,13 @@
 import type { LayoutServerLoad } from './$types';
 
-import { COVER_LETTER, hiddenCount, parkStaleWaiters, passedCount, PRESETS, providerName, readMemory, readPassed, readQueue, readState, seenCount } from '@cursor-chrome/hh';
+import { COVER_LETTER, extensionLamp, hiddenCount, parkStaleWaiters, passedCount, PRESETS, providerName, readMemory, readPassed, readQueue, readState, seenCount } from '@cursor-chrome/hh';
 import { boardFrom } from '$lib/server/board';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { redirect } from '@sveltejs/kit';
 import { coolLeft, pruneShelvedWaiters } from '$lib/server/admin-actions';
 import { guestLinks, storedLinks } from '$lib/server/checks';
 import { chainOf, collapseChain, DEFAULT_QUERY, ensureAccount, GUEST_BALANCE, isCreator, publishSecrets, VACANCY_RUB, withChain, writeAccount } from '$lib/server/secrets';
+import { extensionBuild } from '$lib/server/extension-build';
 import { githubLogin, readSession } from '$lib/server/session';
 
 function emptyStats() {
@@ -57,6 +58,7 @@ function guestShell() {
       extension: false,
       live: false,
     },
+    extensionLamp: 'quiet' as const,
     stats: emptyStats(),
   };
 }
@@ -108,6 +110,7 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
 
   const links = preview ? guestLinks() : await storedLinks(session.login);
   const telegram = links.find(item => item.name === 'Телега');
+  const stats = await statsOf(preview);
 
   return {
     login: preview ? 'гость' : session.login,
@@ -151,6 +154,7 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
       extension: preview ? false : account.extToken.length > 0,
       live: preview ? false : account.hhLive === '1',
     },
-    stats: await statsOf(preview),
+    extensionLamp: preview ? 'quiet' as const : extensionLamp(await extensionBuild(), stats.autopilot.auto),
+    stats,
   };
 };

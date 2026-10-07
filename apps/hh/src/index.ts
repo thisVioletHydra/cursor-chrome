@@ -10,5 +10,5 @@ export { applyOutcomes, busyAmong, coveredWaiters, dropWaiters, isStale, markDon
 export type { Outcome, OutcomeChange, QueueItem, QueueStatus } from './queue/index.ts';
 export { EMPTY_RULES, connectApp, fitsTitle, keepSearchTitle, parseRules, rulesFromEnv, scan, scanBlock, searchTitleSkip, splitWords, startTicker } from './scan/index.ts';
 export type { Report, Rules, TickInput, Vacancy } from './scan/index.ts';
-export { bindWatch, startWatch, takePilotStart, watchCaptcha, watchDeath, watchNote, watchPulse, watchRestart, watchStop, watchView } from './watch/index.ts';
+export { bindWatch, extensionLamp, startWatch, takePilotStart, watchCaptcha, watchDeath, watchNote, watchPulse, watchRestart, watchStop, watchView } from './watch/index.ts';
 export type { WatchRow, WatchWho } from './watch/index.ts';
