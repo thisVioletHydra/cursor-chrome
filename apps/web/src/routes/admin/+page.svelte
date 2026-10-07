@@ -463,8 +463,8 @@ function passedName(row: { company: string; title: string; id: string }): string
 }
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-const chipClass = 'inline-flex h-9 min-h-9 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition-colors hover:border-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400';
-const binClass = 'inline-flex h-7 min-h-7 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400';
+const chipClass = 'relative inline-flex h-9 min-h-9 cursor-pointer items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition hover:border-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-[0.98]';
+const binClass = 'inline-flex h-7 min-h-7 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-[0.98]';
 
 function rotten(at: number | undefined): boolean {
   return typeof at === 'number' && now - at >= WEEK_MS;
@@ -670,30 +670,33 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
 </section>
 
 <section class="mb-8">
-  <div class="mb-3 flex items-center justify-between gap-4">
+  {#snippet chipCount(count: number)}
+    <span class="pointer-events-none absolute top-0 right-0 flex h-4 min-w-4 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#1a1f29] px-1 text-[10px] leading-none font-medium text-zinc-500 tabular-nums">{count}</span>
+  {/snippet}
+  <div class="mb-3 flex items-center justify-between gap-4 pt-2">
     <div class="flex items-center gap-2" role="group" aria-label="Список вакансий">
       <button
         class="{chipClass} {board === 'accepted' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
         type="button"
         aria-pressed={board === 'accepted'}
         onclick={() => showBoard('accepted')}
-      >Принятые <span class="min-w-5 text-center text-xs tabular-nums opacity-70">{stats.accepted ?? 0}</span></button>
+      >Принятые {@render chipCount(stats.accepted ?? 0)}</button>
       <button
         class="{chipClass} {board === 'waiting' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
         type="button"
         aria-pressed={board === 'waiting'}
         onclick={() => showBoard('waiting')}
-      >Ждуны <span class="min-w-5 text-center text-xs tabular-nums opacity-70">{stats.waiting}</span></button>
+      >Ждуны {@render chipCount(stats.waiting)}</button>
     </div>
     <button
       class="{binClass} {board === 'hidden' ? 'border-white/30 bg-white/10 text-zinc-200' : 'border-white/10 text-zinc-500 hover:text-zinc-300'}"
       type="button"
       aria-pressed={board === 'hidden'}
       onclick={() => showBoard('hidden')}
-    >Корзина <span class="min-w-5 text-center tabular-nums">{stats.passedTotal ?? stats.passed.length}</span></button>
+    >Корзина <span class="tabular-nums">{stats.passedTotal ?? stats.passed.length}</span></button>
   </div>
+  {#if board === 'waiting' && (waitNote.length > 0 || stats.waiting > 0)}
   <div class="mb-2 flex min-h-6 flex-wrap items-center justify-end gap-x-4 gap-y-1">
-    {#if board === 'waiting' && (waitNote.length > 0 || stats.waiting > 0)}
       {#if waitNote}
         <p class="mr-auto text-xs {waitOk ? 'text-emerald-400' : 'text-rose-300'}">{waitNote}</p>
       {/if}
@@ -705,8 +708,8 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
           </button>
         </form>
       {/if}
-    {/if}
   </div>
+  {/if}
   {#snippet vacancyLink(href: string, label: string, at: number | undefined)}
     <a class="underline-offset-4 hover:underline {rotten(at) ? 'text-zinc-500' : 'text-zinc-200'}" href={href} target="_blank" rel="noreferrer">{label}</a>
   {/snippet}
