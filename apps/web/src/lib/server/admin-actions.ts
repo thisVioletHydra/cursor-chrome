@@ -389,26 +389,6 @@ export async function setHoursAdmin({ request, cookies }: RequestEvent) {
   return { ok: true, detail: 'Сохранено', hours: hhHours !== '0' };
 }
 
-export async function parkStaleWaiters(queue: QueueItem[]): Promise<QueueItem[]> {
-  const picked = staleWaiters(queue);
-  if (picked.length === 0)
-    return queue;
-
-  const ids = picked.map(row => row.id);
-  await remember(ids);
-  await forgetLinks(ids);
-  await notePassed(picked.map(row => ({
-    id: row.id,
-    reason: 'протухло',
-    company: row.company,
-    title: row.title,
-  })));
-  await dropWaiters(ids);
-  const gone = new Set(ids);
-
-  return queue.filter(row => gone.has(row.id) === false);
-}
-
 export async function pruneShelvedWaiters(queue: QueueItem[]): Promise<QueueItem[]> {
   const waiting = queue.filter(row => row.status === 'needsHuman').map(row => row.id);
   const ids = coveredWaiters(queue, await shelvedAmong(waiting));

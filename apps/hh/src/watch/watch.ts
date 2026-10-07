@@ -2,6 +2,7 @@ import { storePath, workHours } from '../diary/memory.ts';
 import { readState, writeState } from '../diary/state.ts';
 import { parseJsonLoose, writeJsonAtomic } from '../diary/store.ts';
 import { ownerLogin, runTenant, tenantLogin } from '../diary/tenant.ts';
+import { parkStaleWaiters } from '../queue/park.ts';
 
 import path from 'node:path';
 import process from 'node:process';
@@ -243,6 +244,7 @@ export async function watchRestart(): Promise<void> {
   bag().pulse = { at: Date.now(), line: shortStep(bag().pulse.line) ? bag().pulse.line : '' };
   bag().pilotStart = true;
   try {
+    await parkStaleWaiters();
     await writeState({ auto: true });
   }
   catch (error) {
