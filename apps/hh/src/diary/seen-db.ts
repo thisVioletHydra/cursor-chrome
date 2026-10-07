@@ -19,6 +19,7 @@ const RELOOK_REASON = 'пересмотр';
 const RELOOK_STALE_MS = 20 * 60 * 1000;
 
 export const HIDE_REASON = 'скрыл, уже видели';
+const BASKET_ASIDE = ['', 'уже видели', RELOOK_REASON, HIDE_REASON, LEGACY_HIDE];
 
 const QUIET_REASON = new Set(['', 'уже видели', 'уже в очереди']);
 
@@ -177,7 +178,7 @@ export function countHidden(): number {
 }
 
 export function countPassed(): number {
-  const row = openDatabase().prepare(`SELECT COUNT(*) AS total FROM passed WHERE reason != '' AND reason != 'уже видели' AND reason != 'пересмотр'`).get();
+  const row = openDatabase().prepare(`SELECT COUNT(*) AS total FROM passed WHERE reason NOT IN (${asideMarks()})`).get(...BASKET_ASIDE);
   if (row === undefined)
     return 0;
 
@@ -220,16 +221,16 @@ export function listPassed(limit = PASSED_LIMIT): PassedRow[] {
   const rows = openDatabase().prepare(`
     SELECT id, at, reason, company, title
     FROM passed
-    WHERE reason != '' AND reason != 'уже видели' AND reason != 'пересмотр'
+    WHERE reason NOT IN (${asideMarks()})
     ORDER BY at DESC
     LIMIT ?
-  `).all(cap);
+  `).all(...BASKET_ASIDE, cap);
   const out: PassedRow[] = [];
   for (const row of rows) {
     const id = textId(row.id);
     const at = wholeAt(row.at);
     const reason = sqlText(row.reason);
-    if (id === null || at === null || reason.length === 0 || reason === 'уже видели' || reason === RELOOK_REASON)
+    if (id === null || at === null || BASKET_ASIDE.includes(reason))
       continue;
 
     out.push({
@@ -376,6 +377,10 @@ export function forgetPassed(ids: readonly string[]): void {
 
   const marks = nums.map(() => '?').join(', ');
   openDatabase().prepare(`DELETE FROM passed WHERE id IN (${marks})`).run(...nums);
+}
+
+function asideMarks(): string {
+  return BASKET_ASIDE.map(() => '?').join(', ');
 }
 
 function shownHideReason(reason: string): string {

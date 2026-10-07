@@ -20,7 +20,9 @@ test('relook opens a canned hide and leaves a real skip', async () => {
   assert.deepEqual(claimed.map(row => row.id), ['137776562']);
   assert.deepEqual(await db.lookupSeen(['137776562', '3']), ['3']);
   assert.deepEqual(db.claimRelook([], 8).map(row => row.id), []);
+  db.savePassed([{ id: '9', reason: 'скрыл, уже видели', company: '', title: '' }]);
   assert.deepEqual(db.listPassed().map(row => row.id), ['2']);
+  assert.equal(db.countPassed(), 1);
   const again = db.claimRelook([], 8, Date.now() + 21 * 60 * 1000);
   assert.equal(again[0]?.id, '137776562');
   db.forgetPassed(['137776562']);
