@@ -1,6 +1,6 @@
 import type { LayoutServerLoad } from './$types';
 
-import { COVER_LETTER, hiddenCount, passedCount, PRESETS, providerName, readMemory, readPassed, readQueue, readState, seenCount } from '@cursor-chrome/hh';
+import { COVER_LETTER, hiddenCount, parkStaleWaiters, passedCount, PRESETS, providerName, readMemory, readPassed, readQueue, readState, seenCount } from '@cursor-chrome/hh';
 import { boardFrom } from '$lib/server/board';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { redirect } from '@sveltejs/kit';
@@ -65,6 +65,7 @@ async function statsOf(preview: boolean) {
   if (preview)
     return emptyStats();
 
+  await parkStaleWaiters();
   const [loaded, state, judged, hidden, passed, passedTotal, memory] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount(), readPassed(), passedCount(), readMemory()]);
   const queue = await pruneShelvedWaiters(loaded);
   const board = boardFrom(queue, passed);

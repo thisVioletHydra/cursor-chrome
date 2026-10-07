@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 
-import { hiddenCount, passedCount, readMemory, readPassed, readQueue, readState, seenCount, watchView } from '@cursor-chrome/hh';
+import { hiddenCount, parkStaleWaiters, passedCount, readMemory, readPassed, readQueue, readState, seenCount, watchView } from '@cursor-chrome/hh';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { pruneShelvedWaiters } from '$lib/server/admin-actions';
@@ -38,6 +38,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
   if (isCreator(session.login) && cookies.get('preview') === 'guest')
     return json(blank);
 
+  await parkStaleWaiters();
   const [loaded, state, judged, hidden, passed, passedTotal, memory] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount(), readPassed(), passedCount(), readMemory()]);
   const queue = await pruneShelvedWaiters(loaded);
   const watch = watchView();
