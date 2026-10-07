@@ -885,7 +885,21 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
       };
     }}
   >
-    <h3 class="text-base font-semibold">Часы поиска</h3>
+    <div class="flex items-center gap-2">
+      <h3 class="text-base font-semibold">Часы поиска</h3>
+      <span class="group/hours relative">
+        <button
+          class="grid size-5 place-items-center rounded-full border border-white/15 text-[11px] leading-none text-zinc-400 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
+          type="button"
+          aria-describedby="hours-hint"
+        >i</button>
+        <span
+          id="hours-hint"
+          role="tooltip"
+          class="invisible absolute top-7 left-0 z-20 w-72 rounded-xl border border-white/10 bg-[#10131a] px-3 py-2 text-xs leading-snug text-zinc-300 opacity-0 shadow-lg group-hover/hours:visible group-hover/hours:opacity-100 group-focus-within/hours:visible group-focus-within/hours:opacity-100"
+        >Включено — бот ищет и откликается только с 9:00 до 22:00 по Москве. Выключено — окно снято, работает в любое время. Так оставляют для проверки.</span>
+      </span>
+    </div>
     <p class="mt-1 text-sm text-zinc-300">{hoursLine}</p>
     <input name="hhHours" type="hidden" value={hoursOn ? '0' : '1'} />
     <div class="mt-3 flex flex-wrap items-center gap-3">
