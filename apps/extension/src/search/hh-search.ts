@@ -17,7 +17,7 @@ const FEED_KEY = 'лента';
 const FEED = 'https://hh.ru/search/vacancy?enable_snippets=true&ored_clusters=true&search_period=7&hhtmFromLabel=search_order_button&hhtmFrom=vacancy_search_list';
 const LIGHT = 'https://hh.ru/search/vacancy?enable_snippets=true&ored_clusters=true&work_format=REMOTE&search_period=1&hhtmFromLabel=search_order_button&hhtmFrom=vacancy_search_list';
 const LIGHT_CAP = 10;
-const WORD_FALLBACK = ['Frontend', 'Vue.js', 'vue', 'TypeScript', 'JavaScript', 'React', 'Node.js', 'Fullstack', 'NestJS', 'GraphQL'];
+const WORD_FALLBACK = ['Frontend', 'Frontend AI', 'Vue.js', 'vue', 'TypeScript', 'JavaScript', 'React', 'Node.js', 'Fullstack', 'NestJS', 'GraphQL'];
 type FeedMode = 'feed' | 'words' | 'light';
 let feedMode: FeedMode = 'feed';
 let wordQuery = '';

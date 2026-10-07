@@ -1,7 +1,7 @@
 import type { State } from '@cursor-chrome/hh';
 import type { RequestHandler } from './$types';
 
-import { COVER_LETTER, DEFAULT_QUERY, HIDE_REASON, busyAmong, coveredWaiters, dayOpen, dropWaiters, forgetAllLinks, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, moscowDay, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readQueue, readState, rememberSearchPage, searchPages, splitQueries, stepWalk, takePilotStart, takeRelook, walkFrom, workHours, writeState } from '@cursor-chrome/hh';
+import { COVER_LETTER, DEFAULT_QUERY, HIDE_REASON, busyAmong, coveredWaiters, dayOpen, dropWaiters, forgetAllLinks, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, moscowDay, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readQueue, readState, rememberSearchPage, searchPages, splitQueries, stepWalk, takePilotStart, takeRelook, walkFrom, withFrontAi, workHours, writeState } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { parkStaleWaiters } from '$lib/server/admin-actions';
 import { extLogin } from '$lib/server/ext-auth';
@@ -18,7 +18,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
   const state = await walkToday(loaded);
   const letter = account.coverLetter || COVER_LETTER;
   const saved = ['лента'];
-  const words = splitQueries(account.hhQuery.trim() || DEFAULT_QUERY).filter(line => line.startsWith('-') === false).slice(0, 20);
+  const words = withFrontAi(splitQueries(account.hhQuery.trim() || DEFAULT_QUERY).filter(line => line.startsWith('-') === false)).slice(0, 20);
   const stop = state.hung === true && state.auto === false;
   const auto = state.auto === true;
   const listen = url.searchParams.get('listen') === '1';

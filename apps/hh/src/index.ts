@@ -2,7 +2,7 @@ export { ping, pingReasons } from './cli/index.ts';
 export { dayOpen, dropPassed, forgetAllLinks, forgetLinks, forgetSearchPages, HIDE_REASON, heldAmong, hiddenCount, keepLinks, knownAmong, markSent, moscowDay, moscowHour, noteHidden, notePassed, ownerLogin, parseJsonLoose, passedCount, readLinks, readMemory, readPassed, readState, remember, rememberSearchPage, roomToday, runTenant, searchPages, seenCount, shelvedAmong, storePath, takeRelook, tenantLogin, workHours, writeJsonAtomic, writeState } from './diary/index.ts';
 export type { HeldLink, Memory, PassedRow, State } from './diary/index.ts';
 export { LOOK_PER_START, MAX_ATTEMPTS, QUEUE_TARGET, SCAN_EVERY_MS, SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from './limits.ts';
-export { burstPages, DEFAULT_QUERY, freshWalk, serveQueries, splitQueries, stepWalk, suggestQueries, walkFrom } from './mix/index.ts';
+export { burstPages, DEFAULT_QUERY, freshWalk, serveQueries, splitQueries, stepWalk, suggestQueries, walkFrom, withFrontAi } from './mix/index.ts';
 export type { QueryCursor, Walk, WalkPhase } from './mix/index.ts';
 export { COVER_LETTER, FACTS, PRESETS, answerQuestion, asAtsFlags, asProvider, asQuestion, askChain, atsFirst, atsSource, chainFromEnv, corpusOn, corpusState, distillCorpus, keepVacancy, modelFromChain, modelsDown, parseChain, pingChain, presetOf, probeProvider, providerName, readProbeLog, scoreAts } from './model/index.ts';
 export type { Answer, AtsFlag, Preset, ProbeNote, Provider, ProviderId, Question } from './model/index.ts';

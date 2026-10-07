@@ -5,6 +5,7 @@ import { askChain } from '../model/model.ts';
 
 const DEFAULT_QUERIES = [
   'Frontend',
+  'Frontend AI',
   'Vue.js',
   'vue',
   'TypeScript',
@@ -17,6 +18,19 @@ const DEFAULT_QUERIES = [
 ];
 
 export const DEFAULT_QUERY = DEFAULT_QUERIES.join('\n');
+
+const FRONT_AI = 'Frontend AI';
+
+export function withFrontAi(queries: readonly string[]): string[] {
+  if (queries.some(frontAiQuery))
+    return [...queries];
+
+  const at = queries.findIndex(query => /^frontend$/i.test(query.trim()));
+  if (at < 0)
+    return [FRONT_AI, ...queries];
+
+  return [...queries.slice(0, at + 1), FRONT_AI, ...queries.slice(at + 1)];
+}
 
 const MAX_QUERIES = 5;
 const SUGGEST_TRY_MS = 9_000;
@@ -70,4 +84,11 @@ export function splitQueries(text: string): string[] {
   const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
 
   return [...new Set(lines)];
+}
+
+function frontAiQuery(query: string): boolean {
+  const front = /frontend|front[\s-]*end|фронтенд|фронтэнд/i.test(query);
+  const ai = /(?:^|[^\p{L}\p{N}])ai(?=$|[^\p{L}\p{N}])/iu.test(query);
+
+  return front && ai;
 }
