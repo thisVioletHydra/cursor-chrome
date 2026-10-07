@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { hiddenCount, passedCount, readMemory, readPassed, readQueue, readState, seenCount, watchView } from '@cursor-chrome/hh';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
-import { pruneShelvedWaiters } from '$lib/server/admin-actions';
+import { parkStaleWaiters, pruneShelvedWaiters } from '$lib/server/admin-actions';
 import { boardFrom } from '$lib/server/board';
 import { isCreator } from '$lib/server/secrets';
 import { githubLogin, readSession } from '$lib/server/session';
@@ -38,8 +38,9 @@ export const GET: RequestHandler = async ({ cookies }) => {
   if (isCreator(session.login) && cookies.get('preview') === 'guest')
     return json(blank);
 
-  const [loaded, state, judged, hidden, passed, passedTotal, memory] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount(), readPassed(), passedCount(), readMemory()]);
-  const queue = await pruneShelvedWaiters(loaded);
+  const loaded = await readQueue();
+  const queue = await parkStaleWaiters(await pruneShelvedWaiters(loaded));
+  const [state, judged, hidden, passed, passedTotal, memory] = await Promise.all([readState(), seenCount(), hiddenCount(), readPassed(), passedCount(), readMemory()]);
   const watch = watchView();
   const board = boardFrom(queue, passed);
 

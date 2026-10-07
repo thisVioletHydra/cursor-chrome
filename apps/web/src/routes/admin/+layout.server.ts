@@ -4,7 +4,7 @@ import { COVER_LETTER, hiddenCount, passedCount, PRESETS, providerName, readMemo
 import { boardFrom } from '$lib/server/board';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { redirect } from '@sveltejs/kit';
-import { coolLeft, pruneShelvedWaiters } from '$lib/server/admin-actions';
+import { coolLeft, parkStaleWaiters, pruneShelvedWaiters } from '$lib/server/admin-actions';
 import { guestLinks, storedLinks } from '$lib/server/checks';
 import { chainOf, collapseChain, DEFAULT_QUERY, ensureAccount, GUEST_BALANCE, isCreator, publishSecrets, VACANCY_RUB, withChain, writeAccount } from '$lib/server/secrets';
 import { githubLogin, readSession } from '$lib/server/session';
@@ -65,8 +65,9 @@ async function statsOf(preview: boolean) {
   if (preview)
     return emptyStats();
 
-  const [loaded, state, judged, hidden, passed, passedTotal, memory] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount(), readPassed(), passedCount(), readMemory()]);
-  const queue = await pruneShelvedWaiters(loaded);
+  const loaded = await readQueue();
+  const queue = await parkStaleWaiters(await pruneShelvedWaiters(loaded));
+  const [state, judged, hidden, passed, passedTotal, memory] = await Promise.all([readState(), seenCount(), hiddenCount(), readPassed(), passedCount(), readMemory()]);
   const board = boardFrom(queue, passed);
 
   return {

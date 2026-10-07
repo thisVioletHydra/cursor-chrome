@@ -693,20 +693,12 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
       type="button"
       aria-pressed={board === 'hidden'}
       onclick={() => showBoard('hidden')}
-    >Скрытые <span class="tabular-nums">{stats.passedTotal ?? stats.passed.length}</span></button>
+    >Корзина <span class="tabular-nums">{stats.passedTotal ?? stats.passed.length}</span></button>
   </div>
   {#if board === 'waiting' && (waitNote.length > 0 || stats.waiting > 0)}
     <div class="mb-2 flex min-h-6 flex-wrap items-center justify-end gap-x-4 gap-y-1">
       {#if waitNote}
         <p class="mr-auto text-xs {waitOk ? 'text-emerald-400' : 'text-rose-300'}">{waitNote}</p>
-      {/if}
-      {#if stats.waiting > 0 && (stats.stale ?? 0) > 0}
-        <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>
-          <input type="hidden" name="stale" value="1" />
-          <button class="cursor-pointer bg-transparent text-xs text-zinc-400 underline-offset-4 hover:text-zinc-100 hover:underline disabled:cursor-wait disabled:opacity-50" type="submit" disabled={dropping} title="Сидят в ждунах дольше 7 дней">
-            {dropping ? 'Убираю' : `Убрать протухшие · ${stats.stale ?? 0}`}
-          </button>
-        </form>
       {/if}
       {#if stats.waiting > 0}
         <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>
@@ -806,7 +798,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
         </tbody>
       </table>
     {:else}
-      <p class="px-5 py-8 text-sm text-zinc-500">Скрытых пока нет.</p>
+      <p class="px-5 py-8 text-sm text-zinc-500">Корзина пустая.</p>
     {/if}
   </div>
 </section>
