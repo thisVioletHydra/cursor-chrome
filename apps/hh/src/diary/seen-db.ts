@@ -12,7 +12,7 @@ const SWAY = 0.16;
 const DAY_LOW = Math.floor(SEND_PER_DAY * (1 - SWAY));
 const DAY_HIGH = Math.ceil(SEND_PER_DAY * (1 + SWAY));
 const INSERT_STEP = 5_000;
-const PASSED_LIMIT = 80;
+const PASSED_LIMIT = 500;
 
 const LEGACY_HIDE = 'не подходит профессия';
 const RELOOK_REASON = 'пересмотр';

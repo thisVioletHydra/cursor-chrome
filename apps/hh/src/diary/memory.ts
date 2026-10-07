@@ -57,7 +57,7 @@ export function dropPassed(ids: readonly string[]): Promise<void> {
   });
 }
 
-export function readPassed(limit = 80): Promise<PassedRow[]> {
+export function readPassed(limit = 500): Promise<PassedRow[]> {
   return turn(async () => listPassed(limit));
 }
 

@@ -11,14 +11,14 @@ function waitWhy(hints: string[] | undefined): string {
 }
 
 export function boardFrom(queue: QueueItem[], passed: PassedRow[], now = Date.now()) {
-  const waiting = queue.filter(row => row.status === 'needsHuman');
-  const rest = queue.filter(row => row.status !== 'needsHuman');
+  const waiting = queue.filter(row => row.status === 'needsHuman' && now - (row.doneAt ?? row.at) < WEEK_MS);
+  const clicks = queue.filter(row => row.status === 'sent');
 
   return {
-    accepted: rest.length,
+    accepted: clicks.length,
     waiting: waiting.length,
-    stale: waiting.filter(row => now - (row.doneAt ?? row.at) >= WEEK_MS).length,
-    rows: [...waiting, ...rest].slice(0, 40).map((row) => {
+    stale: 0,
+    rows: [...clicks, ...waiting].map((row) => {
       const at = row.doneAt ?? row.at;
 
       return {

@@ -173,7 +173,7 @@ const liveStep = $derived.by(() => {
 });
 
 const journalRows = $derived([...logSnap.rows].reverse());
-const acceptedPool = $derived(stats.rows.filter(row => row.status !== 'needsHuman'));
+const acceptedPool = $derived(stats.rows.filter(row => row.status === 'sent'));
 const waitingPool = $derived(stats.rows.filter(row => row.status === 'needsHuman'));
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -692,13 +692,13 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
         type="button"
         aria-pressed={board === 'accepted'}
         onclick={() => showBoard('accepted')}
-      >Принятые {@render chipCount(acceptedPool.length)}</button>
+      >Принятые {@render chipCount(stats.accepted ?? acceptedPool.length)}</button>
       <button
         class="{chipClass} {board === 'waiting' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
         type="button"
         aria-pressed={board === 'waiting'}
         onclick={() => showBoard('waiting')}
-      >Ждуны {@render chipCount(waitingPool.length)}</button>
+      >Ждуны {@render chipCount(stats.waiting)}</button>
     </div>
     <div class="flex items-center gap-4">
       {#if waitNote}
@@ -717,7 +717,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
         type="button"
         aria-pressed={board === 'hidden'}
         onclick={() => showBoard('hidden')}
-      >Корзина <span class="tabular-nums">{stats.passed.length}</span></button>
+      >Корзина <span class="tabular-nums">{stats.passedTotal ?? stats.passed.length}</span></button>
     </div>
   </div>
   {#snippet vacancyLink(href: string, label: string, at: number | undefined)}
@@ -747,7 +747,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
           </tbody>
         </table>
       {:else}
-        <p class="px-5 py-8 text-sm text-zinc-500">Очередь пустая.</p>
+        <p class="px-5 py-8 text-sm text-zinc-500">Откликов пока нет.</p>
       {/if}
     {:else if board === 'waiting'}
       {#if waitingPool.length > 0}
