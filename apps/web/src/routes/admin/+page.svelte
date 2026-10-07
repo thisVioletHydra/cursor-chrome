@@ -656,7 +656,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
     {#if logSnap.rows.length === 0}
       <p class="px-3 py-2 text-zinc-500">Пока тихо. Сюда попадают смена шага и поломки, не каждая секунда.</p>
     {:else}
-      <ul use:keepLog class="max-h-80 overflow-x-hidden overflow-y-auto px-3 py-2 [overflow-anchor:none]" onscroll={onLogScroll}>
+      <ul use:keepLog class="max-h-[40rem] overflow-x-hidden overflow-y-auto px-3 py-2 [overflow-anchor:none]" onscroll={onLogScroll}>
         {#each journalRows as row (logKey(row))}
           <li data-k={logKey(row)} class="flex items-baseline gap-x-2 py-0.5">
             <time class="shrink-0 text-xs text-zinc-500 tabular-nums whitespace-nowrap">{clock(row.at)}</time>
