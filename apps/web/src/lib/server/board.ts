@@ -10,9 +10,13 @@ function waitWhy(hints: string[] | undefined): string {
   return (specific.length > 0 ? specific : rows).join(' · ');
 }
 
+function newer(left: QueueItem, right: QueueItem): number {
+  return (right.doneAt ?? right.at) - (left.doneAt ?? left.at);
+}
+
 export function boardFrom(queue: QueueItem[], passed: PassedRow[], now = Date.now()) {
   const waiting = queue.filter(row => row.status === 'needsHuman' && now - (row.doneAt ?? row.at) < WEEK_MS);
-  const clicks = queue.filter(row => row.status === 'sent');
+  const clicks = queue.filter(row => row.status === 'sent').sort(newer);
 
   return {
     accepted: clicks.length,
