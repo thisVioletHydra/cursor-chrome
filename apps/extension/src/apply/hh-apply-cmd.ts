@@ -1,12 +1,12 @@
 import { handleNeedsHuman } from './human-review';
 import { tabShowsCaptcha } from '../tab/hh-captcha';
 import { ensureContent, requireTabId, workerTopMessage } from '../link/inject';
-import { haltHang, tellPage } from '../pilot/page-log';
+import { tellPage } from '../pilot/page-log';
 import { waitMark, waitPulse } from '../pilot/wait-pulse';
 import { getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
-const APPLY_CAP_MS = 30 * 60_000;
+const APPLY_CAP_MS = 3 * 60_000;
 
 type ApplyReply = {
   ok?: boolean;
@@ -61,11 +61,7 @@ function applyCap(mark: () => void): { promise: Promise<ApplyReply>; cancel: () 
   const promise = new Promise<ApplyReply>((resolve) => {
     timer = setTimeout(() => {
       mark();
-      void stopStuckApply().then(() => resolve({
-        ok: false,
-        status: 'skip',
-        reason: 'форма отклика зависла',
-      }));
+      void stopStuckApply().then(() => resolve(stuckApply()), () => resolve(stuckApply()));
     }, APPLY_CAP_MS);
   });
 
@@ -78,9 +74,12 @@ function applyCap(mark: () => void): { promise: Promise<ApplyReply>; cancel: () 
   };
 }
 
+function stuckApply(): ApplyReply {
+  return { ok: false, status: 'skip', reason: 'форма отклика зависла' };
+}
+
 async function stopStuckApply(): Promise<void> {
-  await tellPage('я завис: форма отклика, 30 мин');
-  await haltHang();
+  await tellPage('мимо, форма отклика зависла');
 }
 
 function applyBeat(): ReturnType<typeof setInterval> {
