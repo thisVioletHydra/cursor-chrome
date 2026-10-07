@@ -285,7 +285,7 @@ export function takePilotStart(): boolean {
 export function watchView(): { pulse: { at: number; line: string }; rows: WatchRow[] } {
   return {
     pulse: { at: bag().pulse.at, line: shortStep(bag().pulse.line) ? bag().pulse.line : '' },
-    rows: bag().rows.slice(-40),
+    rows: bag().rows.slice(-80),
   };
 }
 

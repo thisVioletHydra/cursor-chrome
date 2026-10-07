@@ -169,6 +169,8 @@ const liveStep = $derived.by(() => {
 });
 
 const journalRows = $derived([...logSnap.rows].reverse());
+const acceptedPool = $derived(stats.rows.filter(row => row.status !== 'needsHuman'));
+const waitingPool = $derived(stats.rows.filter(row => row.status === 'needsHuman'));
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -656,7 +658,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
     {#if logSnap.rows.length === 0}
       <p class="px-3 py-2 text-zinc-500">Пока тихо. Сюда попадают смена шага и поломки, не каждая секунда.</p>
     {:else}
-      <ul use:keepLog class="max-h-[40rem] overflow-x-hidden overflow-y-auto px-3 py-2 [overflow-anchor:none]" onscroll={onLogScroll}>
+      <ul use:keepLog class="max-h-80 overflow-x-hidden overflow-y-auto px-3 py-2 [overflow-anchor:none]" onscroll={onLogScroll}>
         {#each journalRows as row (logKey(row))}
           <li data-k={logKey(row)} class="flex items-baseline gap-x-2 py-0.5">
             <time class="shrink-0 text-xs text-zinc-500 tabular-nums whitespace-nowrap">{clock(row.at)}</time>
@@ -680,13 +682,13 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
         type="button"
         aria-pressed={board === 'accepted'}
         onclick={() => showBoard('accepted')}
-      >Принятые {@render chipCount(stats.accepted ?? 0)}</button>
+      >Принятые {@render chipCount(acceptedPool.length)}</button>
       <button
         class="{chipClass} {board === 'waiting' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
         type="button"
         aria-pressed={board === 'waiting'}
         onclick={() => showBoard('waiting')}
-      >Ждуны {@render chipCount(stats.waiting)}</button>
+      >Ждуны {@render chipCount(waitingPool.length)}</button>
     </div>
     <div class="flex items-center gap-4">
       {#if waitNote}
@@ -705,7 +707,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
         type="button"
         aria-pressed={board === 'hidden'}
         onclick={() => showBoard('hidden')}
-      >Корзина <span class="tabular-nums">{stats.passedTotal ?? stats.passed.length}</span></button>
+      >Корзина <span class="tabular-nums">{stats.passed.length}</span></button>
     </div>
   </div>
   {#snippet vacancyLink(href: string, label: string, at: number | undefined)}
@@ -713,7 +715,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
   {/snippet}
   <div class="max-h-[26rem] overflow-x-hidden overflow-y-auto rounded-2xl border border-white/8 bg-[#151922]">
     {#if board === 'accepted'}
-      {#if stats.rows.some(row => row.status !== 'needsHuman')}
+      {#if acceptedPool.length > 0}
         <table class="table">
           <thead class="sticky top-0 z-10">
             <tr class="bg-[#151922] text-xs text-zinc-500">
@@ -723,7 +725,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
             </tr>
           </thead>
           <tbody>
-            {#each stats.rows.filter(row => row.status !== 'needsHuman') as row (row.id)}
+            {#each acceptedPool as row (row.id)}
               <tr>
                 <td class="max-w-xs truncate">
                   {@render vacancyLink(row.url, `${plainLabel(row.company)} · ${plainLabel(row.title)}`, row.at)}
@@ -738,7 +740,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
         <p class="px-5 py-8 text-sm text-zinc-500">Очередь пустая.</p>
       {/if}
     {:else if board === 'waiting'}
-      {#if stats.rows.some(row => row.status === 'needsHuman')}
+      {#if waitingPool.length > 0}
         <table class="table table-fixed w-full">
           <thead class="sticky top-0 z-10">
             <tr class="bg-[#151922] text-xs text-zinc-500">
@@ -749,7 +751,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
             </tr>
           </thead>
           <tbody>
-            {#each stats.rows.filter(row => row.status === 'needsHuman') as row (row.id)}
+            {#each waitingPool as row (row.id)}
               <tr>
                 <td class="w-11 pr-0!">
                   <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>
