@@ -1,4 +1,5 @@
 import type { Hunt, QueueItem } from './admin-api';
+import type { FoundCard } from '../search/hh-search';
 
 import { claimRelook, dropKnown, dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, markRead, postFound, postHidden, postWalk, rememberPage, seenAmong } from './admin-api';
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
@@ -591,7 +592,7 @@ async function reviewHidden(base: string, key: string, run: QueueRun): Promise<A
       return { started, stop: false, reason: '' };
 
     const name = link.title.trim() || link.id;
-    await tellPage(`queue-run.ts · пересмотр: ${name}`);
+    await tellPage(`queue-run.ts · снова открываю скрытую: ${name}`);
     const step = await takeLink(base, key, run, link, true);
     if (step.started)
       started = true;
@@ -604,6 +605,18 @@ async function reviewHidden(base: string, key: string, run: QueueRun): Promise<A
   }
 
   return { started, stop: false, reason: '' };
+}
+
+async function readRelook(tabId: number, id: string, url: string): Promise<FoundCard | null> {
+  await revealHiddenVacancy(tabId);
+  const until = Date.now() + 12_000;
+  let card = await readVacancyPage(tabId, id, url);
+  while (card === null && Date.now() < until) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    card = await readVacancyPage(tabId, id, url);
+  }
+
+  return card;
 }
 
 async function takeLink(base: string, key: string, run: QueueRun, link: { id: string; url: string }, reopen = false): Promise<ApplyPass> {
@@ -628,16 +641,16 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
     return stallLink(base, key, shown);
   }
 
-  const card = await readVacancyPage(shown.tabId, link.id, link.url);
+  const card = reopen
+    ? await readRelook(shown.tabId, link.id, link.url)
+    : await readVacancyPage(shown.tabId, link.id, link.url);
   if (card === null) {
-    await tellPage('queue-run.ts · вакансия не открылась');
+    await tellPage(reopen ? 'queue-run.ts · скрытая не прочиталась' : 'queue-run.ts · вакансия не открылась');
 
     return { started: false, stop: false, reason: '', held: true };
   }
 
-  if (reopen)
-    await revealHiddenVacancy(shown.tabId);
-  else if (await vacancyShelved(shown.tabId)) {
+  if (reopen === false && await vacancyShelved(shown.tabId)) {
     await tellPage(`queue-run.ts · уже скрыта: ${card.title}`);
     await postHidden(base, key, { id: link.id, reason: 'уже скрыта', title: card.title, company: card.company });
     await dropLinks(base, key, [link.id]);
