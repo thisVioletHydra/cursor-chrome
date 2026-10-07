@@ -463,7 +463,8 @@ function passedName(row: { company: string; title: string; id: string }): string
 }
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-const chipClass = 'inline-flex h-8 min-h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition hover:border-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-[0.98]';
+const chipClass = 'relative inline-flex h-9 min-h-9 cursor-pointer items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition hover:border-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-[0.98]';
+const binClass = 'inline-flex h-7 min-h-7 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-[0.98]';
 
 function rotten(at: number | undefined): boolean {
   return typeof at === 'number' && now - at >= WEEK_MS;
@@ -672,50 +673,53 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
   {#snippet chipCount(count: number)}
     <span class="pointer-events-none absolute top-0 right-0 flex h-4 min-w-4 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#1a1f29] px-1 text-[10px] leading-none font-medium text-zinc-500 tabular-nums">{count}</span>
   {/snippet}
-  <div class="mb-3 flex flex-wrap gap-2 overflow-visible pt-2" role="group" aria-label="Список вакансий">
+  <div class="mb-3 flex items-center justify-between gap-4 pt-2">
+    <div class="flex items-center gap-2" role="group" aria-label="Список вакансий">
+      <button
+        class="{chipClass} {board === 'accepted' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
+        type="button"
+        aria-pressed={board === 'accepted'}
+        onclick={() => showBoard('accepted')}
+      >Принятые {@render chipCount(stats.accepted ?? 0)}</button>
+      <button
+        class="{chipClass} {board === 'waiting' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
+        type="button"
+        aria-pressed={board === 'waiting'}
+        onclick={() => showBoard('waiting')}
+      >Ждуны {@render chipCount(stats.waiting)}</button>
+    </div>
     <button
-      class="relative {chipClass} {board === 'accepted' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
-      type="button"
-      aria-pressed={board === 'accepted'}
-      onclick={() => showBoard('accepted')}
-    >Принятые {@render chipCount(stats.accepted ?? 0)}</button>
-    <button
-      class="relative {chipClass} {board === 'hidden' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
+      class="{binClass} {board === 'hidden' ? 'border-white/30 bg-white/10 text-zinc-200' : 'border-white/10 text-zinc-500 hover:text-zinc-300'}"
       type="button"
       aria-pressed={board === 'hidden'}
       onclick={() => showBoard('hidden')}
-    >Скрытые {@render chipCount(stats.passedTotal ?? stats.passed.length)}</button>
-    <button
-      class="relative {chipClass} {board === 'waiting' ? 'border-white/50 bg-white/15 text-white' : 'border-white/15 bg-[#10131a] text-zinc-400 hover:text-zinc-100'}"
-      type="button"
-      aria-pressed={board === 'waiting'}
-      onclick={() => showBoard('waiting')}
-    >Ждуны {@render chipCount(stats.waiting)}</button>
-    {#if board === 'waiting' && stats.waiting > 0}
-      <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>
-        <input type="hidden" name="stale" value="1" />
-        <button class="{chipClass} border-white/15 bg-[#10131a] text-zinc-300 hover:text-white" type="submit" disabled={dropping || (stats.stale ?? 0) === 0}>
-          {dropping ? 'Убираю' : `Автоочистка ${stats.stale ?? 0}`}
-        </button>
-      </form>
-    {/if}
-    {#if waitNote}
-      <p class="self-center text-xs {waitOk ? 'text-emerald-400' : 'text-rose-300'}">{waitNote}</p>
-    {/if}
-    {#if board === 'waiting' && stats.waiting > 0}
-      <form class="ml-auto self-center" method="POST" action="?/dropWaiting" use:enhance={dropWait}>
-        <input type="hidden" name="all" value="1" />
-        <button class="cursor-pointer bg-transparent px-1 text-sm text-rose-400/70 hover:text-rose-300 disabled:cursor-wait disabled:opacity-50" type="submit" disabled={dropping}>
-          {dropping ? 'Убираю' : 'Очистить'}
-        </button>
-      </form>
-    {/if}
+    >Скрытые <span class="tabular-nums">{stats.passedTotal ?? stats.passed.length}</span></button>
   </div>
+  {#if board === 'waiting' && (waitNote.length > 0 || stats.waiting > 0)}
+    <div class="mb-2 flex min-h-6 flex-wrap items-center justify-end gap-x-4 gap-y-1">
+      {#if waitNote}
+        <p class="mr-auto text-xs {waitOk ? 'text-emerald-400' : 'text-rose-300'}">{waitNote}</p>
+      {/if}
+      {#if stats.waiting > 0 && (stats.stale ?? 0) > 0}
+        <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>
+          <input type="hidden" name="stale" value="1" />
+          <button class="cursor-pointer bg-transparent text-xs text-zinc-400 underline-offset-4 hover:text-zinc-100 hover:underline disabled:cursor-wait disabled:opacity-50" type="submit" disabled={dropping} title="Сидят в ждунах дольше 7 дней">
+            {dropping ? 'Убираю' : `Убрать протухшие · ${stats.stale ?? 0}`}
+          </button>
+        </form>
+      {/if}
+      {#if stats.waiting > 0}
+        <form method="POST" action="?/dropWaiting" use:enhance={dropWait}>
+          <input type="hidden" name="all" value="1" />
+          <button class="cursor-pointer bg-transparent text-xs text-rose-400/70 hover:text-rose-300 disabled:cursor-wait disabled:opacity-50" type="submit" disabled={dropping}>
+            {dropping ? 'Убираю' : 'Очистить'}
+          </button>
+        </form>
+      {/if}
+    </div>
+  {/if}
   {#snippet vacancyLink(href: string, label: string, at: number | undefined)}
     <a class="underline-offset-4 hover:underline {rotten(at) ? 'text-zinc-500' : 'text-zinc-200'}" href={href} target="_blank" rel="noreferrer">{label}</a>
-    {#if rotten(at)}
-      <span class="ml-2 text-xs text-zinc-500">протухло</span>
-    {/if}
   {/snippet}
   <div class="max-h-[26rem] overflow-x-hidden overflow-y-auto rounded-2xl border border-white/8 bg-[#151922]">
     {#if board === 'accepted'}
