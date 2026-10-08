@@ -4,6 +4,7 @@ import type { RequestHandler } from './$types';
 import { COVER_LETTER, DEFAULT_QUERY, HIDE_REASON, busyAmong, coveredWaiters, dayOpen, dropWaiters, forgetAllLinks, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, moscowDay, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readQueue, readState, rememberSearchPage, searchPages, splitQueries, stepWalk, takePilotStart, takeRelook, walkFrom, withFrontAi, workHours, writeState } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
+import { extensionBuild } from '$lib/server/extension-build';
 import { readAccount } from '$lib/server/secrets';
 import { weekOpen } from '$lib/server/week';
 
@@ -12,7 +13,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
   if (login === null)
     return json({ error: 'нет' }, { status: 401 });
 
-  const [memory, account, loaded] = await Promise.all([readMemory(), readAccount(login), readState()]);
+  const [memory, account, loaded, build] = await Promise.all([readMemory(), readAccount(login), readState(), extensionBuild()]);
   const state = await walkToday(loaded);
   const letter = account.coverLetter || COVER_LETTER;
   const saved = ['лента'];
@@ -32,7 +33,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
     await writeState({ walkAt: spot });
 
   if (open === false)
-    return json({ items: [], links: [], letter, queries: saved, words, focus, depth: walked.left, phase: walked.phase, want: false, imitation: account.imitation, stop, hours, auto, start, day, week });
+    return json({ items: [], links: [], letter, queries: saved, words, focus, depth: walked.left, phase: walked.phase, want: false, imitation: account.imitation, stop, hours, auto, start, day, week, build });
 
   const queued = await pendingCount();
   const want = account.hhLive === '1' && state.auto && queued < QUEUE_TARGET;
@@ -56,6 +57,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
     start,
     day: true,
     week: true,
+    build,
   });
 }
 

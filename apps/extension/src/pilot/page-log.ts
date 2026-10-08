@@ -710,6 +710,9 @@ async function postPulse(line: string): Promise<void> {
   if (body === null || stamp !== pilotStamp())
     return;
 
+  if (await takeBuild(body))
+    return;
+
   noteHours(body);
 
   if (pilotStart(body)) {
@@ -733,6 +736,9 @@ async function listenPilot(): Promise<void> {
   const stamp = pilotStamp();
   const body = await pilotFetch('/api/queue?listen=1');
   if (body === null || stamp !== pilotStamp())
+    return;
+
+  if (await takeBuild(body))
     return;
 
   noteHours(body);
@@ -811,6 +817,51 @@ async function pilotAuth(): Promise<{ host: string; key: string } | null> {
   catch {
     return null;
   }
+}
+
+const RELOAD_KEY = 'extReloadFor';
+
+async function takeBuild(body: unknown): Promise<boolean> {
+  const offered = buildOf(body);
+  const mine = browser.runtime.getManifest().version;
+  if (offered.length === 0 || behind(mine, offered) === false)
+    return false;
+
+  const stored = await browser.storage.local.get(RELOAD_KEY);
+  if (stored[RELOAD_KEY] === offered)
+    return false;
+
+  await browser.storage.local.set({ [RELOAD_KEY]: offered });
+  browser.runtime.reload();
+
+  return true;
+}
+
+function buildOf(body: unknown): string {
+  if (typeof body !== 'object' || body === null || 'build' in body === false)
+    return '';
+
+  const value = body.build;
+  if (typeof value !== 'string' || /^\d+\.\d+\.\d+$/.test(value) === false)
+    return '';
+
+  return value;
+}
+
+function behind(mine: string, offered: string): boolean {
+  const left = mine.split('.').map(part => Number(part));
+  const right = offered.split('.').map(part => Number(part));
+  for (let index = 0; index < 3; index += 1) {
+    const have = left[index] ?? 0;
+    const next = right[index] ?? 0;
+    if (have < next)
+      return true;
+
+    if (have > next)
+      return false;
+  }
+
+  return false;
 }
 
 function pilotStart(body: unknown): boolean {

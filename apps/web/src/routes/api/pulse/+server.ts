@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { readState, takePilotStart, watchPulse } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
+import { extensionBuild } from '$lib/server/extension-build';
 import { readAccount } from '$lib/server/secrets';
 import { noteWeekPulse } from '$lib/server/week';
 
@@ -31,5 +32,6 @@ export const POST: RequestHandler = async ({ request }) => {
     start: takePilotStart(),
     auto: state !== null && state.auto === true,
     hours: account.hhHours !== '0',
+    build: await extensionBuild(),
   });
 };
