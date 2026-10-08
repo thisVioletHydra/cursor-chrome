@@ -807,8 +807,8 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
         <thead class="sticky top-0 z-10">
           <tr class="bg-[#151922] text-xs text-zinc-500">
             <th>Вакансия</th>
-            <th>Когда</th>
             <th>Причина</th>
+            <th>Когда</th>
           </tr>
         </thead>
         <tbody>
@@ -817,8 +817,8 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
               <td class="max-w-xs break-words whitespace-normal">
                 {@render vacancyLink(row.url, passedName(row), row.at)}
               </td>
-              <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
               <td class="max-w-xs break-words whitespace-normal text-sm text-zinc-300">{row.reason}</td>
+              <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
             </tr>
           {/each}
         </tbody>
