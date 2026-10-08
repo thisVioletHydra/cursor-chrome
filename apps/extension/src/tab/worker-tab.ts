@@ -245,6 +245,9 @@ export async function ensureHhWorker(): Promise<WorkerCheck> {
 
 export async function openOnHhTab(url: string): Promise<WorkerCheck> {
   const href = httpHref(url);
+  if ((await getFlags()).autoQueue !== true)
+    return openLoose(href);
+
   const existing = ownWorkTab(await listJobTabs(), await getWorkerTabId());
   if (existing)
     return resumeHh(existing.id, href);
@@ -290,6 +293,18 @@ function httpHref(url: string): string {
     throw new Error('нужен http(s) URL');
 
   return parsed.href;
+}
+
+async function openLoose(href: string): Promise<WorkerCheck> {
+  const created = await browser.tabs.create({ url: href, active: true });
+
+  return {
+    ok: typeof created.id === 'number',
+    url: href,
+    tabId: created.id,
+    pinned: false,
+    status: 'Открыл',
+  };
 }
 
 async function openOnlyHh(url: string): Promise<WorkerCheck> {

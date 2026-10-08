@@ -1,6 +1,9 @@
+import { browser } from '../browser-host';
 import { ask } from './bridge';
 
 const TO_VACANCY = /перейти\s+к\s+вакансии/i;
+
+let botOn = false;
 
 export function keepHhClicks(): void {
   if (window !== window.top || onHhPage() === false)
@@ -8,6 +11,17 @@ export function keepHhClicks(): void {
 
   window.addEventListener('click', onHhClick, true);
   window.addEventListener('auxclick', onHhClick, true);
+  void browser.storage.local.get('flags').then((stored) => {
+    botOn = queueOn(stored.flags);
+  }).catch(() => {
+    botOn = false;
+  });
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || changes.flags === undefined)
+      return;
+
+    botOn = queueOn(changes.flags.newValue);
+  });
 }
 
 export function blockedHref(element: Element): string | null {
@@ -18,7 +32,17 @@ function onHhPage(): boolean {
   return /(^|\.)hh\.ru$/i.test(location.hostname);
 }
 
+function queueOn(raw: unknown): boolean {
+  if (typeof raw !== 'object' || raw === null)
+    return false;
+
+  return 'autoQueue' in raw && raw.autoQueue === true;
+}
+
 function onHhClick(event: Event): void {
+  if (botOn === false)
+    return;
+
   if (event instanceof MouseEvent === false)
     return;
 
