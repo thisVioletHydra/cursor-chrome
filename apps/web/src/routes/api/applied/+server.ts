@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 
-import { markDone, markFailed, markSent, notePassed, readQueue, remember, watchCaptcha } from '@cursor-chrome/hh';
+import { markDone, markFailed, markSent, notePassed, readQueue, remember, watchAlarm, watchCaptcha } from '@cursor-chrome/hh';
 import { notifyVacancy } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
@@ -16,6 +16,7 @@ type Body = {
   hints?: unknown;
   reason?: string;
   captcha?: boolean;
+  alarm?: boolean;
   again?: boolean;
 };
 
@@ -47,6 +48,12 @@ export const POST: RequestHandler = async ({ request }) => {
   if (status === 'stop') {
     if (body?.captcha === true) {
       await watchCaptcha(body.again === true);
+
+      return json({ ok: true, queued: false });
+    }
+
+    if (body?.alarm === true) {
+      await watchAlarm();
 
       return json({ ok: true, queued: false });
     }

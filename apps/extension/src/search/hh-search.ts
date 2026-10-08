@@ -1,7 +1,9 @@
 import type { HideFace, HideStep } from './hide-popup';
 
 import { getFlags } from '../pilot/flags';
+import { DETECT_LINE, detectWall } from '../hh/detect-wall';
 import { tabShowsCaptcha } from '../tab/hh-captcha';
+import { tabShowsDetect } from '../tab/hh-detect';
 import { hangHalted, loadWithin, setLogMode, tellPage, tickPage, whileSearching } from '../pilot/page-log';
 import { budgetSec, waitMark } from '../pilot/wait-pulse';
 import { hideDom } from './hide-dom';
@@ -40,6 +42,7 @@ export function wordFallback(): string[] {
 const endedQuery = new Set<string>();
 let endedQuiet = false;
 let sawCaptcha = false;
+let sawDetect = false;
 const SEARCH = 'https://hh.ru/search/vacancy';
 const HH_ROOT = 'https://hh.ru/';
 
@@ -101,8 +104,12 @@ export async function collectVacancies(
 ): Promise<SearchHit> {
   void plan;
   sawCaptcha = false;
+  sawDetect = false;
   endedQuery.clear();
   const pinned = await getWorkerTabId();
+  if (pinned !== null && await tabShowsDetect(pinned))
+    return detectHit();
+
   if (pinned !== null && await tabShowsCaptcha(pinned))
     return miss(true, false, '');
 
@@ -160,6 +167,12 @@ export async function collectVacancies(
         await noteMiss();
 
         return 'miss';
+      }
+
+      if (detectWall(pulled.html)) {
+        sawDetect = true;
+
+        return 'fail';
       }
 
       if (isLogin(pulled.url, pulled.html))
@@ -269,6 +282,9 @@ export async function collectVacancies(
 
     return false;
   });
+
+  if (sawDetect)
+    return detectHit(read);
 
   if (sawCaptcha)
     return miss(true, false, '', read);
@@ -450,6 +466,10 @@ function storedPage(page: number | undefined): number {
     return 0;
 
   return page;
+}
+
+function detectHit(read = 0): SearchHit {
+  return { login: false, captcha: false, saved: 0, more: false, done: false, read, reason: DETECT_LINE };
 }
 
 function miss(captcha: boolean, login: boolean, reason: string, read = 0): SearchHit {

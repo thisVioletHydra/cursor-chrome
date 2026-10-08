@@ -6,6 +6,7 @@ import { applyBlocker, captchaOnPage, formReady, humanPayload } from './apply-de
 import { asHumanBlock, fillApply } from './apply-fill';
 import { ask } from './bridge';
 import { sleep, until } from './dom';
+import { DETECT_LINE, hhDetectShown } from './detect-wall';
 import { dismissJobOffer } from './job-offer';
 import { noteLive } from './live-log';
 import { murkyBlock, vacancyAndFormText } from './murky';
@@ -58,6 +59,7 @@ async function applyOnce(resume: boolean): Promise<ApplyResult> {
     await until(() => formReady() || ctaApplied() || employerQuestionnaire() !== null, 8000);
 
   const steps: Array<() => Promise<ApplyResult | null>> = [
+    async () => (hhDetectShown() ? fail(DETECT_LINE) : null),
     async () => humanOrNull(captchaOnPage()),
     async () => hhHostStep(),
     async () => pageSkip(),

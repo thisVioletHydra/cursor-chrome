@@ -9,6 +9,8 @@ import { clearPilotLink, clearPilotPending, notePilotLink, setPilotPending, take
 import { applyPilot } from '../pilot/pilot-apply';
 import { clearPilotStop, markPilotStop } from '../pilot/pilot-stop';
 import { pushPilot, retryPilotPush } from '../pilot/pilot-switch';
+import { guardDetect } from '../apply/detect-hold';
+import { DETECT_LINE } from '../hh/detect-wall';
 import { clearFormHold } from '../apply/form-hold';
 import { forgetHangReport, guardCaptcha, queueBusy, readPausedUntil, readQueueReport, runQueue } from '../apply/queue-run';
 import { pullSavedResume } from '../apply/resume-pull';
@@ -290,6 +292,13 @@ async function writeFlags(patch: { hideJunk?: boolean; keepSession?: boolean; sh
 }
 
 async function enablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; showMachine?: boolean; autoQueue?: boolean }): Promise<unknown> {
+  if (await guardDetect()) {
+    await clearPilotPending();
+    await clearPilotLink();
+
+    return { error: DETECT_LINE, autoQueue: false };
+  }
+
   if (await guardCaptcha(true)) {
     await clearPilotPending();
     await clearPilotLink();

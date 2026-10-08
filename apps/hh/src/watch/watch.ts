@@ -41,6 +41,7 @@ type Bag = {
   searchMode: string;
   deaths: Set<string>;
   captchaTold: boolean;
+  alarmTold: boolean;
   lastStage: string;
   hangTold: boolean;
   silenceNoted: boolean;
@@ -68,6 +69,7 @@ function freshBag(): Bag {
     searchMode: '',
     deaths: new Set(),
     captchaTold: false,
+    alarmTold: false,
     lastStage: '',
     hangTold: false,
     silenceNoted: false,
@@ -259,6 +261,7 @@ const CAPTCHA_AGAIN = 'hh всё ещё показывает капчу. Бот 
 
 export async function watchRestart(): Promise<void> {
   bag().captchaTold = false;
+  bag().alarmTold = false;
   bag().resumeGen += 1;
   dropHangDeaths();
   bag().hangTold = false;
@@ -278,6 +281,19 @@ export async function watchRestart(): Promise<void> {
 
     throw error;
   }
+}
+
+const ALARM_LINE = 'аларм, нас детектят';
+const ALARM_NOTE = 'аларм, нас детектят. hh закрыл вакансию и просит войти. бот выключен.';
+
+export async function watchAlarm(): Promise<void> {
+  await watchStop();
+  if (bag().alarmTold)
+    return;
+
+  await mark('extension', ALARM_LINE, true);
+  await notify(ALARM_NOTE);
+  bag().alarmTold = true;
 }
 
 export async function watchStop(): Promise<void> {

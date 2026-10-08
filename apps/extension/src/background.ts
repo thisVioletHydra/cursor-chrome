@@ -11,6 +11,7 @@ import { ensureOffscreen, setBadge, waitOffscreen } from './link/offscreen-ctl';
 import { bindPilotWake, clearHangHalt, hangHalted, pulseNow } from './pilot/page-log';
 import { applyPilot } from './pilot/pilot-apply';
 import { releaseStaleHold } from './apply/form-hold';
+import { detectHolding } from './apply/detect-hold';
 import { captchaHolding, clearSearchBusy, clearSearchSoon, isPaused, kickedRecently, markKicked, markSearchSoon, queueBusy, runQueue } from './apply/queue-run';
 import { rpc } from './link/rpc';
 import { browser } from './browser-host';
@@ -273,6 +274,9 @@ async function continueAfterPatch(): Promise<void> {
     return;
 
   if (await isPaused() || await captchaHolding())
+    return;
+
+  if (await detectHolding())
     return;
 
   void runQueue().catch(() => {});

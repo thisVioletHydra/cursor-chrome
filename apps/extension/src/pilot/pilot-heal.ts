@@ -1,5 +1,6 @@
 import type { Flags } from './flags';
 
+import { detectHolding } from '../apply/detect-hold';
 import { getFlags } from './flags';
 import { applyPilot } from './pilot-apply';
 import { clearPilotPending, readPilotPending, setPilotPending } from './pilot-link';
@@ -42,7 +43,7 @@ async function keepOff(): Promise<boolean> {
     return true;
 
   const stored = await browser.storage.local.get([CAPTCHA_HOLD, PAUSED_KEY]);
-  if (stored[CAPTCHA_HOLD] === true)
+  if (stored[CAPTCHA_HOLD] === true || await detectHolding())
     return true;
 
   const until = stored[PAUSED_KEY];

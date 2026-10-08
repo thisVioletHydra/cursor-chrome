@@ -4,9 +4,12 @@ import type { FoundCard } from '../search/hh-search';
 import { claimRelook, dropKnown, dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, markRead, postFound, postHidden, postWalk, rememberPage, seenAmong } from './admin-api';
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 import { getFlags } from '../pilot/flags';
+import { DETECT_LINE } from '../hh/detect-wall';
 import { pinnedCaptcha, tabShowsCaptcha } from '../tab/hh-captcha';
+import { tabShowsDetect } from '../tab/hh-detect';
 import { loadPace, rare, waitMs } from './pace';
 import { markTeaWork, maybeTea, noteTeaSession } from './tea';
+import { detectHolding, holdDetect } from './detect-hold';
 import { FORM_PAUSE_LINE, FORM_STUCK, formHeld, holdForm } from './form-hold';
 import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage, waitBeforeLoad } from '../pilot/page-log';
 import { budgetSec, waitMark } from '../pilot/wait-pulse';
@@ -88,6 +91,9 @@ export async function runQueue(): Promise<QueueRun> {
   const restart = await captchaHolding();
   if (await guardCaptcha(restart))
     return blank('капча, позови человека');
+
+  if (await detectHolding())
+    return blank(DETECT_LINE);
 
   noteQueueRunning(true);
   await clearWait();
@@ -519,6 +525,12 @@ async function applyPending(base: string, key: string, run: QueueRun): Promise<A
         return { started, stop: true, reason: 'капча, позови человека' };
       }
 
+      if (await caughtDetect(reply.reason)) {
+        run.left -= 1;
+
+        return { started, stop: true, reason: DETECT_LINE };
+      }
+
       const paused = await formPause(run, reply);
       if (paused !== null)
         return paused;
@@ -754,6 +766,12 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
     return { started: true, stop: true, reason: 'капча, позови человека' };
   }
 
+  if (await caughtDetect(reply.reason)) {
+    run.left -= 1;
+
+    return { started: true, stop: true, reason: DETECT_LINE };
+  }
+
   const paused = await formPause(run, reply);
   if (paused !== null)
     return paused;
@@ -771,6 +789,9 @@ async function stallLink(base: string, key: string, reply: ApplyReply): Promise<
 
     return { started: false, stop: true, reason: 'капча, позови человека' };
   }
+
+  if (await caughtDetect(reply.reason))
+    return { started: false, stop: true, reason: DETECT_LINE };
 
   if (LOGIN.test(reply.reason || '')) {
     await pauseUntilMorning();
@@ -1069,6 +1090,12 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
   const noted = found.read > 0 || found.done;
   const notedOk = noted === false || await postWalk(base, key, { read: found.read, done: found.done });
 
+  if (found.reason === DETECT_LINE) {
+    await holdDetect();
+
+    return { stop: DETECT_LINE };
+  }
+
   if (found.captcha) {
     await holdCaptcha(false);
 
@@ -1204,6 +1231,9 @@ async function showVacancy(url: string, read?: { base: string; key: string; id: 
     return { status: 'skip', reason: 'расширение зависло' };
 
   const pinned = await getWorkerTabId();
+  if (pinned !== null && await tabShowsDetect(pinned))
+    return { status: 'skip', reason: DETECT_LINE };
+
   if (pinned !== null && await tabShowsCaptcha(pinned))
     return { status: 'skip', reason: 'капча' };
 
@@ -1219,6 +1249,9 @@ async function showVacancy(url: string, read?: { base: string; key: string; id: 
     return { status: 'skip', reason: 'расширение зависло' };
 
   const tabId = requireTabId(tab);
+  if (await tabShowsDetect(tabId))
+    return { status: 'skip', reason: DETECT_LINE };
+
   if (await tabShowsCaptcha(tabId))
     return { status: 'skip', reason: 'капча' };
 
@@ -1252,6 +1285,9 @@ async function showVacancy(url: string, read?: { base: string; key: string; id: 
   await loaded;
   const here = await browser.tabs.get(tabId).catch(() => null);
   const opened = here?.url || '';
+  if (await tabShowsDetect(tabId))
+    return { status: 'skip', reason: DETECT_LINE };
+
   if (sameVacancy(opened, url) === false && await tabShowsCaptcha(tabId))
     return { status: 'skip', reason: 'капча' };
 
@@ -1307,6 +1343,9 @@ async function applyOne(item: QueueItem, already = false): Promise<ApplyReply> {
     await tellPage(openedLine(item.title.trim() || item.id, item.place));
   }
 
+  if (await tabShowsDetect(tabId))
+    return { status: 'skip', reason: DETECT_LINE };
+
   if (await tabShowsCaptcha(tabId))
     return { status: 'skip', reason: 'капча' };
 
@@ -1314,6 +1353,9 @@ async function applyOne(item: QueueItem, already = false): Promise<ApplyReply> {
     return { status: 'skip', reason: 'hh.ru просит войти (login)' };
 
   await pacedWait();
+  if (await tabShowsDetect(tabId))
+    return { status: 'skip', reason: DETECT_LINE };
+
   if (await tabShowsCaptcha(tabId))
     return { status: 'skip', reason: 'капча' };
 
@@ -1490,6 +1532,15 @@ async function sendCaptcha(base: string, key: string, again: boolean): Promise<b
   catch {
     return false;
   }
+}
+
+async function caughtDetect(reason: string | undefined): Promise<boolean> {
+  if (reason !== DETECT_LINE)
+    return false;
+
+  await holdDetect();
+
+  return true;
 }
 
 function captchaReply(reply: ApplyReply): boolean {
