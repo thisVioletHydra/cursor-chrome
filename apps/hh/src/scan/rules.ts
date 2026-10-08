@@ -40,7 +40,7 @@ export type Model = (vacancy: Vacancy) => Promise<{ verdict: Verdict; reason: st
 
 const OFFICE = /только офис|только в офисе|удалёнки нет|удаленки нет|удалёнку не рассматриваем|удаленку не рассматриваем|удалённую не рассматриваем|удаленную не рассматриваем/i;
 const ONSITE = /очн\p{L}{0,6}\s+спринт|(?:один\s+раз\s+в\s+неделю|раз\s+в\s+неделю|еженедельн\p{L}*)[\s\S]{0,80}офис|офис[\s\S]{0,80}(?:раз\s+в\s+неделю|еженедельн\p{L}*|обязательн)|(?:\d+|один|два|три|четыре)\s+дн\p{L}{0,4}[\s\S]{0,40}офис/iu;
-const TITLE_STOP = /(?:^|[^\p{L}\p{N}])(php|bitrix|битрикс|1с|1c|react\s*native)(?=$|[^\p{L}\p{N}])/iu;
+const TITLE_STOP = /(?:^|[^\p{L}\p{N}])(php|bitrix|битрикс|1с|1c|react\s*native|angular|ангуляр)(?=$|[^\p{L}\p{N}])/iu;
 const STACK_TITLE = /(?:^|[^\p{L}\p{N}])(?:frontend|front-end|front\s*end|фронтенд|фронтэнд|vue|react|typescript|javascript|node(?:\.?js)?|nest(?:\.?js)?|graphql|fullstack|full-stack|full\s*stack|фул+ст[еэ]к)(?=$|[^\p{L}\p{N}])/iu;
 
 export function titleFront(title: string): boolean {

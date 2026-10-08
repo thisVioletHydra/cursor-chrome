@@ -1272,7 +1272,21 @@ function sameVacancy(opened: string, want: string): boolean {
   return opened.includes(`/vacancy/${id}`) && /vacancy_response/i.test(opened) === false;
 }
 
+const TITLE_STOP = /(?:^|[^\p{L}\p{N}])(php|bitrix|битрикс|1с|1c|react\s*native|angular|ангуляр)(?=$|[^\p{L}\p{N}])/iu;
+
+function titleStop(title: string): string {
+  const banned = title.match(TITLE_STOP)?.[1] ?? '';
+  if (banned.length === 0)
+    return '';
+
+  return `стоп-слово «${banned.toLowerCase()}»`;
+}
+
 async function applyOne(item: QueueItem, already = false): Promise<ApplyReply> {
+  const banned = titleStop(item.title);
+  if (banned.length > 0)
+    return { status: 'skip', reason: banned };
+
   if (hangHalted())
     return { status: 'skip', reason: 'расширение зависло' };
 
