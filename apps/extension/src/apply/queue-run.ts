@@ -607,6 +607,17 @@ async function reviewHidden(base: string, key: string, run: QueueRun): Promise<A
   return { started, stop: false, reason: '' };
 }
 
+async function readOpened(tabId: number, id: string, url: string): Promise<FoundCard | null> {
+  const until = Date.now() + 8_000;
+  let card = await readVacancyPage(tabId, id, url);
+  while (card === null && Date.now() < until) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    card = await readVacancyPage(tabId, id, url);
+  }
+
+  return card;
+}
+
 async function readRelook(tabId: number, id: string, url: string): Promise<FoundCard | null> {
   await revealHiddenVacancy(tabId);
   const until = Date.now() + 12_000;
@@ -643,7 +654,7 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
 
   const card = reopen
     ? await readRelook(shown.tabId, link.id, link.url)
-    : await readVacancyPage(shown.tabId, link.id, link.url);
+    : await readOpened(shown.tabId, link.id, link.url);
   if (card === null) {
     await tellPage(reopen ? 'queue-run.ts · скрытая не прочиталась' : 'queue-run.ts · вакансия не открылась');
 
@@ -1228,10 +1239,10 @@ async function showVacancy(url: string, read?: { base: string; key: string; id: 
   await loaded;
   const here = await browser.tabs.get(tabId).catch(() => null);
   const opened = here?.url || '';
-  if (onVacancy(opened) === false && await tabShowsCaptcha(tabId))
+  if (sameVacancy(opened, url) === false && await tabShowsCaptcha(tabId))
     return { status: 'skip', reason: 'капча' };
 
-  if (onVacancy(opened) === false)
+  if (sameVacancy(opened, url) === false)
     return { status: 'skip', reason: 'вакансия не открылась' };
 
   if (await loginPage(tabId))
@@ -1240,8 +1251,12 @@ async function showVacancy(url: string, read?: { base: string; key: string; id: 
   return { tabId };
 }
 
-function onVacancy(url: string): boolean {
-  return /\/vacancy\/\d+|vacancy_response/i.test(url);
+function sameVacancy(opened: string, want: string): boolean {
+  const id = want.match(/\/vacancy\/(\d+)/)?.[1] ?? '';
+  if (id.length === 0)
+    return /\/vacancy\/\d+/i.test(opened);
+
+  return opened.includes(`/vacancy/${id}`) && /vacancy_response/i.test(opened) === false;
 }
 
 async function applyOne(item: QueueItem, already = false): Promise<ApplyReply> {

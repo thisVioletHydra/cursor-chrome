@@ -80,6 +80,24 @@ function stuckApply(): ApplyReply {
 
 async function stopStuckApply(): Promise<void> {
   await tellPage('мимо, форма отклика зависла');
+  await leaveApplyForm();
+}
+
+async function leaveApplyForm(): Promise<void> {
+  const tab = await requireWorkerTab().catch(() => null);
+  if (tab === null)
+    return;
+
+  const here = tab.url || '';
+  if (/vacancy_response/i.test(here) === false)
+    return;
+
+  const id = here.match(/[?&]vacancyId=(\d+)/)?.[1] ?? here.match(/\/vacancy\/(\d+)/)?.[1] ?? '';
+  const back = id.length > 0 ? `https://hh.ru/vacancy/${id}` : 'https://hh.ru/';
+  const tabId = requireTabId(tab);
+  const wait = waitTab(tabId, 15_000);
+  await browser.tabs.update(tabId, { url: back, active: false }).catch(() => undefined);
+  await wait;
 }
 
 function applyBeat(): ReturnType<typeof setInterval> {
