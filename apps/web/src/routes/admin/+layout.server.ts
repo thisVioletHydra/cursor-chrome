@@ -61,6 +61,7 @@ function guestShell() {
     extensionLamp: 'quiet' as const,
     extensionBuild: '',
     extensionVersion: '',
+    searchMode: '',
     stats: emptyStats(),
   };
 }
@@ -160,6 +161,7 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
     extensionLamp: preview ? 'quiet' as const : extensionLamp(build, stats.autopilot.auto),
     extensionBuild: preview ? '' : build,
     extensionVersion: preview ? '' : watchView().clientVersion,
+    searchMode: preview ? '' : watchView().searchMode,
     stats,
   };
 };

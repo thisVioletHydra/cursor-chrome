@@ -25,7 +25,6 @@ const TICK = /^(читаю|быстро|чай|отвлёкся|жду) \d+$/;
 const SEARCH_TICK = /^ищу вакансию, \d+ с$/;
 const PAGE_TICK = /^жду страницу, \d+ с$/;
 const STATE_PULSE = /^~([a-z][a-z0-9.]*)\|([^|]+)\|(-|\d+)\|(\d+)\|([a-z][a-z0-9.]*)\|([wsp])\|([01])$/;
-const MODE_TAG = /^\[(?:full|light|target)\]\s+/;
 const FROZEN_MS = 90_000;
 const APPLY_CAP_MS = 30 * 60_000;
 const STEP_MAX = 80;
@@ -39,6 +38,7 @@ type Bag = {
   rows: WatchRow[];
   pulse: { at: number; line: string };
   clientVersion: string;
+  searchMode: string;
   deaths: Set<string>;
   captchaTold: boolean;
   lastStage: string;
@@ -65,6 +65,7 @@ function freshBag(): Bag {
     rows: [],
     pulse: { at: 0, line: '' },
     clientVersion: '',
+    searchMode: '',
     deaths: new Set(),
     captchaTold: false,
     lastStage: '',
@@ -153,12 +154,14 @@ export function extensionLamp(expected: string, auto: boolean, now = Date.now())
   return 'ok';
 }
 
-export async function watchPulse(line: string, version = ''): Promise<boolean> {
-  const text = clip(line.replace(MODE_TAG, ''));
+export async function watchPulse(line: string, version = '', mode = ''): Promise<boolean> {
+  const text = clip(bareStep(line));
   if (text.length === 0)
     return pilotStop();
 
   bag().clientVersion = version.trim();
+  if (mode === 'full' || mode === 'target' || mode === 'light')
+    bag().searchMode = mode;
   bag().silenceNoted = false;
   const previous = bag().pulse.line;
   if (readingHang(text) && pulseElapsedMs(text) >= APPLY_CAP_MS) {
@@ -304,11 +307,12 @@ export function takePilotStart(): boolean {
   return true;
 }
 
-export function watchView(): { pulse: { at: number; line: string }; rows: WatchRow[]; clientVersion: string } {
+export function watchView(): { pulse: { at: number; line: string }; rows: WatchRow[]; clientVersion: string; searchMode: string } {
   return {
     pulse: { at: bag().pulse.at, line: shortStep(bag().pulse.line) || paceLine(bag().pulse.line) ? bag().pulse.line : '' },
     rows: bag().rows.slice(-80),
     clientVersion: bag().clientVersion,
+    searchMode: bag().searchMode,
   };
 }
 

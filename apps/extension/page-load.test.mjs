@@ -1,7 +1,7 @@
 import { FLIP_MAX_MS, FLIP_MIN_MS, HIDE_MAX_MS, HIDE_MIN_MS, PAGE_LOAD_MS, endedAfter, feedAddress, flipWaitMs, foldLiveLine, hideWaitMs, landedPage, liveTick, nextListedPage, nextPageNumber, pageLoadMiss, parsedSearch, putSearchPage, searchHasNext, searchReady, searchStep } from './src/search/page-load.ts';
 import { pulseHolds, pulseLines, waitMark, waitPulse } from './src/pilot/wait-pulse.ts';
 import { feedDry, feedEnded, nextDryStreak } from './src/search/feed-dry.ts';
-import { tagLine } from './src/pilot/log-mode.ts';
+import { nameStep } from './src/pilot/step-name.ts';
 import { descriptionText } from './src/search/vacancy-text.ts';
 import { employerHints, waiterLine } from './src/hh/employer-ask.ts';
 
@@ -167,7 +167,7 @@ test('a named wait replaces the same pulse', () => {
     'пауза после скрытия',
     '3 из 8 с',
     'потом: проверю, закрылось ли меню',
-    'hh-search.ts',
+    'поиск',
   ]);
   assert.deepEqual(foldLiveLine(['жду 29'], first), [first]);
   assert.deepEqual(foldLiveLine([first], next), [next]);
@@ -194,7 +194,7 @@ test('a named wait replaces the same pulse', () => {
     'ищу вакансию в ленте',
     '12 с',
     'потом: жду загрузку страницы hh',
-    'hh-search.ts',
+    'поиск',
   ]);
 });
 
@@ -216,11 +216,12 @@ test('three junk vacancies in a row end the feed, a stack title resets', () => {
   assert.equal(nextDryStreak(streak, 'Разработчик React', 'TypeScript'), 0);
 });
 
-test('a journal line names the feed mode', () => {
-  assert.equal(tagLine('light', 'queue-run.ts · лайт, сплю час, 3600 с · потом снова 10 удалённых'), 'queue-run.ts · [light] лайт, сплю час, 3600 с · потом снова 10 удалённых');
-  assert.equal(tagLine('target', 'hh-search.ts · слово React'), 'hh-search.ts · [target] слово React');
-  assert.equal(tagLine('full', 'нет ключа'), '[full] нет ключа');
-  assert.equal(tagLine('light', 'queue-run.ts · [light] уже'), 'queue-run.ts · [light] уже');
+test('a journal line names the step, not the file', () => {
+  assert.equal(nameStep('queue-run.ts · лайт, сплю час, 3600 с · потом снова 10 удалённых'), 'очередь · лайт, сплю час, 3600 с · потом снова 10 удалённых');
+  assert.equal(nameStep('hh-search.ts · слово React'), 'поиск · слово React');
+  assert.equal(nameStep('page-log.ts · ищу вакансию'), 'чтение · ищу вакансию');
+  assert.equal(nameStep('apply-run.ts · жму Откликнуться'), 'отклик · жму Откликнуться');
+  assert.equal(nameStep('нет ключа'), 'нет ключа');
 });
 
 test('an employer test lands in waiting with the questions', () => {

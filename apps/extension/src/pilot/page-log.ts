@@ -1,6 +1,6 @@
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 import { foldLiveLine, liveTick, PAGE_LOAD_MS } from '../search/page-load';
-import { tagLine, type RunMode } from './log-mode';
+import { nameStep, type RunMode } from './log-mode';
 import { budgetSec, pulseHolds, stageLine, waitMark, waitPulse, type WaitMark } from './wait-pulse';
 import { getFlags } from './flags';
 import { FORM_PAUSE_LINE, formHeld } from '../apply/form-hold';
@@ -173,7 +173,7 @@ export async function tellPage(line: string): Promise<void> {
   if (raw.length === 0)
     return;
 
-  const text = raw.startsWith('~') || raw === 'сервер молчит' || raw.startsWith('я завис') ? raw : tagLine(runMode, raw);
+  const text = nameStep(raw);
 
   if (stallText(text) && hangLive === false)
     return;
@@ -714,7 +714,7 @@ async function postPulse(line: string): Promise<void> {
   const stamp = pilotStamp();
   const body = await pilotFetch('/api/pulse', {
     method: 'POST',
-    body: JSON.stringify({ line, device: await deviceId(), version: browser.runtime.getManifest().version }),
+    body: JSON.stringify({ line, device: await deviceId(), version: browser.runtime.getManifest().version, mode: runMode }),
     signal: AbortSignal.timeout(8_000),
   });
   if (body === null || stamp !== pilotStamp())

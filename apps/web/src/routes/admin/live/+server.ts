@@ -31,6 +31,7 @@ const blank = {
   extensionLamp: 'quiet',
   extensionBuild: '',
   extensionVersion: '',
+  searchMode: '',
   log: [],
 };
 
@@ -70,6 +71,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
     extensionLamp: extensionLamp(build, state.auto),
     extensionBuild: build,
     extensionVersion: watch.clientVersion,
+    searchMode: watch.searchMode,
     log: watch.rows,
   });
 };

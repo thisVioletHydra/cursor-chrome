@@ -12,14 +12,15 @@ export const POST: RequestHandler = async ({ request }) => {
   if (login === null)
     return json({ error: 'нет' }, { status: 401 });
 
-  const body = await request.json().catch(() => null) as { line?: unknown; device?: unknown; version?: unknown } | null;
+  const body = await request.json().catch(() => null) as { line?: unknown; device?: unknown; version?: unknown; mode?: unknown } | null;
   const line = typeof body?.line === 'string' ? body.line : '';
   const device = typeof body?.device === 'string' ? body.device : '';
   const version = typeof body?.version === 'string' && /^\d+\.\d+\.\d+$/.test(body.version) ? body.version : '';
+  const mode = body?.mode === 'full' || body?.mode === 'light' || body?.mode === 'target' ? body.mode : '';
   if (line.trim().length === 0)
     return json({ error: 'пусто' }, { status: 400 });
 
-  const stop = await watchPulse(line, version);
+  const stop = await watchPulse(line, version, mode);
   const [state, saved] = await Promise.all([
     readState().catch(() => null),
     readAccount(login),

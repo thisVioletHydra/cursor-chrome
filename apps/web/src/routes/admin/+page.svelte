@@ -1,6 +1,7 @@
 <script lang="ts">
 import { enhance } from '$app/forms';
 import { onMount, tick } from 'svelte';
+import { searchModeLabel, showLog } from './log-name';
 import { logKey, logPlace, logSnap, readLog, takeRows } from './log-snap.svelte.ts';
 
 let { data } = $props();
@@ -28,6 +29,7 @@ let board = $state<'accepted' | 'hidden' | 'waiting'>('accepted');
 let extensionLamp = $state<'ok' | 'stale' | 'quiet'>(data.extensionLamp === 'stale' || data.extensionLamp === 'quiet' ? data.extensionLamp : 'ok');
 let extensionBuild = $state(typeof data.extensionBuild === 'string' ? data.extensionBuild : '');
 let extensionVersion = $state(typeof data.extensionVersion === 'string' ? data.extensionVersion : '');
+let searchMode = $state(typeof data.searchMode === 'string' ? data.searchMode : '');
 let dropping = $state(false);
 let waitNote = $state('');
 let waitOk = $state(false);
@@ -41,10 +43,10 @@ const copyClass = $derived(
 );
 
 const whoName: Record<string, string> = {
-  extension: 'расширение',
-  telegram: 'телега',
-  server: 'сервер',
-  model: 'модель',
+  extension: 'ext',
+  telegram: 'tg',
+  server: 'srv',
+  model: 'ai',
 };
 
 $effect(() => {
@@ -93,6 +95,7 @@ async function refresh(mine: number): Promise<void> {
     extensionLamp?: string;
     extensionBuild?: string;
     extensionVersion?: string;
+    searchMode?: string;
     log?: unknown;
   };
   if (mine !== seenView)
@@ -111,6 +114,9 @@ async function refresh(mine: number): Promise<void> {
 
     if (typeof body.extensionVersion === 'string')
       extensionVersion = body.extensionVersion;
+
+    if (typeof body.searchMode === 'string')
+      searchMode = body.searchMode;
   }
 
   notePulse(typeof body.pulse?.line === 'string' ? body.pulse.line : '');
@@ -541,6 +547,7 @@ const extensionVer = $derived.by(() => {
 
   return extensionLamp === 'ok' ? extensionBuild : '';
 });
+const modeLine = $derived(searchModeLabel(searchMode));
 
 function restartDetail(data: unknown): { ok: boolean; detail: string } {
   if (typeof data !== 'object' || data === null)
@@ -647,7 +654,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
     <li>
       <div class="flex items-center gap-2">
         <span class="size-2 shrink-0 rounded-full {extensionLamp === 'stale' ? 'bg-amber-300' : extensionLamp === 'ok' ? 'bg-emerald-400' : 'bg-zinc-600'}"></span>
-        <span class={extensionLamp === 'stale' ? 'text-xs text-amber-200' : 'text-xs text-zinc-400'}>{extensionLamp === 'stale' ? 'обнови расширение браузера' : 'Расширение'}</span>
+        <span class={extensionLamp === 'stale' ? 'text-xs text-amber-200' : 'text-xs text-zinc-400'}>{extensionLamp === 'stale' ? 'обнови расширение браузера' : 'ext'}</span>
         {#if extensionVer}
           <span class="text-xs tabular-nums {extensionLamp === 'stale' ? 'text-amber-200/80' : 'text-zinc-500'}">{extensionVer}</span>
         {/if}
@@ -668,6 +675,10 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
   </div>
   <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
     <h2 class="text-base font-semibold">Логирование</h2>
+    <div class="flex items-center gap-3">
+    {#if modeLine}
+      <p class="text-xs text-zinc-400">режим поиска: <span class="text-zinc-200">{modeLine}</span></p>
+    {/if}
     <button
       class="inline-flex h-8 min-h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border bg-[#10131a] px-3 text-sm font-medium transition hover:border-white/30 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-[0.98] {copyClass}"
       type="button"
@@ -686,6 +697,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
       {/if}
       {copyNote}
     </button>
+    </div>
   </div>
   <div class="overflow-hidden rounded-lg border border-white/10 bg-[#07080c] font-mono text-[13px] leading-snug">
     <div class="flex items-center gap-2 border-b border-white/10 px-3 py-2">
@@ -709,7 +721,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
     </div>
     <p class="flex min-w-0 items-center gap-2 overflow-hidden border-b border-white/10 px-3 py-2 whitespace-nowrap">
       <span class="shrink-0 text-zinc-500">&gt;</span>
-      <span class="min-w-0 truncate {pauseLine(liveStep) ? 'text-amber-200' : liveStep.length > 0 ? 'text-[#9dccab]' : 'text-zinc-500'}">{liveStep.length > 0 ? liveStep : 'пульса ещё нет'}</span>
+      <span class="min-w-0 truncate {pauseLine(liveStep) ? 'text-amber-200' : liveStep.length > 0 ? 'text-[#9dccab]' : 'text-zinc-500'}">{liveStep.length > 0 ? showLog(liveStep) : 'пульса ещё нет'}</span>
     </p>
     {#if logSnap.rows.length === 0}
       <p class="px-3 py-2 text-zinc-500">Пока тихо. Сюда попадают смена шага и поломки, не каждая секунда.</p>
@@ -719,7 +731,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
           <li data-k={logKey(row)} class="flex items-baseline gap-x-2 py-0.5">
             <time class="shrink-0 text-xs text-zinc-500 tabular-nums whitespace-nowrap">{clock(row.at)}</time>
             <span class="shrink-0 text-xs text-zinc-500 whitespace-nowrap">{whoName[row.who] ?? row.who}</span>
-            <span class="min-w-0 flex-1 break-words whitespace-normal {pauseLine(row.text) ? 'text-amber-200' : row.death ? 'text-[#c49090]' : 'text-zinc-200'}">{row.text}</span>
+            <span class="min-w-0 flex-1 break-words whitespace-normal {pauseLine(row.text) ? 'text-amber-200' : row.death ? 'text-[#c49090]' : 'text-zinc-200'}">{showLog(row.text)}</span>
           </li>
         {/each}
       </ul>

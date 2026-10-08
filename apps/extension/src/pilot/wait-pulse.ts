@@ -1,3 +1,5 @@
+import { nameStep } from './step-name.ts';
+
 export type WaitKind = 'w' | 's' | 'p';
 
 export type WaitMark = {
@@ -133,7 +135,7 @@ export function stageLine(mark: WaitMark): string | null {
 
   const here = PLACE[mark.id];
   const next = PLACE[mark.next];
-  const file = here?.file ?? mark.id;
+  const file = nameStep(here?.file ?? mark.id);
   const doing = here?.do ?? mark.human;
   const after = next?.do ?? mark.next;
   const budget = mark.budget === null ? '' : `, ${mark.budget} с`;
@@ -149,7 +151,7 @@ export function pulseLines(text: string): string[] | null {
   const here = PLACE[hit.id];
   const next = PLACE[hit.next];
   const doing = here?.do ?? hit.human;
-  const file = here?.file ?? hit.id;
+  const file = nameStep(here?.file ?? hit.id);
   const after = next?.do ?? hit.next;
   if (hit.id === 'queue.idle')
     return ['простой, секунды не пишу', 'жду следующую работу', file];
