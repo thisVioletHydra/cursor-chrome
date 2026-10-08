@@ -1,4 +1,5 @@
 import { scanApplied, watchToasts } from './apply-watch';
+import { dismissJobOffer } from './job-offer';
 import { keepLiveLog, mountLiveLog } from './live-log';
 import { keepMachine, mountMachine } from './machine-hud';
 import { pullRemoteNegotiations, scanNegotiations } from './negotiations';
@@ -28,6 +29,7 @@ export function startHhJob(): void {
     keepMachine();
     scanApplied();
     scanScreenQuestions();
+    dismissJobOffer();
     scanNegotiations();
     void refreshOverlay();
   }, 500);

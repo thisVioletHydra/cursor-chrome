@@ -8,6 +8,7 @@ import { getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
 const APPLY_CAP_MS = 3 * 60_000;
+const APPLY_SURFACE = /\/vacancy\/\d+|vacancy_response/i;
 
 type ApplyReply = {
   ok?: boolean;
@@ -43,7 +44,7 @@ async function applyBody(before: string, stuck: () => boolean): Promise<unknown>
   }
   catch {
     if (stuck())
-      return { ok: false, status: 'skip', reason: FORM_STUCK };
+      return finishCap();
 
     const tab = await requireWorkerTab();
     await waitTab(requireTabId(tab), 15_000);
@@ -62,7 +63,7 @@ function applyCap(mark: () => void): { promise: Promise<ApplyReply>; cancel: () 
   const promise = new Promise<ApplyReply>((resolve) => {
     timer = setTimeout(() => {
       mark();
-      resolve(stuckApply());
+      void finishCap().then(resolve, () => resolve(notAForm()));
     }, APPLY_CAP_MS);
   });
 
@@ -77,6 +78,18 @@ function applyCap(mark: () => void): { promise: Promise<ApplyReply>; cancel: () 
 
 function stuckApply(): ApplyReply {
   return { ok: false, status: 'skip', reason: FORM_STUCK };
+}
+
+function notAForm(): ApplyReply {
+  return { ok: false, status: 'skip', reason: 'уведомление о работе' };
+}
+
+async function finishCap(): Promise<ApplyReply> {
+  const href = await workerHref();
+  if (APPLY_SURFACE.test(href))
+    return stuckApply();
+
+  return notAForm();
 }
 
 function applyBeat(): ReturnType<typeof setInterval> {

@@ -6,6 +6,7 @@ import { applyBlocker, captchaOnPage, formReady, humanPayload } from './apply-de
 import { asHumanBlock, fillApply } from './apply-fill';
 import { ask } from './bridge';
 import { sleep, until } from './dom';
+import { dismissJobOffer } from './job-offer';
 import { noteLive } from './live-log';
 import { murkyBlock, vacancyAndFormText } from './murky';
 import { employerQuestionnaire, markReviewing, setApplyLock } from './screen-questions';
@@ -49,6 +50,7 @@ export function runApply(resume = false): Promise<ApplyResult> {
 }
 
 async function applyOnce(resume: boolean): Promise<ApplyResult> {
+  dismissJobOffer();
   setApplyLock(true);
   abroadNoted = false;
   hadToast = resume ? hadToast : applySucceeded();
