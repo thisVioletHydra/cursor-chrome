@@ -87,6 +87,7 @@ export type FoundCard = {
   remote: boolean;
   experience: string;
   query: string;
+  place?: string;
 };
 
 export async function collectVacancies(
@@ -1080,6 +1081,7 @@ function cardOf(chunk: string): FoundCard | null {
     remote: /удал[её]н|remote/i.test(`${place} ${snippet}`),
     experience: '',
     query: '',
+    place: cleanPlace(place),
   };
 }
 
@@ -1103,9 +1105,23 @@ function vacancyFromHtml(html: string, id: string, url: string): FoundCard | nul
     query: '',
   };
   fillText(card, html);
+  card.place = placeOf(html);
   card.remote = /удал[её]н|remote/i.test(card.text);
 
   return card;
+}
+
+function placeOf(html: string): string {
+  const published = textAt(html, 'vacancy-view-publication-date');
+  const named = published.match(/опубликована\b[\s\S]*\sв\s+(.+)/i)?.[1] ?? '';
+  const address = textAt(html, 'vacancy-view-raw-address');
+  const raw = named.trim().length > 0 ? named : address;
+
+  return cleanPlace(raw);
+}
+
+function cleanPlace(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().slice(0, 80);
 }
 
 function fillText(card: FoundCard, html: string): void {

@@ -26,6 +26,7 @@ export type QueueItem = {
   outcome?: Outcome;
   outcomeAt?: number;
   foundBy?: string;
+  place?: string;
 };
 
 const MAX = 600;

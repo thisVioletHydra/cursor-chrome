@@ -658,7 +658,7 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
     return { started: false, stop: false, reason: '' };
   }
 
-  await tellPage(`queue-run.ts · открыл ${card.title}`);
+  await tellPage(openedLine(card.title, card.place));
   if (feedLight && feedDry(card.title, card.text) === false)
     lightBare = false;
 
@@ -1262,7 +1262,7 @@ async function applyOne(item: QueueItem, already = false): Promise<ApplyReply> {
       return shown;
 
     tabId = shown.tabId;
-    await tellPage(`queue-run.ts · открыл ${item.title.trim() || item.id}`);
+    await tellPage(openedLine(item.title.trim() || item.id, item.place));
   }
 
   if (await tabShowsCaptcha(tabId))
@@ -1300,6 +1300,14 @@ function count(run: QueueRun, status: Status): void {
     run.human += 1;
   else
     run.skipped += 1;
+}
+
+function openedLine(title: string, place: string | undefined): string {
+  const where = typeof place === 'string' ? place.trim() : '';
+  if (where.length === 0)
+    return `queue-run.ts · открыл ${title}`;
+
+  return `queue-run.ts · открыл ${title}, ${where}`;
 }
 
 function describe(status: Status, reply: ApplyReply): string {

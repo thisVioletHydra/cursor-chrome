@@ -36,6 +36,7 @@ export function boardFrom(queue: QueueItem[], passed: PassedRow[], now = Date.no
         reason: row.status === 'needsHuman' ? waitWhy(row.hints) : '',
         at,
         when: when.format(at),
+        place: typeof row.place === 'string' ? row.place : '',
       };
     }),
     passed: passed.map(row => ({

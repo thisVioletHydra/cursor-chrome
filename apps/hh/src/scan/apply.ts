@@ -11,6 +11,7 @@ export async function sendApply(vacancy: Vacancy, reason: string, score = 0): Pr
     reason,
     score,
     ...(vacancy.foundBy ? { foundBy: vacancy.foundBy } : {}),
+    ...(vacancy.place ? { place: vacancy.place } : {}),
   });
 
   return added ? 'queued' : 'again';

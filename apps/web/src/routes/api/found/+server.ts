@@ -20,6 +20,7 @@ type Incoming = {
   remote?: unknown;
   experience?: unknown;
   query?: unknown;
+  place?: unknown;
 };
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -173,6 +174,7 @@ function vacancyOf(value: unknown): Vacancy | null {
     ? row.url.split('?')[0]
     : `https://hh.ru/vacancy/${id}`;
   const foundBy = queryOf(row.query);
+  const place = textOf(row.place, '').slice(0, 80);
 
   return {
     id,
@@ -189,6 +191,7 @@ function vacancyOf(value: unknown): Vacancy | null {
     employerId: '',
     experience: textOf(row.experience, '').slice(0, 80),
     ...(foundBy.length > 0 ? { foundBy } : {}),
+    ...(place.length > 0 ? { place } : {}),
   };
 }
 

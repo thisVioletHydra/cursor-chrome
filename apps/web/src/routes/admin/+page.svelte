@@ -748,8 +748,11 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
           <tbody>
             {#each acceptedPool as row (row.id)}
               <tr>
-                <td class="max-w-xs truncate">
+                <td class="max-w-xs">
                   {@render vacancyLink(row.url, `${plainLabel(row.company)} · ${plainLabel(row.title)}`, row.at)}
+                  {#if row.place}
+                    <span class="mt-0.5 block text-[11px] text-zinc-600">{row.place}</span>
+                  {/if}
                 </td>
                 <td><span class="badge badge-sm {statusBadge[row.status] ?? 'badge-ghost'}">{statusText[row.status] ?? row.status}</span></td>
                 <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
@@ -783,7 +786,9 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
                 <td class="overflow-hidden pl-[0.8rem]!">
                   <a class="block text-xs leading-snug underline-offset-4 hover:underline text-zinc-400" href={row.url} target="_blank" rel="noreferrer">
                     <span class="line-clamp-2">{plainLabel(row.company)} · {plainLabel(row.title)}</span>
-                    <span class="mt-0.5 block text-[11px] tabular-nums text-zinc-600">{row.id}</span>
+                    {#if row.place}
+                      <span class="mt-0.5 block text-[11px] text-zinc-600">{row.place}</span>
+                    {/if}
                   </a>
                 </td>
                 <td>

@@ -39,7 +39,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
   const [items, links, pages] = await Promise.all([pending(10), keptLinks(), searchPages(saved)]);
 
   return json({
-    items: items.map(row => ({ id: row.id, company: row.company, title: row.title, url: row.url })),
+    items: items.map(row => ({ id: row.id, company: row.company, title: row.title, url: row.url, place: row.place ?? '' })),
     links,
     pages,
     letter,
