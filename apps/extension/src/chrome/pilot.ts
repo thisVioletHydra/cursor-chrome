@@ -34,7 +34,7 @@ const STOP_STATUS: Record<PilotStop, string> = {
   daily: 'лимит на сегодня',
   feed: 'вакансии походу закончились',
   week: 'неделя кончилась',
-  alarm: 'аларм, нас детектят',
+  alarm: 'АЛЛО, там смс хотят. иди, кожаный, проверь',
 };
 
 const SERVER_STATUS: Record<PilotFault, string> = {

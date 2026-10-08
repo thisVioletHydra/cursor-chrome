@@ -1,5 +1,5 @@
 export const DETECT_WALL = 'Вам недоступна эта вакансия';
-export const DETECT_LINE = 'аларм, нас детектят';
+export const DETECT_LINE = 'АЛЛО, там смс хотят. иди, кожаный, проверь';
 
 export function detectWall(text: string): boolean {
   return text.includes(DETECT_WALL);

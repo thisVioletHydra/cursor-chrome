@@ -38,7 +38,7 @@ test('user, captcha, hang, and daily limit turn the bot off and close the tab', 
 
   assert.equal(pilotStep(on, { type: 'stop', reason: 'daily' }).status, 'лимит на сегодня');
   assert.equal(pilotStep(on, { type: 'stop', reason: 'feed' }).status, 'вакансии походу закончились');
-  assert.equal(pilotStep(on, { type: 'stop', reason: 'alarm' }).status, 'аларм, нас детектят');
+  assert.equal(pilotStep(on, { type: 'stop', reason: 'alarm' }).status, 'АЛЛО, там смс хотят. иди, кожаный, проверь');
 });
 
 test('pin, wake, focus, popup, discard, and tab id are not a stop', () => {

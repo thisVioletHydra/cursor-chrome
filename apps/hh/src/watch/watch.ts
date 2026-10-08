@@ -283,8 +283,8 @@ export async function watchRestart(): Promise<void> {
   }
 }
 
-const ALARM_LINE = 'аларм, нас детектят';
-const ALARM_NOTE = 'аларм, нас детектят. hh закрыл вакансию и просит войти. бот выключен.';
+const ALARM_LINE = 'АЛЛО, там смс хотят. иди, кожаный, проверь';
+const ALARM_NOTE = 'АЛЛО, там смс хотят. иди, кожаный, проверь. бот выключен, руками.';
 
 export async function watchAlarm(): Promise<void> {
   await watchStop();

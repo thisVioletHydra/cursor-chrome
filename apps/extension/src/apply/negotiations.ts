@@ -2,6 +2,7 @@ import { getSyncKey } from '../diary/apply-log';
 import { getFlags } from '../pilot/flags';
 import { tabShowsCaptcha } from '../tab/hh-captcha';
 import { requireTabId } from '../link/inject';
+import { holdDetect } from './detect-hold';
 import { captchaHolding, syncBase } from './queue-run';
 import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
@@ -77,8 +78,11 @@ async function collect(tabId: number, url: string): Promise<NegotiationItem[]> {
   await loaded;
 
   const tab = await browser.tabs.get(tabId);
-  if ((tab.url || '').startsWith(LOGIN_URL))
+  if ((tab.url || '').startsWith(LOGIN_URL)) {
+    await holdDetect();
+
     throw new Error('hh.ru просит войти (login)');
+  }
 
   await delay(RENDER_WAIT_MS);
   const results = await browser.scripting.executeScript({ target: { tabId }, func: extractNegotiations });

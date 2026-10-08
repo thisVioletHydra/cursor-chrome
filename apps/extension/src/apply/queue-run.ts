@@ -43,7 +43,6 @@ const REPORT_KEY = 'queueReport';
 const SOON_KEY = 'queueSoon';
 const BUSY_KEY = 'queueBusy';
 const KICK_AT_KEY = 'queueKickAt';
-const STOP_NOTE_KEY = 'huntStopNote';
 const KICK_GAP_MS = 10 * 60_000;
 const REPORT_TTL_MS = 12 * 60 * 60_000;
 
@@ -525,7 +524,7 @@ async function applyPending(base: string, key: string, run: QueueRun): Promise<A
         return { started, stop: true, reason: 'капча, позови человека' };
       }
 
-      if (await caughtDetect(reply.reason)) {
+      if (await caughtDetect(reply.reason) || await caughtLogin(reply.reason)) {
         run.left -= 1;
 
         return { started, stop: true, reason: DETECT_LINE };
@@ -766,7 +765,7 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
     return { started: true, stop: true, reason: 'капча, позови человека' };
   }
 
-  if (await caughtDetect(reply.reason)) {
+  if (await caughtDetect(reply.reason) || await caughtLogin(reply.reason)) {
     run.left -= 1;
 
     return { started: true, stop: true, reason: DETECT_LINE };
@@ -790,15 +789,8 @@ async function stallLink(base: string, key: string, reply: ApplyReply): Promise<
     return { started: false, stop: true, reason: 'капча, позови человека' };
   }
 
-  if (await caughtDetect(reply.reason))
+  if (await caughtDetect(reply.reason) || await caughtLogin(reply.reason))
     return { started: false, stop: true, reason: DETECT_LINE };
-
-  if (LOGIN.test(reply.reason || '')) {
-    await pauseUntilMorning();
-    await tellStop(base, key, 'hh.ru просит войти (login)');
-
-    return { started: false, stop: true, reason: 'hh.ru просит войти (login)' };
-  }
 
   return { started: false, stop: false, reason: '', held: true };
 }
@@ -1106,10 +1098,9 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
     return { stop: found.reason };
 
   if (found.login) {
-    await pauseUntilMorning();
-    await tellStop(base, key, 'hh.ru просит войти (login)');
+    await holdDetect();
 
-    return { stop: 'hh.ru просит войти (login)' };
+    return { stop: DETECT_LINE };
   }
 
   if (notedOk === false)
@@ -1182,24 +1173,6 @@ async function sendFound(base: string, key: string, cards: unknown[]): Promise<{
   posted = await postFound(base, key, cards).finally(doneServerBatch);
 
   return posted;
-}
-
-async function tellStop(base: string, key: string, reason: string): Promise<void> {
-  const stored = await browser.storage.local.get(STOP_NOTE_KEY);
-  if (stored[STOP_NOTE_KEY] === reason)
-    return;
-
-  try {
-    const res = await fetch(`${base}/api/applied`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-      body: JSON.stringify({ vacancyId: '0', status: 'stop', reason }),
-    });
-    if (res.ok)
-      await browser.storage.local.set({ [STOP_NOTE_KEY]: reason });
-  }
-  catch {
-  }
 }
 
 function runOf(raw: unknown): QueueRun | null {
@@ -1536,6 +1509,15 @@ async function sendCaptcha(base: string, key: string, again: boolean): Promise<b
 
 async function caughtDetect(reason: string | undefined): Promise<boolean> {
   if (reason !== DETECT_LINE)
+    return false;
+
+  await holdDetect();
+
+  return true;
+}
+
+async function caughtLogin(reason: string | undefined): Promise<boolean> {
+  if (LOGIN.test(reason ?? '') === false)
     return false;
 
   await holdDetect();
