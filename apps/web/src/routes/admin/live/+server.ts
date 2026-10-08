@@ -29,6 +29,8 @@ const blank = {
   judged: 0,
   pulse: { line: '' },
   extensionLamp: 'quiet',
+  extensionBuild: '',
+  extensionVersion: '',
   log: [],
 };
 
@@ -41,7 +43,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
     return json(blank);
 
   await parkStaleWaiters();
-  const [loaded, state, judged, hidden, passed, passedTotal, memory] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount(), readPassed(), passedCount(), readMemory()]);
+  const [loaded, state, judged, hidden, passed, passedTotal, memory, build] = await Promise.all([readQueue(), readState(), seenCount(), hiddenCount(), readPassed(), passedCount(), readMemory(), extensionBuild()]);
   const queue = await pruneShelvedWaiters(loaded);
   const watch = watchView();
   const board = boardFrom(queue, passed);
@@ -65,7 +67,9 @@ export const GET: RequestHandler = async ({ cookies }) => {
     autopilot: { auto: state.auto, lastNote: state.lastNote, runAt: state.auto ? state.runAt : 0 },
     judged,
     pulse: watch.pulse,
-    extensionLamp: extensionLamp(await extensionBuild(), state.auto),
+    extensionLamp: extensionLamp(build, state.auto),
+    extensionBuild: build,
+    extensionVersion: watch.clientVersion,
     log: watch.rows,
   });
 };

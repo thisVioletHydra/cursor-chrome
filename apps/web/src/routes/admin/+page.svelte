@@ -26,6 +26,8 @@ let copyTimer: ReturnType<typeof setTimeout> | undefined;
 let now = $state(Date.now());
 let board = $state<'accepted' | 'hidden' | 'waiting'>('accepted');
 let extensionLamp = $state<'ok' | 'stale' | 'quiet'>(data.extensionLamp === 'stale' || data.extensionLamp === 'quiet' ? data.extensionLamp : 'ok');
+let extensionBuild = $state(typeof data.extensionBuild === 'string' ? data.extensionBuild : '');
+let extensionVersion = $state(typeof data.extensionVersion === 'string' ? data.extensionVersion : '');
 let dropping = $state(false);
 let waitNote = $state('');
 let waitOk = $state(false);
@@ -89,6 +91,8 @@ async function refresh(mine: number): Promise<void> {
     judged?: number;
     pulse?: { line?: string };
     extensionLamp?: string;
+    extensionBuild?: string;
+    extensionVersion?: string;
     log?: unknown;
   };
   if (mine !== seenView)
@@ -101,6 +105,12 @@ async function refresh(mine: number): Promise<void> {
     polling = body.polling === true;
     if (body.extensionLamp === 'ok' || body.extensionLamp === 'stale' || body.extensionLamp === 'quiet')
       extensionLamp = body.extensionLamp;
+
+    if (typeof body.extensionBuild === 'string')
+      extensionBuild = body.extensionBuild;
+
+    if (typeof body.extensionVersion === 'string')
+      extensionVersion = body.extensionVersion;
   }
 
   notePulse(typeof body.pulse?.line === 'string' ? body.pulse.line : '');
@@ -522,6 +532,15 @@ const checks = $derived([
   { ok: data.ready.live, label: 'Боевой режим', miss: 'Боевой режим выключен. Включи его кнопкой ниже.', href: '', link: '' },
 ]);
 const allGreen = $derived(checks.every(row => row.ok) && extensionLamp !== 'stale');
+const extensionVer = $derived.by(() => {
+  if (extensionVersion.length > 0 && extensionBuild.length > 0 && extensionVersion !== extensionBuild)
+    return `${extensionVersion} → ${extensionBuild}`;
+
+  if (extensionVersion.length > 0)
+    return extensionVersion;
+
+  return extensionLamp === 'ok' ? extensionBuild : '';
+});
 
 function restartDetail(data: unknown): { ok: boolean; detail: string } {
   if (typeof data !== 'object' || data === null)
@@ -629,6 +648,9 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
       <div class="flex items-center gap-2">
         <span class="size-2 shrink-0 rounded-full {extensionLamp === 'stale' ? 'bg-amber-300' : extensionLamp === 'ok' ? 'bg-emerald-400' : 'bg-zinc-600'}"></span>
         <span class={extensionLamp === 'stale' ? 'text-xs text-amber-200' : 'text-xs text-zinc-400'}>{extensionLamp === 'stale' ? 'обнови расширение браузера' : 'Расширение'}</span>
+        {#if extensionVer}
+          <span class="text-xs tabular-nums {extensionLamp === 'stale' ? 'text-amber-200/80' : 'text-zinc-500'}">{extensionVer}</span>
+        {/if}
       </div>
     </li>
   </ul>

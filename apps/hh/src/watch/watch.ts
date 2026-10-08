@@ -304,10 +304,11 @@ export function takePilotStart(): boolean {
   return true;
 }
 
-export function watchView(): { pulse: { at: number; line: string }; rows: WatchRow[] } {
+export function watchView(): { pulse: { at: number; line: string }; rows: WatchRow[]; clientVersion: string } {
   return {
     pulse: { at: bag().pulse.at, line: shortStep(bag().pulse.line) || paceLine(bag().pulse.line) ? bag().pulse.line : '' },
     rows: bag().rows.slice(-80),
+    clientVersion: bag().clientVersion,
   };
 }
 
