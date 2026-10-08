@@ -769,7 +769,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
           <thead class="sticky top-0 z-10">
             <tr class="bg-[#151922] text-xs text-zinc-500">
               <th class="w-11"></th>
-              <th class="w-[30%]">Вакансия</th>
+              <th>Вакансия</th>
               <th>Причина</th>
               <th class="w-28">Когда</th>
             </tr>
