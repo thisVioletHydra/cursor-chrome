@@ -654,7 +654,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
     <li>
       <div class="flex items-center gap-2">
         <span class="size-2 shrink-0 rounded-full {extensionLamp === 'stale' ? 'bg-amber-300' : extensionLamp === 'ok' ? 'bg-emerald-400' : 'bg-zinc-600'}"></span>
-        <span class={extensionLamp === 'stale' ? 'text-xs text-amber-200' : 'text-xs text-zinc-400'}>{extensionLamp === 'stale' ? 'обнови расширение браузера' : 'ext'}</span>
+        <span class={extensionLamp === 'stale' ? 'text-xs text-amber-200' : 'text-xs text-zinc-400'}>{extensionLamp === 'stale' ? 'обнови расширение браузера' : 'Расширение'}</span>
         {#if extensionVer}
           <span class="text-xs tabular-nums {extensionLamp === 'stale' ? 'text-amber-200/80' : 'text-zinc-500'}">{extensionVer}</span>
         {/if}
