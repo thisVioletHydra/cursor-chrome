@@ -1,7 +1,9 @@
-import { clearLinks, deleteLinks, insertLinks, listLinks, lookupHeld } from './links-db.ts';
-import { SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from '../limits.ts';
-import { bumpDay, claimRelook, clearSearchPages, countHidden, countPassed, countSeen, forgetPassed, insertHidden, insertSeen, listPassed, lookupSeen, lookupShelved, openStore, readDay, readSearchPages, savePassed, storePath, writeDay, writeSearchPage } from './seen-db.ts';
 import type { PassedNote, PassedRow } from './seen-db.ts';
+
+import { SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from '../limits.ts';
+import { hidePhrase } from './hide-phrase.ts';
+import { clearLinks, deleteLinks, insertLinks, listLinks, lookupHeld } from './links-db.ts';
+import { bumpDay, claimRelook, clearSearchPages, countHidden, countPassed, countSeen, forgetPassed, insertHidden, insertSeen, listPassed, lookupBasket, lookupSeen, lookupShelved, openStore, readDay, readSearchPages, savePassed, storePath, writeDay, writeSearchPage } from './seen-db.ts';
 
 export type { PassedNote, PassedRow };
 export { HIDE_REASON } from './seen-db.ts';
@@ -67,6 +69,24 @@ export function markSent(id: string): Promise<void> {
 
 export function knownAmong(ids: readonly string[]): Promise<string[]> {
   return turn(async () => lookupSeen(ids));
+}
+
+export function hideLabels(ids: readonly string[]): Promise<Record<string, string>> {
+  return turn(async () => {
+    const { readQueue } = await import('../queue/queue.ts');
+    const asked = new Set(ids);
+    const queue = await readQueue();
+    const status = new Map(queue.filter(row => asked.has(row.id)).map(row => [row.id, row.status]));
+    const reasons = lookupBasket(ids);
+    const out: Record<string, string> = {};
+    for (const id of ids) {
+      const phrase = hidePhrase(status.get(id), reasons.get(id) ?? '');
+      if (phrase.length > 0)
+        out[id] = phrase;
+    }
+
+    return out;
+  });
 }
 
 export function shelvedAmong(ids: readonly string[]): Promise<string[]> {

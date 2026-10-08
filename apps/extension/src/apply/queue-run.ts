@@ -1059,7 +1059,7 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
     if (marks === null)
       return null;
 
-    return { seen: new Set(marks.seen), saved: marks.saved };
+    return { seen: new Set(marks.seen), saved: marks.saved, why: marks.why };
   }, cursor => rememberPage(base, key, cursor), async (row) => {
     await postHidden(base, key, row);
   }, { focus: hunt.focus, depth: hunt.depth, phase: hunt.phase });

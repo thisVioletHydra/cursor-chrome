@@ -153,6 +153,28 @@ export function lookupShelved(ids: readonly string[]): string[] {
   return ids.filter(id => found.has(id));
 }
 
+export function lookupBasket(ids: readonly string[]): Map<string, string> {
+  const nums = uniqueNums(ids);
+  if (nums.length === 0)
+    return new Map();
+
+  const marks = nums.map(() => '?').join(', ');
+  const aside = BASKET_ASIDE.map(() => '?').join(', ');
+  const found = new Map<string, string>();
+  const rows = openDatabase().prepare(`
+    SELECT id, reason FROM passed
+    WHERE id IN (${marks}) AND reason NOT IN (${aside})
+  `).all(...nums, ...BASKET_ASIDE);
+  for (const row of rows) {
+    const id = textId(row.id);
+    const reason = sqlText(row.reason).trim();
+    if (id !== null && reason.length > 0)
+      found.set(id, reason);
+  }
+
+  return found;
+}
+
 export function lookupSeen(ids: readonly string[]): string[] {
   const nums = uniqueNums(ids);
   if (nums.length === 0)

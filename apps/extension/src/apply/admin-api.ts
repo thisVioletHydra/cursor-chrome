@@ -8,7 +8,7 @@ export type QueueItem = { id: string; company: string; title: string; url: strin
 
 export type SavedLink = { id: string; url: string };
 
-export type PageMarks = { seen: string[]; saved: string[] };
+export type PageMarks = { seen: string[]; saved: string[]; why: Record<string, string> };
 
 export type Hunt = {
   items: QueueItem[];
@@ -135,9 +135,9 @@ export async function seenAmong(
     if (res.ok === false)
       return null;
 
-    const body = await res.json() as { seen?: unknown; saved?: unknown };
+    const body = await res.json() as { seen?: unknown; saved?: unknown; why?: unknown };
 
-    return { seen: idsOf(body.seen), saved: idsOf(body.saved) };
+    return { seen: idsOf(body.seen), saved: idsOf(body.saved), why: whyOf(body.why) };
   }
   catch {
     return null;
@@ -386,6 +386,23 @@ function idsOf(value: unknown): string[] {
     return [];
 
   return value.filter((item): item is string => typeof item === 'string' && /^\d+$/.test(item));
+}
+
+function whyOf(value: unknown): Record<string, string> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return {};
+
+  const out: Record<string, string> = {};
+  for (const [id, label] of Object.entries(value)) {
+    if (/^\d+$/.test(id) === false || typeof label !== 'string')
+      continue;
+
+    const text = label.trim().slice(0, 80);
+    if (text.length > 0)
+      out[id] = text;
+  }
+
+  return out;
 }
 
 function stringsOf(value: unknown): string[] {

@@ -1,7 +1,7 @@
 import type { State } from '@cursor-chrome/hh';
 import type { RequestHandler } from './$types';
 
-import { COVER_LETTER, DEFAULT_QUERY, HIDE_REASON, busyAmong, coveredWaiters, dayOpen, dropWaiters, forgetAllLinks, forgetLinks, forgetSearchPages, heldAmong, keepLinks, knownAmong, moscowDay, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readQueue, readState, rememberSearchPage, searchPages, splitQueries, stepWalk, takePilotStart, takeRelook, walkFrom, withFrontAi, workHours, writeState } from '@cursor-chrome/hh';
+import { COVER_LETTER, DEFAULT_QUERY, HIDE_REASON, busyAmong, coveredWaiters, dayOpen, dropWaiters, forgetAllLinks, forgetLinks, forgetSearchPages, heldAmong, hideLabels, keepLinks, knownAmong, moscowDay, noteHidden, notePassed, parseRules, pending, pendingCount, QUEUE_TARGET, readLinks, readMemory, readQueue, readState, rememberSearchPage, searchPages, splitQueries, stepWalk, takePilotStart, takeRelook, walkFrom, withFrontAi, workHours, writeState } from '@cursor-chrome/hh';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
 import { extensionBuild } from '$lib/server/extension-build';
@@ -165,7 +165,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (cursor !== null)
     await rememberSearchPage(cursor.query, cursor.page);
 
-  return json({ seen, saved });
+  return json({ seen, saved, why: await hideLabels(seen) });
 }
 
 async function keptSearch(links: { id: string; url: string; title: string }[], stopWords: string[]): Promise<{ id: string; url: string; title: string }[]> {

@@ -66,6 +66,7 @@ export type SearchCursor = { query: string; page: number };
 export type PageMarks = {
   seen: ReadonlySet<string>;
   saved: readonly string[];
+  why: Readonly<Record<string, string>>;
 };
 
 export type HiddenMark = {
@@ -200,8 +201,8 @@ export async function collectVacancies(
       const fresh = new Set(marks.saved);
       const cards = new Map(batch.map(card => [card.id, card]));
       if (knownIds.length > 0)
-        await tellPage(`hh-search.ts · уже видели, ${knownIds.length}`);
-      const hidden = await hideKnown(tabId, pulled.url, knownIds.filter(id => fresh.has(id) === false), cards, noteHidden);
+        await tellPage(`hh-search.ts · скрываю знакомые, ${knownIds.length}`);
+      const hidden = await hideKnown(tabId, pulled.url, knownIds.filter(id => fresh.has(id) === false), cards, marks.why, noteHidden);
       if (hidden === false) {
         hideBlocked = true;
 
@@ -547,6 +548,7 @@ async function hideKnown(
   url: string,
   ids: readonly string[],
   cards: ReadonlyMap<string, { title: string; company: string }>,
+  why: Readonly<Record<string, string>>,
   noteHidden: (row: HiddenMark) => Promise<void>,
 ): Promise<boolean> {
   if (resumePath(url) || ids.length === 0)
@@ -561,7 +563,7 @@ async function hideKnown(
       continue;
 
     const name = hideName(cards.get(id), id);
-    await tellPage(`hh-search.ts · скрываю уже видели: ${name}`);
+    await tellPage(`hh-search.ts · ${hideLine(why[id], name)}`);
     const hit = await settleHide(tabId, id);
     if (hit === 'halt')
       return true;
@@ -591,6 +593,12 @@ async function hideKnown(
   }
 
   return true;
+}
+
+function hideLine(why: string | undefined, name: string): string {
+  const because = typeof why === 'string' && why.trim().length > 0 ? why.trim() : 'уже видели';
+
+  return `скрываю, ${because}: ${name}`;
 }
 
 function hideName(card: { title: string } | undefined, id: string): string {
