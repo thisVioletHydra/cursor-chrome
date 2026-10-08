@@ -3,6 +3,7 @@ import { foldLiveLine, liveTick, PAGE_LOAD_MS } from '../search/page-load';
 import { tagLine, type RunMode } from './log-mode';
 import { budgetSec, pulseHolds, stageLine, waitMark, waitPulse, type WaitMark } from './wait-pulse';
 import { getFlags } from './flags';
+import { FORM_PAUSE_LINE, formHeld } from '../apply/form-hold';
 import { noteHours } from '../apply/hours-flag';
 import { loadPace, waitMs } from '../apply/pace';
 import { reconcilePilot } from './pilot-heal';
@@ -446,6 +447,9 @@ export async function holdQueueWait(): Promise<void> {
     if (halted || queueRunning || resuming || currentWait !== null)
       return;
 
+    if (await formHeld())
+      return;
+
     const flags = await getFlags();
     if (flags.autoQueue !== true)
       return;
@@ -499,6 +503,12 @@ export async function pulseNow(): Promise<void> {
 
   if (halted || flags.autoQueue !== true) {
     await listenPilot();
+
+    return;
+  }
+
+  if (await formHeld()) {
+    await tellPage(FORM_PAUSE_LINE);
 
     return;
   }

@@ -7,6 +7,7 @@ import { getFlags } from '../pilot/flags';
 import { pinnedCaptcha, tabShowsCaptcha } from '../tab/hh-captcha';
 import { loadPace, rare, waitMs } from './pace';
 import { markTeaWork, maybeTea, noteTeaSession } from './tea';
+import { FORM_PAUSE_LINE, FORM_STUCK, formHeld, holdForm } from './form-hold';
 import { armLiveLog, bindHangClear, bindWaitResume, clearWait, disarmLiveLog, doneServerBatch, hangHalted, holdQueueWait, noteQueueRunning, noteServerBatch, settleResume, tellPage, tickPage, waitBeforeLoad } from '../pilot/page-log';
 import { budgetSec, waitMark } from '../pilot/wait-pulse';
 import { isPilotLinkText, readPilotLink } from '../pilot/pilot-link';
@@ -112,7 +113,8 @@ export async function runQueue(): Promise<QueueRun> {
     running = false;
     noteQueueRunning(false);
     await browser.storage.local.set({ [BUSY_KEY]: false });
-    await holdQueueWait();
+    if (await formHeld() === false)
+      await holdQueueWait();
   }
 }
 
@@ -192,7 +194,10 @@ async function rememberReport(run: QueueRun): Promise<void> {
 }
 
 export async function isPaused(): Promise<boolean> {
-  return (await readPausedUntil()) !== null;
+  if ((await readPausedUntil()) !== null)
+    return true;
+
+  return formHeld();
 }
 
 /** Возвращает активную паузу или null; просроченную сбрасывает. */
@@ -514,6 +519,10 @@ async function applyPending(base: string, key: string, run: QueueRun): Promise<A
         return { started, stop: true, reason: 'капча, позови человека' };
       }
 
+      const paused = await formPause(run, reply);
+      if (paused !== null)
+        return paused;
+
       const noted = await noteReply(base, key, run, item, reply);
       if (noted !== null)
         return { started, stop: true, reason: noted.reason };
@@ -744,6 +753,10 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
 
     return { started: true, stop: true, reason: 'капча, позови человека' };
   }
+
+  const paused = await formPause(run, reply);
+  if (paused !== null)
+    return paused;
 
   const noted = await noteReply(base, key, run, item, reply);
   if (noted !== null)
@@ -1363,6 +1376,18 @@ function stopLabel(status: Status, reason: string, text: string): string {
     return 'обязательный тест';
 
   return '';
+}
+
+async function formPause(run: QueueRun, reply: ApplyReply): Promise<ApplyPass | null> {
+  if (reply.reason !== FORM_STUCK)
+    return null;
+
+  run.left -= 1;
+  await clearWait();
+  await holdForm();
+  await tellPage(FORM_PAUSE_LINE);
+
+  return { started: true, stop: true, reason: FORM_STUCK };
 }
 
 async function pauseUntilMorning(): Promise<void> {

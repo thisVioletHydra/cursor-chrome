@@ -346,7 +346,7 @@ async function silence(): Promise<void> {
     return;
 
   const where = shortStep(bag().pulse.line) ? bag().pulse.line : 'нет пульса';
-  if (lightNap(where))
+  if (lightNap(where) || where.includes('форма отклика зависла'))
     return;
 
   if (applyPastCap(where, bag().pulse.at) === false && (queueWait(where) || readingHang(where)))

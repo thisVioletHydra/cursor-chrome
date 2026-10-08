@@ -1,3 +1,4 @@
+import { FORM_STUCK } from './form-hold';
 import { handleNeedsHuman } from './human-review';
 import { tabShowsCaptcha } from '../tab/hh-captcha';
 import { ensureContent, requireTabId, workerTopMessage } from '../link/inject';
@@ -42,7 +43,7 @@ async function applyBody(before: string, stuck: () => boolean): Promise<unknown>
   }
   catch {
     if (stuck())
-      return { ok: false, status: 'skip', reason: 'форма отклика зависла' };
+      return { ok: false, status: 'skip', reason: FORM_STUCK };
 
     const tab = await requireWorkerTab();
     await waitTab(requireTabId(tab), 15_000);
@@ -61,7 +62,7 @@ function applyCap(mark: () => void): { promise: Promise<ApplyReply>; cancel: () 
   const promise = new Promise<ApplyReply>((resolve) => {
     timer = setTimeout(() => {
       mark();
-      void stopStuckApply().then(() => resolve(stuckApply()), () => resolve(stuckApply()));
+      resolve(stuckApply());
     }, APPLY_CAP_MS);
   });
 
@@ -75,29 +76,7 @@ function applyCap(mark: () => void): { promise: Promise<ApplyReply>; cancel: () 
 }
 
 function stuckApply(): ApplyReply {
-  return { ok: false, status: 'skip', reason: 'форма отклика зависла' };
-}
-
-async function stopStuckApply(): Promise<void> {
-  await tellPage('мимо, форма отклика зависла');
-  await leaveApplyForm();
-}
-
-async function leaveApplyForm(): Promise<void> {
-  const tab = await requireWorkerTab().catch(() => null);
-  if (tab === null)
-    return;
-
-  const here = tab.url || '';
-  if (/vacancy_response/i.test(here) === false)
-    return;
-
-  const id = here.match(/[?&]vacancyId=(\d+)/)?.[1] ?? here.match(/\/vacancy\/(\d+)/)?.[1] ?? '';
-  const back = id.length > 0 ? `https://hh.ru/vacancy/${id}` : 'https://hh.ru/';
-  const tabId = requireTabId(tab);
-  const wait = waitTab(tabId, 15_000);
-  await browser.tabs.update(tabId, { url: back, active: false }).catch(() => undefined);
-  await wait;
+  return { ok: false, status: 'skip', reason: FORM_STUCK };
 }
 
 function applyBeat(): ReturnType<typeof setInterval> {

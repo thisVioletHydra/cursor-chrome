@@ -164,6 +164,10 @@ function skipEssay(text: string): boolean {
   return SKIP_ESSAY.test(text);
 }
 
+function pauseLine(text: string): boolean {
+  return text.includes('форма отклика зависла');
+}
+
 const liveStep = $derived.by(() => {
   if (headerStep(logSnap.pulse))
     return logSnap.pulse;
@@ -683,7 +687,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
     </div>
     <p class="flex min-w-0 items-center gap-2 overflow-hidden border-b border-white/10 px-3 py-2 whitespace-nowrap">
       <span class="shrink-0 text-zinc-500">&gt;</span>
-      <span class="min-w-0 truncate {liveStep.length > 0 ? 'text-[#9dccab]' : 'text-zinc-500'}">{liveStep.length > 0 ? liveStep : 'пульса ещё нет'}</span>
+      <span class="min-w-0 truncate {pauseLine(liveStep) ? 'text-amber-200' : liveStep.length > 0 ? 'text-[#9dccab]' : 'text-zinc-500'}">{liveStep.length > 0 ? liveStep : 'пульса ещё нет'}</span>
     </p>
     {#if logSnap.rows.length === 0}
       <p class="px-3 py-2 text-zinc-500">Пока тихо. Сюда попадают смена шага и поломки, не каждая секунда.</p>
@@ -693,7 +697,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
           <li data-k={logKey(row)} class="flex items-baseline gap-x-2 py-0.5">
             <time class="shrink-0 text-xs text-zinc-500 tabular-nums whitespace-nowrap">{clock(row.at)}</time>
             <span class="shrink-0 text-xs text-zinc-500 whitespace-nowrap">{whoName[row.who] ?? row.who}</span>
-            <span class="min-w-0 flex-1 break-words whitespace-normal {row.death ? 'text-[#c49090]' : 'text-zinc-200'}">{row.text}</span>
+            <span class="min-w-0 flex-1 break-words whitespace-normal {pauseLine(row.text) ? 'text-amber-200' : row.death ? 'text-[#c49090]' : 'text-zinc-200'}">{row.text}</span>
           </li>
         {/each}
       </ul>
