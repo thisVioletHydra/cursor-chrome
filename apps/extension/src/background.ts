@@ -10,7 +10,8 @@ import { syncNegotiations } from './apply/negotiations';
 import { ensureOffscreen, setBadge, waitOffscreen } from './link/offscreen-ctl';
 import { bindPilotWake, clearHangHalt, hangHalted, pulseNow } from './pilot/page-log';
 import { applyPilot } from './pilot/pilot-apply';
-import { clearSearchBusy, clearSearchSoon, isPaused, kickedRecently, markKicked, markSearchSoon, queueBusy, runQueue } from './apply/queue-run';
+import { releaseStaleHold } from './apply/form-hold';
+import { captchaHolding, clearSearchBusy, clearSearchSoon, isPaused, kickedRecently, markKicked, markSearchSoon, queueBusy, runQueue } from './apply/queue-run';
 import { rpc } from './link/rpc';
 import { browser } from './browser-host';
 
@@ -258,7 +259,23 @@ async function boot(): Promise<void> {
   connectNative();
   await setBadge(connected);
   await clearSearchBusy();
+  await continueAfterPatch();
   void pulseNow();
+}
+
+async function continueAfterPatch(): Promise<void> {
+  const dropped = await releaseStaleHold();
+  if (dropped === false)
+    return;
+
+  const flags = await getFlags();
+  if (flags.autoQueue !== true || hangHalted())
+    return;
+
+  if (await isPaused() || await captchaHolding())
+    return;
+
+  void runQueue().catch(() => {});
 }
 
 function turnedAutoOn(change: chrome.storage.StorageChange | undefined): boolean {
