@@ -142,7 +142,13 @@ function notePulse(line: string): void {
 
 function headerStep(line: string): boolean {
   const text = line.trim();
-  if (text.length === 0 || text.length > STEP_MAX)
+  if (text.length === 0)
+    return false;
+
+  if (text.includes(' · потом '))
+    return true;
+
+  if (text.length > STEP_MAX)
     return false;
 
   return skipEssay(text) === false;
@@ -775,7 +781,10 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
                   </form>
                 </td>
                 <td class="overflow-hidden pl-[0.8rem]!">
-                  <a class="block truncate text-xs underline-offset-4 hover:underline text-zinc-400" href={row.url} target="_blank" rel="noreferrer">{plainLabel(row.company)} · {plainLabel(row.title)}</a>
+                  <a class="block text-xs leading-snug underline-offset-4 hover:underline text-zinc-400" href={row.url} target="_blank" rel="noreferrer">
+                    <span class="line-clamp-2">{plainLabel(row.company)} · {plainLabel(row.title)}</span>
+                    <span class="mt-0.5 block text-[11px] tabular-nums text-zinc-600">{row.id}</span>
+                  </a>
                 </td>
                 <td>
                   <p class="line-clamp-2 text-sm leading-snug text-zinc-200" title={row.reason || 'не записано'}>{row.reason || 'не записано'}</p>

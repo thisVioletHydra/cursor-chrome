@@ -199,8 +199,9 @@ export async function watchPulse(line: string, version = ''): Promise<boolean> {
   }
 
   const step = shortStep(text);
-  const kept = shortStep(previous) ? previous : '';
-  bag().pulse = { at: Date.now(), line: step ? text : kept };
+  const paced = paceLine(text);
+  const kept = shortStep(previous) || paceLine(previous) ? previous : '';
+  bag().pulse = { at: Date.now(), line: step || paced ? text : kept };
   if (text.startsWith('я завис') || text === 'сервер молчит') {
     if (holdHang())
       return pilotStop();
@@ -210,23 +211,25 @@ export async function watchPulse(line: string, version = ''): Promise<boolean> {
     return pilotStop();
   }
 
+  if (paced || tickLine(text)) {
+    bag().stepped = true;
+    if (tickLine(text)) {
+      const last = bag().rows[bag().rows.length - 1];
+      if (last !== undefined && last.death === false && tickLine(last.text) && last.text !== text) {
+        last.text = text;
+        last.at = Date.now();
+        await save();
+      }
+    }
+
+    return pilotStop();
+  }
+
   if (step === false) {
     if (skipEssay(text) && echoed(text) === false)
       await mark('model', text, false);
     else if (skipEssay(text) === false)
       await mark('extension', text, false);
-
-    return pilotStop();
-  }
-
-  if (tickLine(text)) {
-    bag().stepped = true;
-    const last = bag().rows[bag().rows.length - 1];
-    if (last !== undefined && last.death === false && tickLine(last.text) && last.text !== text) {
-      last.text = text;
-      last.at = Date.now();
-      await save();
-    }
 
     return pilotStop();
   }
@@ -303,7 +306,7 @@ export function takePilotStart(): boolean {
 
 export function watchView(): { pulse: { at: number; line: string }; rows: WatchRow[] } {
   return {
-    pulse: { at: bag().pulse.at, line: shortStep(bag().pulse.line) ? bag().pulse.line : '' },
+    pulse: { at: bag().pulse.at, line: shortStep(bag().pulse.line) || paceLine(bag().pulse.line) ? bag().pulse.line : '' },
     rows: bag().rows.slice(-80),
   };
 }
@@ -757,6 +760,10 @@ function replay(): void {
   }
 }
 
+function paceLine(text: string): boolean {
+  return text.includes(' · потом ');
+}
+
 function shortStep(text: string): boolean {
   return text.length > 0 && text.length <= STEP_MAX && skipEssay(text) === false;
 }
@@ -780,19 +787,16 @@ function twinRow(text: string): WatchRow | null {
   if (body.length < 12)
     return null;
 
-  const from = Math.max(0, bag().rows.length - 40);
-  for (let index = bag().rows.length - 1; index >= from; index -= 1) {
-    const row = bag().rows[index];
-    if (row === undefined || row.death)
-      continue;
+  const row = bag().rows[bag().rows.length - 1];
+  if (row === undefined || row.death)
+    return null;
 
-    const other = skipCore(row.text);
-    if (other.length < 12)
-      continue;
+  const other = skipCore(row.text);
+  if (other.length < 12)
+    return null;
 
-    if (body === other || body.endsWith(other) || other.endsWith(body))
-      return row;
-  }
+  if (body === other || body.endsWith(other) || other.endsWith(body))
+    return row;
 
   return null;
 }
