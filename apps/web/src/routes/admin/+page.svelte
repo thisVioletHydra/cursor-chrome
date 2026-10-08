@@ -462,6 +462,15 @@ function plainLabel(raw: string): string {
     .trim();
 }
 
+function placeLabel(place: string | undefined): string {
+  if (typeof place !== 'string')
+    return 'город не записан';
+
+  const text = place.trim();
+
+  return text.length > 0 ? text : 'город не записан';
+}
+
 function passedName(row: { company: string; title: string; id: string }): string {
   const company = plainLabel(row.company);
   const title = plainLabel(row.title);
@@ -750,9 +759,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
               <tr>
                 <td class="max-w-xs">
                   {@render vacancyLink(row.url, `${plainLabel(row.company)} · ${plainLabel(row.title)}`, row.at)}
-                  {#if row.place}
-                    <span class="mt-0.5 block text-[11px] text-zinc-600">{row.place}</span>
-                  {/if}
+                  <span class="mt-0.5 block text-[11px] text-zinc-600">{placeLabel(row.place)}</span>
                 </td>
                 <td><span class="badge badge-sm {statusBadge[row.status] ?? 'badge-ghost'}">{statusText[row.status] ?? row.status}</span></td>
                 <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
@@ -786,9 +793,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
                 <td class="overflow-hidden pl-[0.8rem]!">
                   <a class="block text-xs leading-snug underline-offset-4 hover:underline text-zinc-400" href={row.url} target="_blank" rel="noreferrer">
                     <span class="line-clamp-2">{plainLabel(row.company)} · {plainLabel(row.title)}</span>
-                    {#if row.place}
-                      <span class="mt-0.5 block text-[11px] text-zinc-600">{row.place}</span>
-                    {/if}
+                    <span class="mt-0.5 block text-[11px] text-zinc-600">{placeLabel(row.place)}</span>
                   </a>
                 </td>
                 <td>
