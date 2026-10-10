@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { ChannelPost } from '$lib/channel-post';
 
-import { enhance } from '$app/forms';
+import { enhance } from '$lib/admin-forms';
 import { slide } from 'svelte/transition';
 
 import KeyConnect from '$lib/KeyConnect.svelte';

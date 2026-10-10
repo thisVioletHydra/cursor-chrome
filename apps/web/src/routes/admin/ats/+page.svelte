@@ -1,6 +1,6 @@
 <script lang="ts">
 import { invalidateAll } from '$app/navigation';
-import { enhance } from '$app/forms';
+import { enhance } from '$lib/admin-forms';
 
 type Flag = {
   level: 'red' | 'orange' | 'yellow';

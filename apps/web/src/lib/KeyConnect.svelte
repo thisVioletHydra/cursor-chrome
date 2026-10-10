@@ -1,5 +1,5 @@
 <script lang="ts">
-import { enhance } from '$app/forms';
+import { enhance } from '$lib/admin-forms';
 
 type Field = { name: string; label: string; secret: boolean; url?: boolean };
 type Memory = { draft: Record<string, string>; message: string };

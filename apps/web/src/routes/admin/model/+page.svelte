@@ -1,5 +1,5 @@
 <script lang="ts">
-import { enhance } from '$app/forms';
+import { enhance } from '$lib/admin-forms';
 import Out from '$lib/Out.svelte';
 
 let { data } = $props();

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { enhance } from '$app/forms';
+import { enhance } from '$lib/admin-forms';
 import { onMount, tick } from 'svelte';
 import { searchModeLabel, showLog } from './log-name';
 import { logKey, logPlace, logSnap, readLog, takeRows } from './log-snap.svelte.ts';

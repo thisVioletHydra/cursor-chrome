@@ -1,10 +1,12 @@
 <script lang="ts">
-import { enhance } from '$app/forms';
+import { enhance } from '$lib/admin-forms';
 
 let { data } = $props();
 let draft = $state('');
 let message = $state('');
 let ok = $state(false);
+let saving = $state(false);
+let restoredDraft = false;
 const COPY_LABEL = 'Скопировать';
 let copyNote = $state(COPY_LABEL);
 let copyTone = $state<'idle' | 'ok' | 'fail'>('idle');
@@ -20,6 +22,21 @@ const copyClass = $derived(
 
 $effect(() => {
   draft = data.coverLetter;
+  if (restoredDraft)
+    return;
+  restoredDraft = true;
+  try {
+    const key = `cover-letter:${data.login}`;
+    const saved = sessionStorage.getItem(key);
+    if (saved !== null) {
+      draft = saved;
+      message = 'Черновик восстановлен после повторного входа. Нажмите «Сохранить».';
+      sessionStorage.removeItem(key);
+    }
+  }
+  catch {
+    // Browser storage may be unavailable.
+  }
 });
 
 function flashCopy(note: string, tone: 'ok' | 'fail'): void {
@@ -85,13 +102,27 @@ async function copyLetter(): Promise<void> {
   <form
     class="mt-4 grid gap-3"
     method="POST"
+    data-login={data.login}
     action="?/save"
     use:enhance={() => {
       message = '';
+      ok = false;
+      saving = true;
       return async ({ result, update }) => {
-        const body = result.type === 'success' ? result.data : null;
+        saving = false;
+        if (result.type === 'error') {
+          message = result.status === 401
+            ? 'Сессия входа истекла или недействительна. Скопируйте письмо и войдите заново, затем повторите сохранение.'
+            : `Не удалось сохранить письмо (HTTP ${result.status}). Попробуйте ещё раз.`;
+          return;
+        }
+        if (result.type === 'redirect') {
+          message = 'Нужно заново войти. Скопируйте письмо перед переходом, чтобы не потерять текст.';
+          return;
+        }
+        const body = result.data;
         ok = body?.ok === true;
-        message = typeof body?.detail === 'string' ? body.detail : 'не вышло';
+        message = typeof body?.detail === 'string' ? body.detail : 'Не удалось сохранить письмо. Попробуйте ещё раз.';
         if (ok)
           await update({ reset: false });
       };
@@ -105,7 +136,7 @@ async function copyLetter(): Promise<void> {
       bind:value={draft}
     ></textarea>
     <div class="flex items-center gap-3">
-      <button class="btn btn-primary h-11 min-h-11 px-4" type="submit" disabled={draft.trim().length === 0 || draft.trim() === data.coverLetter}>Сохранить</button>
+      <button class="btn btn-primary h-11 min-h-11 px-4" type="submit" disabled={saving || draft.trim().length === 0 || draft.trim() === data.coverLetter}>{saving ? 'Сохраняю…' : ok ? 'Сохранено' : 'Сохранить'}</button>
       <span class="text-xs text-zinc-500">{draft.length} / 4000</span>
     </div>
   </form>

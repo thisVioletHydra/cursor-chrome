@@ -1,7 +1,7 @@
 import type { RequestHandler } from './$types';
 
 import { error, redirect } from '@sveltejs/kit';
-import { ensureAccount, isCreator } from '$lib/server/secrets';
+import { ensureAccount } from '$lib/server/secrets';
 import { githubLogin, signSession } from '$lib/server/session';
 
 import process from 'node:process';
@@ -48,5 +48,5 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
     secure: url.protocol === 'https:',
     maxAge: 60 * 60 * 24 * 7,
   });
-  redirect(303, isCreator(user.login) ? '/admin' : '/start');
+  redirect(303, '/start');
 };

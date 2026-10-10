@@ -1,5 +1,5 @@
 <script lang="ts">
-import { enhance } from '$app/forms';
+import { enhance } from '$lib/admin-forms';
 
 import Mark from '$lib/Mark.svelte';
 

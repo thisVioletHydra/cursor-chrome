@@ -1,4 +1,5 @@
 import type { Handle } from '@sveltejs/kit';
+import { redirect } from '@sveltejs/kit';
 
 import { bindWatch, runTenant, startWatch, tenantLogin } from '@cursor-chrome/hh';
 import { notifyOwner, notifyToken, setApplyGate, startAutopilot, startTelegram } from '@cursor-chrome/telegram';
@@ -35,6 +36,10 @@ export const handle: Handle = async ({ event, resolve }) => {
   const bearer = event.request.headers.get('authorization') ?? '';
   const ext = bearer.startsWith('Bearer ') ? await extLogin(event.request) : null;
   const session = ext === null ? readSession(event.cookies.get('session')) : null;
+  if (ext === null && (event.url.pathname === '/admin' || event.url.pathname.startsWith('/admin/')) && (session === null || githubLogin(session.login) === false)) {
+    event.cookies.delete('session', { path: '/' });
+    redirect(303, '/?expired=1');
+  }
   const who = ext ?? (session !== null && githubLogin(session.login) ? session.login : null);
   if (who === null)
     return resolve(event);
