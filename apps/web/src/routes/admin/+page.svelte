@@ -1,6 +1,6 @@
 <script lang="ts">
 import { enhance } from '$lib/admin-forms';
-import { onMount, tick } from 'svelte';
+import { onDestroy, onMount, tick } from 'svelte';
 import { searchModeLabel, showLog } from './log-name';
 import { logKey, logPlace, logSnap, readLog, takeRows } from './log-snap.svelte.ts';
 
@@ -24,6 +24,12 @@ const COPY_LABEL = 'Скопировать';
 let copyNote = $state(COPY_LABEL);
 let copyTone = $state<'idle' | 'ok' | 'fail'>('idle');
 let copyTimer: ReturnType<typeof setTimeout> | undefined;
+const LETTER_COPY_LABEL = 'Скопировать сопроводительное';
+let letterCopyNote = $state(LETTER_COPY_LABEL);
+let letterCopyFailed = $state(false);
+let letterCopyTimer: ReturnType<typeof setTimeout> | undefined;
+
+onDestroy(() => clearTimeout(letterCopyTimer));
 let now = $state(Date.now());
 let board = $state<'accepted' | 'hidden' | 'waiting'>('accepted');
 let extensionLamp = $state<'ok' | 'stale' | 'quiet'>(data.extensionLamp === 'stale' || data.extensionLamp === 'quiet' ? data.extensionLamp : 'ok');
@@ -270,6 +276,26 @@ function shownJournal(): string {
   }
 
   return lines.join('\n');
+}
+
+async function copyCoverLetter(): Promise<void> {
+  clearTimeout(letterCopyTimer);
+  const text = data.coverLetter.replace(/\r\n/g, '\n');
+  letterCopyFailed = false;
+  try {
+    if (text.trim().length === 0)
+      throw new Error('Сопроводительное пустое');
+    await navigator.clipboard.writeText(text);
+    letterCopyNote = 'Сопроводительное скопировано';
+  }
+  catch {
+    letterCopyFailed = true;
+    letterCopyNote = text.trim().length === 0 ? 'Сопроводительное пустое' : 'Не скопировалось — повторить';
+  }
+  letterCopyTimer = setTimeout(() => {
+    letterCopyNote = LETTER_COPY_LABEL;
+    letterCopyFailed = false;
+  }, 3000);
 }
 
 async function copyJournal(): Promise<void> {
@@ -675,7 +701,15 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
   </div>
   <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
     <h2 class="text-base font-semibold">Логирование</h2>
-    <div class="flex items-center gap-3">
+    <div class="flex flex-wrap items-center gap-3">
+    <button
+      class="inline-flex min-h-8 cursor-pointer items-center rounded-lg border border-white/15 bg-[#10131a] px-3 py-1.5 text-sm transition hover:border-white/30 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 {letterCopyFailed ? 'text-rose-300' : 'text-zinc-100'}"
+      type="button"
+      aria-live="polite"
+      onclick={copyCoverLetter}
+    >
+      {letterCopyNote}
+    </button>
     {#if modeLine}
       <p class="text-xs text-zinc-400">режим поиска: <span class="text-zinc-200">{modeLine}</span></p>
     {/if}
