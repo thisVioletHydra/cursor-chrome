@@ -10,6 +10,7 @@
   "dependencies": {
     "@cursor-chrome/hh": "workspace:*",
     "@cursor-chrome/telegram": "workspace:*",
+    "@tanstack/svelte-virtual": "^3.13.40",
     "ws": "catalog:"
   },
   "devDependencies": {
@@ -17,10 +18,10 @@
     "@sveltejs/kit": "^2.43.0",
     "@sveltejs/vite-plugin-svelte": "^6.2.0",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/ws": "catalog:",
     "daisyui": "^5.7.44",
     "svelte": "^5.39.0",
     "tailwindcss": "^4.3.3",
-    "@types/ws": "catalog:",
     "typescript": "catalog:",
     "vite": "^7.1.0"
   }

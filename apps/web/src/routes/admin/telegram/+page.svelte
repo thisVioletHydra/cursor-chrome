@@ -4,6 +4,7 @@ import type { ChannelPost } from '$lib/channel-post';
 import { enhance } from '$lib/admin-forms';
 import { slide } from 'svelte/transition';
 
+import ChannelFeed from '$lib/ChannelFeed.svelte';
 import KeyConnect from '$lib/KeyConnect.svelte';
 import Mark from '$lib/Mark.svelte';
 import Out from '$lib/Out.svelte';
@@ -20,14 +21,6 @@ let problem = $state('');
 let editing = $state(false);
 let opened = $state<{ name: string; posts: ChannelPost[] } | null>(null);
 const channel = $derived(opened?.name ?? data.feed);
-
-const when = new Intl.DateTimeFormat('ru-RU', {
-  timeZone: 'Asia/Bishkek',
-  day: 'numeric',
-  month: 'short',
-  hour: '2-digit',
-  minute: '2-digit',
-});
 
 function taken(value: unknown): { name: string; posts: ChannelPost[] } | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value))
@@ -176,14 +169,18 @@ function taken(value: unknown): { name: string; posts: ChannelPost[] } | null {
   {#if channel !== '' && busy === false}
     {#if opened}
       <div transition:slide={{ duration: 420 }}>
-        {@render rows(opened.posts)}
+        {#key opened.name}
+          <ChannelFeed posts={opened.posts} />
+        {/key}
       </div>
     {:else}
       {#await data.channel.posts}
         <p class="mt-6 text-sm text-zinc-500">Читаю ленту…</p>
       {:then posts}
         <div transition:slide={{ duration: 420 }}>
-          {@render rows(posts)}
+          {#key channel}
+            <ChannelFeed {posts} />
+          {/key}
         </div>
       {:catch}
         <p class="mt-6 text-sm text-rose-300">Канал не открылся.</p>
@@ -192,24 +189,3 @@ function taken(value: unknown): { name: string; posts: ChannelPost[] } | null {
   {/if}
 {/if}
 
-{#snippet rows(posts: ChannelPost[])}
-  <p class="mt-6 text-sm text-zinc-500">{posts.length} за 7 дней</p>
-  {#if posts.length === 0}
-    <p class="mt-4 text-sm text-zinc-500">За неделю пусто.</p>
-  {:else}
-    <ul class="mt-3 flex flex-col gap-3">
-      {#each posts as post (post.id)}
-        <li class="rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
-          <p class="text-xs text-zinc-500">{[when.format(post.at), post.company, post.location, post.salary].filter(Boolean).join(' · ')}</p>
-          <h3 class="mt-1 text-lg font-medium text-white">{post.title}</h3>
-          {#if post.body}
-            <p class="mt-3 whitespace-pre-line text-sm leading-6 text-zinc-200">{post.body}</p>
-          {/if}
-          {#if post.apply}
-            <a class="mt-3 inline-block text-sm text-indigo-300 underline-offset-4 hover:underline" href={post.apply} target="_blank" rel="noreferrer">Вакансия</a>
-          {/if}
-        </li>
-      {/each}
-    </ul>
-  {/if}
-{/snippet}
