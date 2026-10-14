@@ -23,7 +23,7 @@ async function romanData() {
 }
 
 for (const migrated of [false, true]) {
-  test(`Vasya does not see Roman's memory and rules (${migrated ? 'after' : 'before'} owner migration)`, async () => {
+  test(`Vasya does not see the owner's memory and rules (${migrated ? 'after' : 'before'} owner migration)`, async () => {
     await romanData();
     const root = await reviewDb();
     if (migrated) {
@@ -39,7 +39,7 @@ for (const migrated of [false, true]) {
       assert.deepEqual(await listCanon(), []);
       assert.deepEqual(await listEntries(), []);
       assert.equal((await unlinkedFor('Ваш GitHub?')).size, 0);
-      // Vasya's own writes work in his own DB and never touch Roman's rows
+      // Vasya's own writes work in his own DB and never touch the owner's rows
       await rememberAnswers([{ key: 'k', prompt: 'Сколько лет опыта с Vue?', answer: '1 год' }]);
       await saveCanon({ title: 'Ссылка на GitHub', answer: 'https://github.com/vasya', aliases: [] });
       assert.deepEqual((await listMemory()).map(r => r.answer), ['1 год']);

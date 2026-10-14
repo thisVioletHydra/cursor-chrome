@@ -3,10 +3,11 @@ import type { Model, Verdict } from '../scan/rules.ts';
 import { modelPrompt } from '../scan/judge.ts';
 import { PING_MS } from '../limits.ts';
 import { noteProbe } from './probe-log.ts';
+import { tenantLogin } from '../diary/tenant.ts';
 
 import process from 'node:process';
 
-export type ProviderId = 'groq' | 'gemini' | 'zai' | 'openrouter' | 'cohere' | 'deepseek' | 'mistral' | 'custom';
+export type ProviderId = 'groq' | 'gemini' | 'zai' | 'openrouter' | 'cohere' | 'deepseek' | 'mistral' | 'xai' | 'custom';
 
 export type Provider = {
   id: ProviderId;
@@ -32,6 +33,7 @@ export const PRESETS: Preset[] = [
   { id: 'cohere', name: 'Cohere', url: 'https://api.cohere.ai/compatibility/v1/chat/completions', model: 'command-a-plus-05-2026', keysUrl: 'https://dashboard.cohere.com/api-keys', free: true },
   { id: 'deepseek', name: 'DeepSeek', url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', keysUrl: 'https://platform.deepseek.com/api_keys', free: false },
   { id: 'mistral', name: 'Mistral', url: 'https://api.mistral.ai/v1/chat/completions', model: 'mistral-small-latest', keysUrl: 'https://console.mistral.ai/api-keys', free: false },
+  { id: 'xai', name: 'xAI Grok', url: 'https://api.x.ai/v1/chat/completions', model: 'grok-4.7', keysUrl: 'https://console.x.ai/team/default/api-keys', free: false },
   { id: 'custom', name: 'Свой', url: '', model: '', keysUrl: '', free: false },
 ];
 
@@ -85,7 +87,12 @@ export function asProvider(value: unknown): Provider | null {
   return { id: preset.id, key: row.key.trim(), model, url };
 }
 
+export const DEMO_TENANT = 'vasya-pupkin';
+
 export function chainFromEnv(): Provider[] {
+  // demo account (vasya-pupkin): never our server key, BYOK only
+  if (tenantLogin() === DEMO_TENANT)
+    return [];
   const chain = parseChain(process.env.MODEL_CHAIN ?? '');
   if (chain.length > 0)
     return chain;

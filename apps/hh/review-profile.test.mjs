@@ -16,7 +16,7 @@ async function freshStore() {
 
 const text = prompt => ({ prompt, kind: 'text', options: [], choices: [], multi: false, required: false, fieldKey: '' });
 const choice = (prompt, options) => ({ prompt, kind: 'choice', options, choices: options.map(label => ({ value: label, label })), multi: false, required: false, fieldKey: '' });
-const CITY_RULE = { mode: 'conditions', cases: [{ when: [{ field: 'city', op: 'is', value: 'Москва' }], value: 'Москва' }], otherwise: 'Бишкек' };
+const CITY_RULE = { mode: 'conditions', cases: [{ when: [{ field: 'city', op: 'is', value: 'Москва' }], value: 'Москва' }], otherwise: 'Тестоград' };
 const PROFILE = parseProfile({ savedAt: 1, fields: { city: CITY_RULE, testTask: { mode: 'fixed', value: 'да' } }, custom: [] });
 const CHAIN = [{ id: 'groq', name: 'Groq', url: 'http://mock/chat/completions', model: 'm', key: 'k' }];
 
@@ -37,11 +37,11 @@ function mockModel(answers) {
 test('conditions: city modes fixed / as in vacancy / by conditions', () => {
   assert.equal(evaluateRule(CITY_RULE, { city: 'Москва' }), 'Москва');
   assert.equal(evaluateRule(CITY_RULE, { city: 'москва ' }), 'Москва', 'case and spaces ignored');
-  assert.equal(evaluateRule(CITY_RULE, { city: 'Казань' }), 'Бишкек');
-  assert.equal(evaluateRule(CITY_RULE, {}), 'Бишкек');
+  assert.equal(evaluateRule(CITY_RULE, { city: 'Казань' }), 'Тестоград');
+  assert.equal(evaluateRule(CITY_RULE, {}), 'Тестоград');
   assert.equal(evaluateRule({ mode: 'fixed', value: 'Алматы' }, { city: 'Москва' }), 'Алматы');
   assert.equal(evaluateRule({ mode: 'vacancy', field: 'city' }, { city: 'Казань' }), 'Казань');
-  assert.equal(evaluateRule({ mode: 'vacancy', field: 'city', fallback: 'Бишкек' }, {}), 'Бишкек');
+  assert.equal(evaluateRule({ mode: 'vacancy', field: 'city', fallback: 'Тестоград' }, {}), 'Тестоград');
   assert.equal(evaluateRule(undefined, {}), '');
 });
 
@@ -56,7 +56,7 @@ test('conditions are generic: other fields, operators, all-of', () => {
 
 test('canon rules can use conditions through templates', () => {
   assert.equal(fillTemplate('Живу в {{profile.city}}, вакансия в {{vacancy.city}}', PROFILE, { city: 'Москва' }), 'Живу в Москва, вакансия в Москва');
-  assert.equal(fillTemplate('{{profile.city}}', PROFILE, { city: 'Казань' }), 'Бишкек');
+  assert.equal(fillTemplate('{{profile.city}}', PROFILE, { city: 'Казань' }), 'Тестоград');
 });
 
 test('parseProfile drops junk', () => {
@@ -69,7 +69,7 @@ test('parseProfile drops junk', () => {
 
 test('profile answers paraphrased hh questions; choice snapped to option', () => {
   assert.equal(profileAnswer(text('В каком городе вы проживаете?'), PROFILE, { city: 'Москва' })?.answer, 'Москва');
-  assert.equal(profileAnswer(text('Ваш город'), PROFILE, { city: 'Новосибирск' })?.answer, 'Бишкек');
+  assert.equal(profileAnswer(text('Ваш город'), PROFILE, { city: 'Новосибирск' })?.answer, 'Тестоград');
   assert.equal(profileAnswer(choice('Готовы выполнить тестовое задание?', ['Да', 'Нет']), PROFILE, {})?.answer, 'Да');
   assert.equal(profileAnswer(text('Ваше гражданство?'), PROFILE, {}), null, 'empty field → no answer');
   assert.ok(PROFILE_QUESTIONS.length >= 8);
@@ -122,7 +122,7 @@ test('profile priority: profile beats memory (even human), canon beats profile',
   assert.equal(result.drafts[0].answer, 'Москва');
   assert.equal(result.drafts[0].source.kind, 'profile');
   result = await draftAnswers([], { id: '4', title: 't', company: 'c', info: { city: 'Казань' }, questions: [text('В каком городе вы проживаете?')], formText: '', resume: '', profile: PROFILE });
-  assert.equal(result.drafts[0].answer, 'Бишкек');
+  assert.equal(result.drafts[0].answer, 'Тестоград');
   await saveCanon({ title: 'В каком городе вы проживаете?', answer: 'Город: {{profile.city}}', aliases: [] });
   result = await draftAnswers([], { id: '5', title: 't', company: 'c', info: { city: 'Москва' }, questions: [text('В каком городе вы проживаете?')], formText: '', resume: '', profile: PROFILE });
   assert.equal(result.drafts[0].answer, 'Город: Москва');

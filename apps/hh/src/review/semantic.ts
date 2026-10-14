@@ -48,7 +48,7 @@ export async function matchAnswer(question: FormQuestion, ctx: MatchContext): Pr
 
   const scored = await scoreAll(question.prompt, pool, ctx);
   const best = (kind: Candidate['kind'], human = false) => scored.filter(item => item.kind === kind && item.ok && (human === false || item.human === true)).sort((left, right) => right.score - left.score)[0];
-  // rule > Roman's own correction > older memory
+  // rule > the user's own correction > older memory
   const hit = best('canon') ?? best('memory', true) ?? best('memory');
   if (hit === undefined)
     return null;

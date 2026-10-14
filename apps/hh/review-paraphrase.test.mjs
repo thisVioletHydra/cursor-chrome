@@ -105,7 +105,7 @@ test('LLM is not asked when words already match; type check still blocks a confi
   }
 });
 
-test('draft + recheck pick up Roman answers for paraphrased questions', async () => {
+test('draft + recheck pick up owner answers for paraphrased questions', async () => {
   await seed();
   const llm = mockLlm('тестовое', 0.9);
   try {

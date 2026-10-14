@@ -5,7 +5,7 @@ import type { DecisionAnswer } from './store.ts';
 import { rememberAnswers, reviewDb, safeJson } from './store.ts';
 import { canWrite, ownerInsert, ownerWhere } from './owner.ts';
 
-// human = Roman typed or corrected this answer himself; it outranks AI-origin memory.
+// human = the user typed or corrected this answer; it outranks AI-origin memory.
 export type MemoryRow = { key: string; prompt: string; answer: string; human?: boolean };
 
 export type CanonAnswer = { id: number; title: string; answer: string; aliases: string[] };
@@ -109,7 +109,7 @@ function canonId(target: string | undefined): number {
 // Memory hit from another question → that memory row takes the new answer too.
 // Canon hit → the canon is unlinked for this exact question so the edit wins next time
 // (changing the canon itself is what «запомнить как правило» is for).
-// Only fields Roman changed by hand are stored; untouched AI answers never become «human» memory.
+// Only fields the user changed by hand are stored; untouched AI answers never become «human» memory.
 export async function rememberCorrections(answers: readonly DecisionAnswer[]): Promise<void> {
   await rememberAnswers(answers.filter(row => row.edited === true).map(row => ({ ...row, origin: 'human' as const })));
   const opened = await reviewDb();

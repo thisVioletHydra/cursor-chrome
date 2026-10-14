@@ -27,7 +27,7 @@ export type DraftRow = {
   source?: DraftSource;
 };
 
-// source = memory/canon target the draft came from; edited = Roman changed the drafted text.
+// source = memory/canon target the draft came from; edited = the user changed the drafted text.
 export type DecisionAnswer = { key: string; prompt: string; answer: string; source?: string; edited?: boolean; kind?: string; options?: string[]; origin?: 'human' | 'ai' };
 
 export type Decision = {
