@@ -1,4 +1,6 @@
 import { browser } from '../browser-host';
+import { readGate } from '../local/link-gate';
+import { vacancyIdFromUrl } from './history-view';
 
 export type ApplyStatus = 'sent' | 'needsHuman';
 
@@ -10,6 +12,8 @@ export type ApplyRecord = {
   sentAt: number;
   status?: ApplyStatus;
   hints?: string[];
+  // account login the record belongs to (new records only; missing = owner account)
+  owner?: string;
 };
 
 const LOG_KEY = 'applyLog';
@@ -79,7 +83,10 @@ export async function appendApply(record: ApplyRecord): Promise<ApplyRecord[]> {
   if (isJunkApply({ title: safeTitle, company: safeCompany }))
     return listApplies();
 
-  const normalized: ApplyRecord = { ...record, title: safeTitle, company: safeCompany };
+  const gate = await readGate(browser.storage.local).catch(() => null);
+  const owner = record.owner || gate?.login || '';
+  const vacancyId = record.vacancyId || vacancyIdFromUrl(record.url);
+  const normalized: ApplyRecord = { ...record, vacancyId, title: safeTitle, company: safeCompany, ...(owner ? { owner } : {}) };
   const log = await listApplies();
   if (applyStatus(normalized) === 'needsHuman' && await isWaitDismissed(normalized))
     return log;

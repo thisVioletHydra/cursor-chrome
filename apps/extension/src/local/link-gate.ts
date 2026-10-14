@@ -9,7 +9,8 @@ export const NOT_LINKED_TEXT = 'Не подключено к админке';
 export const RELINK_TEXT = 'Переподключи расширение: вставь новую ссылку из админки';
 
 export type LinkState = 'ok' | 'none' | 'gone' | 'unauthorized' | 'down';
-export type LinkGate = { state: LinkState; host: string; at: number };
+// login: account of the extToken as the server reported it (optional, old gates have none)
+export type LinkGate = { state: LinkState; host: string; at: number; login?: string };
 
 export function hostOf(url: string): string {
   try {
@@ -29,8 +30,11 @@ export async function checkLink(url: string, key: string, fetcher: typeof fetch 
   const base = `${new URL(url.trim()).protocol}//${host}`;
   try {
     const res = await fetcher(`${base}/api/link`, { cache: 'no-store', headers: { authorization: `Bearer ${key.trim()}` } });
-    if (res.status === 200)
-      return { state: 'ok', host, at: now };
+    if (res.status === 200) {
+      const body = await res.json().catch(() => null) as { login?: unknown } | null;
+      const login = typeof body?.login === 'string' ? body.login : '';
+      return login ? { state: 'ok', host, at: now, login } : { state: 'ok', host, at: now };
+    }
     if (res.status === 401 || res.status === 403)
       return { state: 'unauthorized', host, at: now };
     if (res.status === 404 || res.status === 410 || res.headers.get('x-railway-fallback') !== null)

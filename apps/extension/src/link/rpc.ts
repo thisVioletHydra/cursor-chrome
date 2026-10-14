@@ -16,6 +16,9 @@ import { forgetHangReport, guardCaptcha, queueBusy, readPausedUntil, readQueueRe
 import { pullSavedResume } from '../apply/resume-pull';
 import { checkWorker, listJobTabs, openHhBackground, openOnHhTab, pinWorker } from '../tab/worker-tab';
 import { ensurePinnedHh, openPinnedWorker } from '../tab/worker-open';
+import { viewItems } from '../diary/history-view';
+import { gateOpen, readGate } from '../local/link-gate';
+import { browser } from '../browser-host';
 
 type Reply = (value?: unknown) => void;
 type Sender = chrome.runtime.MessageSender;
@@ -42,8 +45,11 @@ async function applyHistory(): Promise<unknown> {
   await backfillUnpinnedReviews();
   await sweepDismissedWaiting();
   const log = await listApplies();
+  // display only: no link → not shown as current; other account's records hidden; dups collapsed
+  const gate = await readGate(browser.storage.local).catch(() => null);
+  const view = { linked: gateOpen(gate), login: gate?.login ?? '' };
 
-  return { log, today: await todayCount(), waiting: waitingHuman(log) };
+  return { log: viewItems(log, view), today: await todayCount(), waiting: viewItems(waitingHuman(log), view) };
 }
 
 async function dropWaitingMessage(message: Record<string, unknown>): Promise<unknown> {
