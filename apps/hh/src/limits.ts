@@ -15,5 +15,5 @@ export const HH_API = 'https://api.hh.ru';
 export function hhUserAgent(env: Record<string, string | undefined> = process.env): string {
   const contact = (env.HH_CONTACT_EMAIL ?? '').trim();
 
-  return contact ? `cursor-chrome-hh (${contact})` : 'cursor-chrome-hh';
+  return contact ? `NoJobNoProblemBuddy-hh (${contact})` : 'NoJobNoProblemBuddy-hh';
 }

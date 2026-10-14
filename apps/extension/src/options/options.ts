@@ -163,7 +163,7 @@ function dataTab(): HTMLElement {
   const out = el('pre');
   const doExport = () => {
     const blob = new Blob([exportLocalData(data)], { type: 'application/json' });
-    const link = el('a', { href: URL.createObjectURL(blob), download: `cursor-chrome-data-${new Date().toISOString().slice(0, 10)}.json` });
+    const link = el('a', { href: URL.createObjectURL(blob), download: `NoJobNoProblemBuddy-data-${new Date().toISOString().slice(0, 10)}.json` });
     link.click();
     status('Exported (model keys are never included)');
   };

@@ -1,11 +1,11 @@
-# Cursor Chrome
+# NoJobNoProblemBuddy
 
 **Your real Chrome / Edge, driven from Cursor.** Same cookies, same logins, same tabs. Not a second Playwright browser.
 
 Store Browser MCP dies with the MV3 service worker. This one keeps the socket in a native host, talks to Cursor over local MCP, and clicks the page you already have open.
 
 <p align="center">
-  <img src="apps/extension/src/icons/icon128.png" width="96" height="96" alt="Cursor Chrome" />
+  <img src="apps/extension/src/icons/icon128.png" width="96" height="96" alt="NoJobNoProblemBuddy" />
 </p>
 
 ```

@@ -16,7 +16,7 @@ export const GET: RequestHandler = async ({ params }) => {
   if (fs.existsSync(path(dir)) === false)
     return new Response('сборка расширения не найдена', { status: 503 });
 
-  return new Response(zipDir(dir), { headers: { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="cursor-chrome-extension.zip"', 'cache-control': 'no-store' } });
+  return new Response(zipDir(dir), { headers: { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="NoJobNoProblemBuddy-extension.zip"', 'cache-control': 'no-store' } });
 };
 
 function path(dir: string): string {

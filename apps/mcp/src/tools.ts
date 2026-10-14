@@ -30,7 +30,7 @@ export function registerTools(server: McpServer, bridge: ExtensionBridge): void 
   server.registerTool(
     'browser_navigate',
     {
-      description: 'Navigate the pinned HH worker tab. Never activates it, so YouTube stays put. Pin the tab in the Cursor Chrome popup first.',
+      description: 'Navigate the pinned HH worker tab. Never activates it, so YouTube stays put. Pin the tab in the NoJobNoProblemBuddy popup first.',
       inputSchema: { url: z.string() },
     },
     async ({ url }) => {

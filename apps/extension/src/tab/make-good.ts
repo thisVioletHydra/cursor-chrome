@@ -63,7 +63,7 @@ export async function runMakeGood(link: Link): Promise<GoodReport> {
     return {
       ok: true,
       report: [
-        'Cursor Chrome: CONNECT',
+        'NoJobNoProblemBuddy: CONNECT',
         `transport: ${snap.transport}`,
         `url: ${worker.url || ''}`,
         snap.detail ? `detail: ${snap.detail}` : '',
@@ -134,7 +134,7 @@ function fail(fields: FailFields): GoodReport {
     .filter(key => typeof fields[key] === 'string')
     .map(key => `${key}: ${fields[key]}`);
   const lines = [
-    'Cursor Chrome: FAIL',
+    'NoJobNoProblemBuddy: FAIL',
     `step: ${fields.step}`,
     `reason: ${fields.reason}`,
     ...extra,

@@ -34,7 +34,7 @@ type HhVacancy = {
 const API = 'https://api.hh.ru/vacancies/';
 const GAP_MS = 1_500;
 const TIMEOUT_MS = 10_000;
-const AGENT = 'cursor-chrome-review/1.0 (read-only)';
+const AGENT = 'NoJobNoProblemBuddy-review/1.0 (read-only)';
 
 let line: Promise<unknown> = Promise.resolve();
 let lastAt = 0;

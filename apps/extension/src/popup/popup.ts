@@ -325,7 +325,7 @@ async function makeGood(): Promise<void> {
     paintLink('Не вышло', false);
     reportEl.hidden = false;
     reportEl.textContent = [
-      'Cursor Chrome: FAIL',
+      'NoJobNoProblemBuddy: FAIL',
       'step: host',
       'reason: service worker asleep',
       `detail: ${error instanceof Error ? error.message : String(error)}`,

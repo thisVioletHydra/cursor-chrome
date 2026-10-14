@@ -109,7 +109,7 @@ export async function probeModel(provider: Provider): Promise<Probe> {
 const hhHeaders = (token: string) => ({
   authorization: `Bearer ${token}`,
   // hh asks for a contact in the UA: from env, never hardcoded
-  'user-agent': process.env.HH_CONTACT_EMAIL ? `cursor-chrome-web (${process.env.HH_CONTACT_EMAIL})` : 'cursor-chrome-web',
+  'user-agent': process.env.HH_CONTACT_EMAIL ? `NoJobNoProblemBuddy-web (${process.env.HH_CONTACT_EMAIL})` : 'NoJobNoProblemBuddy-web',
   accept: 'application/json',
 });
 

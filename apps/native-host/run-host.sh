@@ -23,11 +23,11 @@ if [ ! -x "$NODE" ]; then
   done
 fi
 if [ -z "$NODE" ] || [ ! -x "$NODE" ]; then
-  echo "cursor-chrome native host: node not found" >&2
+  echo "NoJobNoProblemBuddy native host: node not found" >&2
   exit 1
 fi
 if [ ! -f "$ROOT/dist/index.js" ]; then
-  echo "cursor-chrome native host: dist missing, run pnpm build" >&2
+  echo "NoJobNoProblemBuddy native host: dist missing, run pnpm build" >&2
   exit 1
 fi
 exec "$NODE" "$ROOT/dist/index.js"

@@ -32,7 +32,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
     headers: {
       authorization: `Bearer ${token.access_token}`,
       accept: 'application/vnd.github+json',
-      'user-agent': 'cursor-chrome-web',
+      'user-agent': 'NoJobNoProblemBuddy-web',
     },
   });
   const user = await userRes.json() as { login?: string };

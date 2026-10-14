@@ -157,5 +157,5 @@ function sendNative(message: unknown): void {
 }
 
 function log(...args: unknown[]): void {
-  console.error('[cursor-chrome-host]', ...args);
+  console.error('[NoJobNoProblemBuddy-host]', ...args);
 }

@@ -226,11 +226,11 @@ export async function checkWorker(): Promise<WorkerCheck> {
 export async function requireWorkerTab(): Promise<chrome.tabs.Tab> {
   const check = await checkWorker();
   if (check.ok === false || typeof check.tabId !== 'number')
-    throw new Error(`HH tab not ready: ${check.reason || 'unknown'}. Pin it in the Cursor Chrome popup.`);
+    throw new Error(`HH tab not ready: ${check.reason || 'unknown'}. Pin it in the NoJobNoProblemBuddy popup.`);
 
   const tab = await browser.tabs.get(check.tabId).catch(() => null);
   if (tab === null)
-    throw new Error('HH tab not ready: вкладка закрыта. Pin it in the Cursor Chrome popup.');
+    throw new Error('HH tab not ready: вкладка закрыта. Pin it in the NoJobNoProblemBuddy popup.');
 
   return tab;
 }

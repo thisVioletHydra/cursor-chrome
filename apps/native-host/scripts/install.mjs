@@ -25,7 +25,7 @@ async function main() {
 
   const hostManifest = {
     name: hostName,
-    description: 'Cursor Chrome native messaging host',
+    description: 'NoJobNoProblemBuddy native messaging host',
     path: hostPath,
     type: 'stdio',
     allowed_origins: [`chrome-extension://${id}/`],

@@ -6,7 +6,7 @@ import { registerTools } from './tools';
 import process from 'node:process';
 
 const log = (...args: unknown[]) => {
-  console.error('[cursor-chrome]', ...args);
+  console.error('[NoJobNoProblemBuddy]', ...args);
 };
 
 async function main(): Promise<void> {
@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   log('ws listening on 127.0.0.1:18765');
 
   const server = new McpServer({
-    name: 'cursor-chrome',
+    name: 'NoJobNoProblemBuddy',
     version: __APP_VERSION__,
   });
   registerTools(server, bridge);
@@ -39,6 +39,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error('[cursor-chrome]', error instanceof Error ? error.message : error);
+  console.error('[NoJobNoProblemBuddy]', error instanceof Error ? error.message : error);
   process.exit(1);
 });
