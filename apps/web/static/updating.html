@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Обновляемся · NoJobNoProblemBuddy</title>
+<style>
+  :root { color-scheme: dark; --bg: #0b0d12; --text: #f4f4f5; --dim: #a1a1aa; --a: #818cf8; --b: #a78bfa; --cord: #3b4262; --body: #e4e4f0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: radial-gradient(1200px 600px at 50% 40%, rgba(129, 140, 248, .10), transparent 60%), var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; display: grid; place-items: center; overflow: hidden; }
+  .scene { position: relative; width: 100%; height: 100%; display: grid; place-items: center; }
+  .art { position: absolute; top: 50%; width: 34vw; max-width: 460px; min-width: 220px; transform: translateY(-58%); pointer-events: none; }
+  .art.left { left: 0; }
+  .art.right { right: 0; }
+  .plug { transform-origin: 300px 120px; animation: reach 2.6s ease-in-out infinite; }
+  @keyframes reach { 0%, 100% { transform: translateX(0) rotate(-14deg); } 50% { transform: translateX(14px) rotate(-8deg); } }
+  .spark { animation: blink 2.6s ease-in-out infinite; }
+  @keyframes blink { 0%, 35%, 100% { opacity: 0; } 50% { opacity: 1; } }
+  main { position: relative; z-index: 1; text-align: center; padding: 24px; max-width: 640px; }
+  h1 { margin: 0 0 14px; font-size: clamp(40px, 6vw, 68px); line-height: 1; font-weight: 800; letter-spacing: -0.01em; padding: 0 .12em .08em; background: linear-gradient(90deg, #c7d2fe, var(--b)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  p { margin: 0 0 28px; color: var(--dim); font-size: 17px; line-height: 1.5; }
+  button { font: inherit; font-size: 15px; font-weight: 600; color: #fff; border: 0; border-radius: 999px; padding: 12px 26px; cursor: pointer; background: linear-gradient(90deg, #6366f1, #8b5cf6); box-shadow: 0 8px 30px rgba(129, 140, 248, .35); transition: transform .15s, box-shadow .15s; }
+  button:hover { transform: translateY(-1px); box-shadow: 0 10px 34px rgba(139, 92, 246, .45); }
+  button:focus-visible { outline: 2px solid #a5b4fc; outline-offset: 3px; }
+  .note { margin-top: 18px; font-size: 13px; color: #71717a; min-height: 1em; }
+  @media (max-width: 720px) { .art { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .plug, .spark { animation: none; } }
+</style>
+</head>
+<body>
+<div class="scene">
+  <svg class="art left" viewBox="0 0 460 260" aria-hidden="true">
+    <path d="M0 210 C 70 250, 120 120, 190 190 S 250 150, 268 132" fill="none" stroke="var(--cord)" stroke-width="10" stroke-linecap="round"/>
+    <g class="plug">
+      <rect x="250" y="78" width="70" height="88" rx="22" fill="url(#gp)"/>
+      <rect x="300" y="72" width="34" height="100" rx="14" fill="var(--body)"/>
+      <rect x="332" y="96" width="46" height="12" rx="6" fill="#c7c9e0"/>
+      <rect x="332" y="136" width="46" height="12" rx="6" fill="#c7c9e0"/>
+    </g>
+    <g class="spark" fill="var(--b)"><circle cx="410" cy="100" r="4"/><circle cx="424" cy="126" r="3"/><circle cx="410" cy="150" r="4"/></g>
+    <defs><linearGradient id="gp" x1="0" x2="1"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs>
+  </svg>
+  <svg class="art right" viewBox="0 0 460 260" aria-hidden="true">
+    <path d="M460 90 C 400 60, 360 150, 300 110 S 240 120, 210 122" fill="none" stroke="var(--cord)" stroke-width="10" stroke-linecap="round"/>
+    <rect x="130" y="64" width="80" height="116" rx="26" fill="url(#gs)"/>
+    <ellipse cx="128" cy="122" rx="44" ry="60" fill="var(--body)"/>
+    <ellipse cx="128" cy="122" rx="30" ry="44" fill="#d4d6ea"/>
+    <rect x="112" y="102" width="16" height="10" rx="5" fill="#2a2f45"/>
+    <rect x="112" y="132" width="16" height="10" rx="5" fill="#2a2f45"/>
+    <defs><linearGradient id="gs" x1="1" x2="0"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs>
+  </svg>
+  <main>
+    <h1>Обновляемся</h1>
+    <p>Вернёмся через минутку, страница обновится сама</p>
+    <button id="retry" type="button">Попробовать снова</button>
+    <div class="note" id="note" aria-live="polite"></div>
+  </main>
+</div>
+<script>
+(function () {
+  var embedded = window.parent !== window;
+  var busy = false;
+  var note = document.getElementById('note');
+  function back() {
+    if (embedded) window.parent.postMessage({ type: 'nojob-healthy' }, location.origin);
+    else location.reload();
+  }
+  function ping(manual) {
+    if (busy) return;
+    busy = true;
+    var ctl = new AbortController();
+    var t = setTimeout(function () { ctl.abort(); }, 2500);
+    fetch('/healthz', { cache: 'no-store', signal: ctl.signal })
+      .then(function (r) { if (r.status === 200) back(); else if (manual) note.textContent = 'Ещё не готово, пробуем дальше…'; })
+      .catch(function () { if (manual) note.textContent = 'Ещё не готово, пробуем дальше…'; })
+      .finally(function () { clearTimeout(t); busy = false; });
+  }
+  document.getElementById('retry').addEventListener('click', function () { ping(true); });
+  setInterval(ping, 3000);
+})();
+</script>
+</body>
+</html>

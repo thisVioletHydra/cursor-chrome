@@ -14,6 +14,7 @@ import { extensionBuild } from '$lib/server/extension-build';
 import { dlSecret, signDl } from '$lib/server/thin/dl';
 import { policyOf, versionGate } from '$lib/server/thin/version';
 
+import { healthz, isHealthz } from '$lib/server/healthz';
 import { demoAllow, ensureDemoToken, isDemoLogin } from '$lib/server/demo';
 
 import process from 'node:process';
@@ -46,6 +47,10 @@ catch {
 startAutopilot();
 
 export const handle: Handle = async ({ event, resolve }) => {
+  // healthcheck: before auth/version gate/tenant, always 200 no-store
+  if (isHealthz(event.url.pathname))
+    return healthz();
+
   if (asset(event.url.pathname))
     return resolve(event);
 
