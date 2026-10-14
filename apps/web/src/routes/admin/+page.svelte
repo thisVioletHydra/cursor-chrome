@@ -1,6 +1,7 @@
 <script lang="ts">
 import { enhance } from '$lib/admin-forms';
 import { neutralText } from '$lib/neutral-text';
+import { EXT_MARK_ATTR, EXT_MARK_EVENT, extBindState, type ExtMark, fetchConnectLink, readMark } from '$lib/ext-bind';
 import { onDestroy, onMount, tick } from 'svelte';
 import { searchModeLabel, showLog } from './log-name';
 import { logKey, logPlace, logSnap, readLog, takeRows } from './log-snap.svelte.ts';
@@ -32,6 +33,49 @@ let letterCopyFailed = $state(false);
 let letterCopyTimer: ReturnType<typeof setTimeout> | undefined;
 
 onDestroy(() => clearTimeout(letterCopyTimer));
+
+// extension bind status: mark from the content script (event + light 3 s poll of the attribute, no server calls)
+let extMark = $state<ExtMark>('');
+const extBind = $derived(extBindState(extMark, String(data.extSeen ?? '')));
+const KEY_COPY_LABEL = 'Скопировать ключ';
+let keyCopyNote = $state(KEY_COPY_LABEL);
+let keyCopyBusy = $state(false);
+onMount(() => {
+  const read = () => {
+    extMark = readMark(document.documentElement.getAttribute(EXT_MARK_ATTR));
+  };
+  const onMark = (event: MessageEvent) => {
+    if (event.source === window && event.data?.type === EXT_MARK_EVENT)
+      extMark = readMark(event.data.mark);
+  };
+  read();
+  window.addEventListener('message', onMark);
+  const timer = setInterval(read, 3000);
+
+  return () => {
+    clearInterval(timer);
+    window.removeEventListener('message', onMark);
+  };
+});
+
+async function copyBindKey(): Promise<void> {
+  keyCopyBusy = true;
+  try {
+    const link = await fetchConnectLink(location.origin);
+    if (link.length === 0) {
+      keyCopyNote = 'Ключа нет — выпусти его в Extension';
+      return;
+    }
+    await navigator.clipboard.writeText(link);
+    keyCopyNote = 'Скопировано';
+  }
+  catch {
+    keyCopyNote = 'Не скопировалось — повторить';
+  }
+  finally {
+    keyCopyBusy = false;
+  }
+}
 let now = $state(Date.now());
 let board = $state<'accepted' | 'hidden' | 'waiting'>('accepted');
 let extensionLamp = $state<'ok' | 'stale' | 'quiet'>(data.extensionLamp === 'stale' || data.extensionLamp === 'quiet' ? data.extensionLamp : 'ok');
@@ -616,6 +660,8 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
 }
 </script>
 
+<svelte:head><meta name="nojob-admin" content="1" /></svelte:head>
+
 <section class="mb-8 rounded-2xl border border-white/8 bg-[#151922] px-5 {allGreen ? 'py-3 lg:py-2' : 'py-4'}">
   <div class={allGreen ? 'lg:flex lg:items-center lg:gap-6' : ''}>
   <div class="flex items-center justify-between gap-3 {allGreen ? 'lg:contents' : ''}">
@@ -681,13 +727,19 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
     {/each}
     <li>
       <div class="flex items-center gap-2">
-        <span class="size-2 shrink-0 rounded-full {extensionLamp === 'stale' || data.extSeen === 'stale' ? 'bg-amber-300' : data.extSeen === 'never' ? 'bg-rose-400' : 'bg-emerald-400'}" data-ext-seen={data.extSeen}></span>
-        <span class={extensionLamp === 'stale' || data.extSeen === 'stale' ? 'text-xs text-amber-200' : data.extSeen === 'never' ? 'text-sm text-zinc-200' : 'text-xs text-zinc-400'}>{extensionLamp === 'stale' ? 'обнови расширение браузера' : data.extSeen === 'never' ? 'Расширение не установлено' : data.extSeen === 'stale' ? 'Расширение не на связи' : 'Расширение'}</span>
+        <span class="size-2 shrink-0 rounded-full {extensionLamp === 'stale' || extBind === 'stale' || extBind === 'unlinked' ? 'bg-amber-300' : extBind === 'missing' ? 'bg-rose-400' : 'bg-emerald-400'}" data-ext-seen={data.extSeen} data-ext-bind={extBind}></span>
+        <span class={extensionLamp === 'stale' || extBind === 'stale' || extBind === 'unlinked' ? 'text-xs text-amber-200' : extBind === 'missing' ? 'text-sm text-zinc-200' : 'text-xs text-zinc-400'}>{extensionLamp === 'stale' ? 'обнови расширение браузера' : extBind === 'missing' ? 'Расширение не установлено' : extBind === 'unlinked' ? 'Расширение установлено, но не связано' : extBind === 'stale' ? 'Расширение не на связи' : 'Расширение'}</span>
         {#if extensionVer}
           <span class="text-xs tabular-nums {extensionLamp === 'stale' ? 'text-amber-200/80' : 'text-zinc-500'}">{extensionVer}</span>
         {/if}
       </div>
-      {#if data.extSeen !== 'ok'}
+      {#if extBind === 'unlinked'}
+        <p class="mt-1 pl-4 text-xs text-zinc-500" data-ext-bind-key>
+          Свяжи расширение: вставь этот ключ в расширение.
+          <button type="button" class="text-zinc-300 underline underline-offset-4 hover:text-zinc-100 disabled:opacity-60" disabled={keyCopyBusy} onclick={copyBindKey}>{keyCopyNote}</button>
+        </p>
+      {/if}
+      {#if extBind === 'missing' || extBind === 'stale'}
         <p class="mt-1 pl-4 text-xs text-zinc-500">
           {#if data.extDownload}
             <a class="text-zinc-300 underline underline-offset-4 hover:text-zinc-100" href={data.extDownload} download>Скачать расширение</a> (zip, ссылка на 24 часа).

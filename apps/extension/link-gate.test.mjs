@@ -90,7 +90,7 @@ test('gate pack 2: popup/content actions, autofill and negotiations sync pause w
   assert.match(bg, /if \(isGatedMessage\(type\) === false\)\n    return dispatch\(\);/);
   assert.match(bg, /async function syncNegotiationsIfDue\(\): Promise<void> \{\n  if \(await linkPaused\(\)\)\n    return;/);
   const content = fs.readFileSync(new URL('./src/content.ts', import.meta.url), 'utf8');
-  assert.match(content, /then\(\(open\) => \{\n  if \(open\)\n    startHhJob\(\);/);
+  assert.match(content, /then\(\(open\) => \{\n  if \(open\)\n    startHhJobOnce\(\);/);
   assert.match(content, /sendResponse\(PAUSED_REPLY\)/);
 });
 

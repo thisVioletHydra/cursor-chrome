@@ -4,14 +4,51 @@ import { runApply } from './hh/apply-run';
 import { click, hover, pressKey, selectOption, typeInto } from './page/actions';
 import { byRef, bySelector, snapshot } from './page/snapshot';
 import { browser } from './browser-host';
-import { contentGateOpen, isGatedMessage, PAUSED_REPLY } from './local/link-gate.ts';
+import { BIND_MARK_ATTR, BIND_MARK_EVENT, bindMark, contentGateOpen, isGatedMessage, LINK_GATE_KEY, type LinkGate, markOrigins, PAUSED_REPLY, shouldMarkPage } from './local/link-gate.ts';
+import { getSyncUrl } from './diary/apply-log';
 
 keepHhClicks();
 // gate «без связи — пауза»: no autonomous page job while the extension is not linked to the admin
+let hhJobStarted = false;
+function startHhJobOnce(): void {
+  if (hhJobStarted)
+    return;
+  hhJobStarted = true;
+  startHhJob();
+}
 void contentGateOpen({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>> }).then((open) => {
   if (open)
-    startHhJob();
+    startHhJobOnce();
 });
+// link came back while this page was open: start the job without reloading the extension
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || changes[LINK_GATE_KEY] === undefined)
+    return;
+  void contentGateOpen({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>> }).then((open) => {
+    if (open)
+      startHhJobOnce();
+  });
+  void paintBindMark(changes[LINK_GATE_KEY].newValue as LinkGate | undefined);
+});
+
+// admin «До старта»: «установлено, но не связано» vs «связано». Only on our admin page (meta tag), never on job sites.
+async function paintBindMark(gate: LinkGate | null | undefined): Promise<void> {
+  if (window !== window.top || location.pathname.startsWith('/admin') === false)
+    return;
+  const origins = markOrigins(gate, await getSyncUrl().catch(() => ''));
+  if (shouldMarkPage(location.origin, location.pathname, document.querySelector('meta[name="nojob-admin"]') !== null, origins) === false)
+    return;
+  const mark = bindMark(gate);
+  document.documentElement.setAttribute(BIND_MARK_ATTR, mark);
+  window.postMessage({ type: BIND_MARK_EVENT, mark }, location.origin);
+}
+function markAdmin(): void {
+  void browser.storage.local.get(LINK_GATE_KEY).then(items => paintBindMark(items[LINK_GATE_KEY] as LinkGate | undefined)).catch(() => {});
+}
+if (document.readyState === 'loading')
+  document.addEventListener('DOMContentLoaded', markAdmin, { once: true });
+else
+  markAdmin();
 watchResumePull();
 
 const logs: Array<{ type: string; text: string; time: number }> = [];

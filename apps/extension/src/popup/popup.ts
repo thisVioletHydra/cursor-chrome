@@ -6,6 +6,7 @@ import { browser } from '../browser-host';
 import { bannerHtml, updateFlag } from '../local/version';
 import { watchUpdating } from '../local/updating';
 import { paintLinkPanel } from '../local/link-panel';
+import { adminUrl, BIND_TITLE, bindMode, DEFAULT_ADMIN_URL, gateText, gateTransition, LINK_GATE_KEY, type LinkGate, parseConnectInput, readGate } from '../local/link-gate';
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 
 type ApplyRecord = {
@@ -90,7 +91,11 @@ let waitCleared = false;
 const clicks: Record<string, () => void> = {
   'make-good': () => void (linked ? hangUp() : makeGood()),
   'power': () => void togglePower(),
-  'pin-here': () => void pinHere(),
+  'pin-here': () => {
+    if (bindOn)
+      return;
+    void pinHere();
+  },
   'go-main': () => show('main'),
   'go-history': () => show('history'),
   'go-settings': () => show('settings'),
@@ -173,6 +178,15 @@ showMachineEl?.addEventListener('change', () => {
 browser.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local')
     return;
+
+  const gateChange = changes[LINK_GATE_KEY];
+  if (gateChange !== undefined) {
+    const turn = gateTransition(gateChange.oldValue as LinkGate | undefined, gateChange.newValue as LinkGate | undefined);
+    if (turn === 'linked' && bindOn)
+      location.reload();
+    else if (turn === 'lost')
+      paintBind(true);
+  }
 
   const linkChange = changes[PILOT_LINK_KEY];
   if (linkChange !== undefined && autoOn)
@@ -463,7 +477,7 @@ async function connectFromLink(): Promise<void> {
   if (connectLinkEl === null || connectErrorEl === null || connectSaveEl === null)
     return;
 
-  const parsed = parseConnectLink(connectLinkEl.value);
+  const parsed = parseConnectInput(connectLinkEl.value, await getSyncUrl().catch(() => ''));
   if (parsed === null) {
     paintConnectFail('Это не ссылка подключения');
     return;
@@ -485,6 +499,16 @@ async function connectFromLink(): Promise<void> {
     }
 
     connectLinkEl.value = '';
+    // bind mode: ask the server right away; accepted → redraw the popup with the full interface
+    const gate = await paintLinkPanel(document.getElementById('cc-link'), parsed.url, parsed.key, gateArea).catch(() => null);
+    if (bindOn) {
+      if (gate !== null && bindMode(gate) === false) {
+        location.reload();
+        return;
+      }
+      paintConnectFail(gateText(gate) || 'Ключ не принят');
+      return;
+    }
     connectSaveEl.classList.add('saved');
     await paintConnect();
     connectSaveEl.textContent = 'Заменено';
@@ -528,6 +552,16 @@ async function paintConnect(): Promise<void> {
 
   if (connectSaveEl && connectSaveEl.classList.contains('saved') === false)
     connectSaveEl.textContent = on ? 'Заменить' : 'Подключить';
+
+  // bind mode keeps its own title/button text even when this repaint lands later
+  if (bindOn) {
+    if (connectTitleEl)
+      connectTitleEl.textContent = BIND_TITLE;
+    if (connectNoteEl)
+      connectNoteEl.hidden = false;
+    if (connectSaveEl && connectSaveEl.classList.contains('saved') === false)
+      connectSaveEl.textContent = 'Подключить';
+  }
 }
 
 function hostOf(url: string): string {
@@ -886,6 +920,8 @@ async function paintBootStatus(): Promise<void> {
 }
 
 async function togglePower(): Promise<void> {
+  if (bindOn)
+    return;
   if (powerBtn === null || powerBtn.disabled)
     return;
 
@@ -1080,5 +1116,79 @@ void (async () => {
     node.innerHTML = bannerHtml(await updateFlag(area), base);
   // deploy window: small «updating» bar, ping /healthz every 3 s, then reload the popup data
   void watchUpdating(document.getElementById('cc-updating'), base, () => location.reload());
-  void paintLinkPanel(document.getElementById('cc-link'), await getSyncUrl(), await getSyncKey(), area).catch(() => null);
+  const gate = await paintLinkPanel(document.getElementById('cc-link'), await getSyncUrl(), await getSyncKey(), area).catch(() => null);
+  paintBind(bindMode(gate));
 })();
+
+// ── Bind mode: no valid token / server unreachable → only the connect screen (existing form + classes).
+// Tabs, autopilot card, «Включить», «Запинить», history and other settings are hidden; version + hash stay.
+let bindOn = false;
+const gateArea = { set: (items: Record<string, unknown>) => browser.storage.local.set(items) };
+const connectHome = connectForm?.parentElement ?? null;
+const connectNext = connectForm?.nextElementSibling ?? null;
+let bindAdmin: HTMLAnchorElement | null = null;
+
+function paintBind(on: boolean): void {
+  bindOn = on;
+  const tabsEl = document.getElementById('tabs');
+  if (tabsEl)
+    tabsEl.hidden = on;
+  if (on) {
+    for (const id of ['view-history', 'pin-note'])
+      document.getElementById(id)?.setAttribute('hidden', '');
+  }
+  for (const el of document.querySelectorAll<HTMLElement>('.autopilot-card, .pin-line'))
+    el.hidden = on;
+  const settings = document.getElementById('view-settings');
+  const main = document.getElementById('view-main');
+  if (powerBtn)
+    powerBtn.disabled = on || powerBtn.disabled;
+  const pinBtn = document.getElementById('pin-here') as HTMLButtonElement | null;
+  if (pinBtn)
+    pinBtn.disabled = on;
+  if (connectForm === null || main === null)
+    return;
+  if (on) {
+    main.hidden = false;
+    if (settings)
+      settings.hidden = true;
+    main.before(connectForm);
+    if (connectTitleEl)
+      connectTitleEl.textContent = BIND_TITLE;
+    if (connectNoteEl)
+      connectNoteEl.hidden = false;
+    if (connectSaveEl)
+      connectSaveEl.textContent = 'Подключить';
+    if (bindAdmin === null) {
+      bindAdmin = document.createElement('a');
+      bindAdmin.className = 'text-action';
+      bindAdmin.target = '_blank';
+      bindAdmin.rel = 'noopener';
+      bindAdmin.textContent = 'Открыть админку';
+      connectForm.append(bindAdmin);
+    }
+    bindAdmin.hidden = false;
+    void readGate({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>>, set: async () => {} }).then((gate) => {
+      if (bindAdmin)
+        bindAdmin.href = adminUrl(gate) || DEFAULT_ADMIN_URL;
+    }).catch(() => {
+      if (bindAdmin)
+        bindAdmin.href = DEFAULT_ADMIN_URL;
+    });
+
+    return;
+  }
+  if (bindAdmin)
+    bindAdmin.hidden = true;
+  if (connectHome && connectForm.parentElement !== connectHome) {
+    connectHome.insertBefore(connectForm, connectNext);
+    show('main');
+    requestAnimationFrame(() => syncTabChip());
+  }
+  void paintConnect().catch(() => {});
+}
+
+// first paint from the stored state (no TTL) so the full UI does not flash before the live check
+void readGate({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>>, set: async () => {} })
+  .then(gate => paintBind(bindMode(gate, Date.now(), false)))
+  .catch(() => paintBind(true));

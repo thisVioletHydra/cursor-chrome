@@ -104,3 +104,83 @@ export async function contentGateOpen(area: Pick<Area, 'get'>, now = Date.now())
     return false;
   }
 }
+
+// ── Bind mode («режим привязки»): while the gate is closed the popup shows only the connect screen.
+export const BIND_TITLE = 'Введи ключ для связи';
+export const DEFAULT_ADMIN_URL = 'https://nojobnoproblem.up.railway.app/admin';
+
+// Popup first paint: trust the stored state (not the TTL) to avoid a flash; the live check decides after.
+export function bindMode(gate: LinkGate | null | undefined, now = Date.now(), strict = true): boolean {
+  if (strict)
+    return gateOpen(gate, now) === false;
+
+  return gate?.state !== 'ok';
+}
+
+// «Подключить»: a connect link (https://host/connect#key) or a bare key for the already known server.
+export function parseConnectInput(raw: string, knownUrl = ''): { url: string; key: string } | null {
+  const text = raw.trim();
+  if (text.length === 0)
+    return null;
+  try {
+    const link = new URL(text);
+    if (link.pathname.replace(/\/+$/, '') !== '/connect')
+      return null;
+    const key = decodeURIComponent(link.hash.replace(/^#/, '')).trim();
+
+    return key.length >= 16 ? { url: `${link.protocol}//${link.host}`, key } : null;
+  }
+  catch {
+  }
+  if (/^[\w.~+/=-]{16,}$/.test(text) === false)
+    return null;
+  try {
+    const known = new URL(knownUrl.trim());
+
+    return { url: `${known.protocol}//${known.host}`, key: text };
+  }
+  catch {
+    return null;
+  }
+}
+
+// open → closed = 'lost' (autopilot pauses, popup back to the connect screen); closed → open = 'linked'.
+export function gateTransition(prev: LinkGate | null | undefined, next: LinkGate | null | undefined, now = Date.now()): 'linked' | 'lost' | null {
+  const was = gateOpen(prev, now);
+  const is = gateOpen(next, now);
+  if (was === is)
+    return null;
+
+  return is ? 'linked' : 'lost';
+}
+
+// Admin «До старта»: the content script leaves a mark on our admin page only (never on job sites),
+// so the admin tells «не установлено» (no mark) from «установлено, но не связано» (mark = unlinked).
+export const BIND_MARK_ATTR = 'data-nojob-ext';
+export const BIND_MARK_EVENT = 'nojob-ext-mark';
+export const ADMIN_META = 'nojob-admin';
+
+export function bindMark(gate: LinkGate | null | undefined, now = Date.now()): 'linked' | 'unlinked' {
+  return gateOpen(gate, now) ? 'linked' : 'unlinked';
+}
+
+function originOf(url: string): string {
+  try {
+    return new URL(url.trim()).origin;
+  }
+  catch {
+    return '';
+  }
+}
+
+// Origins allowed to receive the mark: admin of the gate host and the sync URL; nothing known → DEFAULT_ADMIN_URL.
+export function markOrigins(gate: LinkGate | null | undefined, syncUrl = ''): string[] {
+  const list = [originOf(adminUrl(gate)), originOf(syncUrl)].filter(o => o.length > 0);
+
+  return list.length > 0 ? list : [originOf(DEFAULT_ADMIN_URL)];
+}
+
+export function shouldMarkPage(pageOrigin: string, path: string, hasAdminMeta: boolean, origins: string[]): boolean {
+  // our admin only: own origin AND /admin path AND the <meta name="nojob-admin"> the admin page renders
+  return origins.includes(pageOrigin) && path.startsWith('/admin') && hasAdminMeta;
+}
