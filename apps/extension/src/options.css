@@ -31,3 +31,4 @@ table { width:100%; border-collapse:collapse; } td, th { text-align:left; paddin
 .wizard .result { margin-top: 8px; font-size: 13px; }
 .wizard .result.ok { color: #6ee7b7; }
 .wizard .result.fail { color: #fda4af; }
+.cc-updating { margin: 8px 16px; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(129, 140, 248, .45); background: rgba(129, 140, 248, .12); color: #c7d2fe; font-size: 13px; }

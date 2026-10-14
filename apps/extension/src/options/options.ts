@@ -10,6 +10,7 @@ import { renderDebug } from './debug-tab.ts';
 import { browser } from '../browser-host';
 import { byokInfo, idbKeyStore, saveByok } from '../local/byok.ts';
 import { bannerHtml, updateFlag } from '../local/version.ts';
+import { watchUpdating } from '../local/updating.ts';
 import { maskKey, readClipboardKey, STEPS, testKey, validXaiKey, XAI_KEYS_URL } from '../local/key-wizard.ts';
 // provider ids the server accepts in x-llm-provider (server-side presets; no custom URLs from the client)
 const PRESETS = [{ id: 'xai', name: 'xAI Grok' }, { id: 'groq', name: 'Groq' }, { id: 'gemini', name: 'Gemini' }, { id: 'zai', name: 'Z.ai' }, { id: 'openrouter', name: 'OpenRouter' }, { id: 'cohere', name: 'Cohere' }, { id: 'deepseek', name: 'DeepSeek' }, { id: 'mistral', name: 'Mistral' }];
@@ -223,13 +224,14 @@ async function serverBase(): Promise<string> {
 // Outdated-version banner: the flag comes from the server's response headers (x-ext-outdated / 426).
 async function drawUpdate(): Promise<void> {
   document.getElementById('update')!.innerHTML = bannerHtml(await updateFlag(storageArea), await serverBase());
+  void watchUpdating(document.getElementById('updating'), await serverBase(), () => location.reload());
 }
 
 // BYOK: own LLM key, encrypted (WebCrypto AES-GCM) in chrome.storage.local, sent only as x-llm-key.
 async function enableCoach(): Promise<boolean> {
   const origins = ['https://console.x.ai/*'];
-  const granted = await chrome.permissions.request({ origins });
-  if (!granted)
+  // host access is already covered by the required <all_urls> (page control on any tab), so no permission prompt
+  if (await chrome.permissions.contains({ origins }) === false)
     return false;
 
   const have = await chrome.scripting.getRegisteredContentScripts({ ids: ['xai-coach'] });
@@ -248,7 +250,7 @@ function keyWizard(onSaved: () => Promise<void>): HTMLElement {
   const show = (text: string, kind: '' | 'ok' | 'fail' = '') => { result.textContent = text; result.className = `result ${kind || 'dim'}`; };
   const testBtn = el('button', { className: 'btn', textContent: 'Проверить', disabled: true });
   const saveBtn = el('button', { className: 'btn', textContent: 'Сохранить', disabled: true });
-  // optional host permission for the coach overlay on console.x.ai, asked on this click only
+  // coach overlay on console.x.ai: registered on this click only (host access comes from <all_urls>)
   const getBtn = el('button', { className: 'btn', textContent: 'Получить ключ Grok', onclick: async () => {
     const coach = await enableCoach().catch(() => false);
     window.open(XAI_KEYS_URL, '_blank', 'noopener');

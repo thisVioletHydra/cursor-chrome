@@ -4,6 +4,7 @@
 import type { LocalData } from './schema.ts';
 import type { VacancyFacts } from '../../../hh/src/review/profile.ts';
 
+import { retryWhileUpdating } from './updating.ts';
 import { questionKey } from '../../../hh/src/review/form.ts';
 import { LEXICAL_MIN, lexicalScore } from '../../../hh/src/review/normalize.ts';
 
@@ -43,7 +44,7 @@ export async function askServer(
   key: string,
   fields: ThinField[],
   context: Record<string, unknown>,
-  extra: { llmKey?: string; llmProvider?: string; version?: string } = {},
+  extra: { llmKey?: string; llmProvider?: string; version?: string; retry?: { sleep?: (ms: number) => Promise<void>; maxWait?: number } } = {},
   fetcher: typeof fetch = fetch,
 ): Promise<ThinReply[]> {
   const human = (reason: string) => fields.map((field, index) => ({ id: field.id ?? String(index), human: true as const, reason }));
@@ -58,7 +59,9 @@ export async function askServer(
   if (extra.version)
     headers['x-ext-version'] = extra.version;
   try {
-    const res = await fetcher(`${base}/api/answer`, { method: 'POST', headers, body: JSON.stringify({ fields: fields.map((field, index) => ({ ...field, id: field.id ?? String(index) })), context }) });
+    const body0 = JSON.stringify({ fields: fields.map((field, index) => ({ ...field, id: field.id ?? String(index) })), context });
+    // deploy window (502/503/504/network): wait for /healthz and ask again; still only reads an answer, never submits
+    const res = await retryWhileUpdating(base, () => fetcher(`${base}/api/answer`, { method: 'POST', headers, body: body0 }), { fetcher, ...extra.retry });
     if (res.status === 426)
       return human('расширение устарело: обнови его по ссылке в плашке');
     if (res.ok === false)

@@ -600,3 +600,4 @@ body {
 
 .cc-update { margin: 6px 0; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(251, 191, 36, .45); background: rgba(251, 191, 36, .12); color: #fde68a; font-size: 12px; }
 .cc-update a { color: #fde68a; margin-left: 4px; text-decoration: underline; }
+.cc-updating { margin: 6px 0; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(129, 140, 248, .45); background: rgba(129, 140, 248, .12); color: #c7d2fe; font-size: 12px; }

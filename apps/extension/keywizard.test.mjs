@@ -21,7 +21,7 @@ test('wizard: console URL, format, mask, clipboard on click', async () => {
   assert.match((await readClipboardKey({ readText: async () => { throw new Error('denied'); } })).error, /нет доступа/);
 });
 
-test('wizard: test goes through our server, key only in x-llm-key; manifest has only an optional host permission', async () => {
+test('wizard: test goes through our server, key only in x-llm-key; coach is not an optional permission', async () => {
   let sent;
   const ok = await testKey('http://s', 'ext_k', KEY, async (url, init) => { sent = { url, init }; return new Response('{"ok":true,"code":"ok","message":"✅ ключ работает"}'); });
   assert.deepEqual([ok.ok, ok.message], [true, '✅ ключ работает']);
@@ -32,8 +32,12 @@ test('wizard: test goes through our server, key only in x-llm-key; manifest has 
   assert.equal((await testKey('http://s', 'k', KEY, async () => { throw new Error('x'); })).message, 'нет связи');
   assert.equal((await testKey('http://s', 'k', 'bad', async () => { throw new Error('must not call'); })).code, 'bad-format');
   const manifest = JSON.parse(fs.readFileSync(new URL('./src/manifest.json', import.meta.url), 'utf8'));
-  assert.deepEqual(manifest.optional_host_permissions, ['https://console.x.ai/*']);
-  assert.equal(manifest.host_permissions.includes('https://console.x.ai/*'), false);
+  const required = new Set(manifest.host_permissions ?? []);
+  const optional = manifest.optional_host_permissions ?? [];
+  // Chrome warns "Optional permission ... is redundant" when optional overlaps required (<all_urls> covers everything)
+  assert.deepEqual(optional.filter(o => required.has(o) || required.has('<all_urls>')), [], 'no optional/required overlap');
+  assert.deepEqual((manifest.optional_permissions ?? []).filter(o => (manifest.permissions ?? []).includes(o)), []);
+  assert.equal(fs.readFileSync(new URL('./src/options/options.ts', import.meta.url), 'utf8').includes('permissions.request'), false, 'no prompt for coach');
   assert.equal(JSON.stringify(manifest.content_scripts).includes('console.x.ai'), false, 'coach is registered at runtime only');
 });
 

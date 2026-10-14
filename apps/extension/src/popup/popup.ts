@@ -4,6 +4,7 @@ import { labeledApplies, paintApplyGroup, readWaitingKey } from '../hh/history-l
 import { openWorkerUrl, pinHere, refreshWorkerPanel } from './popup-pin';
 import { browser } from '../browser-host';
 import { bannerHtml, updateFlag } from '../local/version';
+import { watchUpdating } from '../local/updating';
 import { getSyncUrl } from '../diary/apply-log';
 
 type ApplyRecord = {
@@ -1075,4 +1076,6 @@ void (async () => {
   const node = document.getElementById('cc-update');
   if (node)
     node.innerHTML = bannerHtml(await updateFlag(area), base);
+  // deploy window: small «updating» bar, ping /healthz every 3 s, then reload the popup data
+  void watchUpdating(document.getElementById('cc-updating'), base, () => location.reload());
 })();
