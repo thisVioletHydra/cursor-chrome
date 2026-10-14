@@ -1,6 +1,6 @@
-import { DatabaseSync } from 'node:sqlite';
+import sqlite from 'node:sqlite';
 
-const db = new DatabaseSync(new URL('./session.sqlite', import.meta.url).pathname);
+const db = new sqlite.DatabaseSync(new URL('./session.sqlite', import.meta.url).pathname);
 
 const tables = db.prepare(`SELECT name, sql FROM sqlite_master WHERE type = 'table'`).all();
 console.log('TABLES', JSON.stringify(tables, null, 2));
@@ -33,6 +33,7 @@ for (const t of tables) {
 function summarize(s) {
   if (typeof s !== 'string')
     return { type: typeof s };
+
   return {
     len: s.length,
     tail: s.length >= 2 ? s.slice(-2) : `(short:${s.length})`,
@@ -44,12 +45,16 @@ function redact(value, path = '') {
   if (value === null || typeof value !== 'object') {
     if (typeof value === 'string' && /(key|token|secret|password)/i.test(path))
       return summarize(value);
+
     if (typeof value === 'string' && value.length > 24)
       return { len: value.length, tail: value.slice(-2), kind: 'long-string' };
+
     return value;
   }
+
   if (Array.isArray(value))
-    return value.map((item, i) => redact(item, `${path}[${i}]`));
+    return value.map((item, f) => redact(item, `${path}[${f}]`));
+
   const out = {};
   for (const [k, v] of Object.entries(value)) {
     const next = path ? `${path}.${k}` : k;
@@ -58,5 +63,6 @@ function redact(value, path = '') {
     else
       out[k] = redact(v, next);
   }
+
   return out;
 }

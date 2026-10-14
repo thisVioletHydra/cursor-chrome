@@ -1,4 +1,4 @@
-import { HH_API, HH_USER_AGENT, PING_MS } from '../limits.ts';
+import { HH_API, hhUserAgent, PING_MS } from '../limits.ts';
 
 import process from 'node:process';
 
@@ -37,7 +37,7 @@ export async function vacancyPing(token: string): Promise<void> {
   const res = await fetch(url, {
     signal: AbortSignal.timeout(PING_MS),
     headers: {
-      'user-agent': HH_USER_AGENT,
+      'user-agent': hhUserAgent(),
       accept: 'application/json',
       authorization: `Bearer ${token}`,
     },
@@ -62,7 +62,7 @@ async function exchangeApp(clientId: string, clientSecret: string): Promise<stri
     method: 'POST',
     headers: {
       'content-type': 'application/x-www-form-urlencoded',
-      'user-agent': HH_USER_AGENT,
+      'user-agent': hhUserAgent(),
       accept: 'application/json',
     },
     body,

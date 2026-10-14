@@ -1,7 +1,7 @@
 import type { Vacancy } from './rules.ts';
 
 import { appToken } from './hh-token.ts';
-import { HH_API, HH_USER_AGENT, PING_MS } from '../limits.ts';
+import { HH_API, hhUserAgent, PING_MS } from '../limits.ts';
 import { splitQueries } from '../mix/queries.ts';
 
 type SearchItem = {
@@ -88,7 +88,7 @@ async function loadCard(item: SearchItem, token: string): Promise<Vacancy> {
 export async function hhGet<T>(url: URL | string, token = ''): Promise<T> {
   const headers: Record<string, string> = {
     accept: 'application/json',
-    'user-agent': HH_USER_AGENT,
+    'user-agent': hhUserAgent(),
   };
   if (token.length > 0)
     headers.authorization = `Bearer ${token}`;
