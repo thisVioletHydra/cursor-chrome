@@ -1,29 +1,44 @@
 <!doctype html>
-<html>
+<html lang="ru">
   <head>
     <meta charset="utf-8" />
     <title>NoJobNoProblemBuddy</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <p class="brand">NoJobNoProblemBuddy <span id="ver"></span></p>
+    <header class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="currentColor">
+          <circle cx="9" cy="8" r="4.5" />
+          <circle cx="24" cy="11" r="3.5" />
+          <circle cx="7" cy="24" r="3" />
+          <circle cx="21" cy="23" r="5.5" />
+        </svg>
+      </span>
+      <span class="brand-copy">no job.<br /><span>no problem.</span></span>
+    </header>
     <div id="cc-update"></div>
-    <div id="cc-updating" hidden></div>
-    <div id="cc-link" hidden></div>
-    <div class="tabs" id="tabs">
+    <aside class="connection" aria-label="Подключение">
+      <div id="cc-updating" hidden></div>
+      <div id="cc-link" hidden></div>
+    </aside>
+    <nav class="tabs" id="tabs" aria-label="Разделы">
       <span class="checked-bg" aria-hidden="true"></span>
-      <button id="go-main" class="nav on" type="button">Главная</button>
+      <button id="go-main" class="nav on" type="button">Пульт</button>
       <button id="go-history" class="nav" type="button">История</button>
       <button id="go-settings" class="nav" type="button">Настройки</button>
-    </div>
+    </nav>
 
     <section id="view-main">
+      <div class="autopilot-card"><h1 class="eyebrow">Автопилот</h1>
       <p id="pill" class="status" aria-live="polite">Выключено</p>
       <button id="power" class="btn-primary" type="button" disabled>Включить</button>
       <p id="power-note" class="power-note" hidden aria-live="polite"></p>
-      <p id="auto-line" class="quiet">Сам откликается, пока очередь не пустая. Новые — раз в 15 мин.</p>
-      <button id="run-queue" class="btn-quiet" type="button">Откликнуться сейчас</button>
-      <p class="quiet">на вакансии, которые уже в очереди</p>
+      <p id="auto-line" class="quiet">Новые вакансии — каждые 15 минут.</p>
+      </div>
+      <footer class="build-info" aria-label="Версия сборки">
+        <span id="ver"></span><span aria-hidden="true">·</span><span id="build-hash">__BUILD_HASH__</span>
+      </footer>
       <p class="pin-line">
         <span id="worker-line" class="worker-line">Вкладка не запинена</span>
         <button id="pin-here" class="text-action" type="button">Запинить</button>
@@ -42,7 +57,7 @@
         <p id="connect-host" class="connect-host" hidden></p>
         <p id="connect-note" class="connect-note">В админке открой Extension, скопируй ссылку и вставь сюда.</p>
         <div class="field-row">
-          <input id="connect-link" type="text" placeholder="https://…/connect#ключ" autocomplete="off" />
+          <input id="connect-link" aria-label="Ссылка подключения из админки" type="text" placeholder="https://…/connect#ключ" autocomplete="off" />
           <button id="connect-save" class="ghost" type="submit">Подключить</button>
         </div>
         <p id="connect-error" class="connect-error" hidden></p>
@@ -56,7 +71,7 @@
 
       <div class="group">
         <form id="worker-url-form" class="worker-url" autocomplete="off">
-          <input id="worker-url" type="url" placeholder="https://… — пин-воркер" />
+          <input id="worker-url" aria-label="Адрес рабочей вкладки" type="url" placeholder="Адрес рабочей вкладки" />
           <button id="open-worker-url" class="ghost" type="submit">Открыть</button>
         </form>
         <p id="url-note" class="power-note" hidden></p>
@@ -65,15 +80,15 @@
       <div class="group">
         <label class="flag">
         <span>
-          <strong>Показывать поп</strong>
-          <small>карточка на сайте вакансий. если плагин OFF — прячется сама</small>
+          <strong>Карточка на сайте</strong>
+          <small>Видна, пока работает автопилот</small>
         </span>
           <input id="flag-show-pop" type="checkbox" />
         </label>
 
         <label class="flag">
         <span>
-          <strong>Скрывать мусорные вакансии</strong>
+          <strong>Фильтр вакансий</strong>
           <small>junior, Angular/PHP/1C/мобилки, Яндекс, офис в тексте</small>
         </span>
           <input id="flag-hide-junk" type="checkbox" />
@@ -81,16 +96,16 @@
 
         <label class="flag">
         <span>
-          <strong>Продолжать сессию на площадке</strong>
-          <small>выкл: тот же пин, сброс на площадку. вкл: тот же URL и история</small>
+          <strong>Сохранять сессию</strong>
+          <small>Не сбрасывать страницу и историю переходов</small>
         </span>
           <input id="flag-keep-session" type="checkbox" />
         </label>
 
         <label class="flag">
         <span>
-          <strong>Статус машины</strong>
-          <small>панель слева сверху на сайте вакансий</small>
+          <strong>Диагностика</strong>
+          <small>Текущий шаг в углу страницы</small>
         </span>
           <input id="flag-show-machine" type="checkbox" />
         </label>

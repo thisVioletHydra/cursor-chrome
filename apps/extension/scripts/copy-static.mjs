@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import url from 'node:url';
@@ -19,6 +20,20 @@ async function main() {
 
   for (const file of ['offscreen.html', 'popup.html', 'popup.css', 'options.html', 'options.css'])
     await fsPromises.copyFile(path.join(src, file), path.join(dist, file));
+
+  const hash = createHash('sha256');
+  const files = (await fsPromises.readdir(dist)).sort();
+  for (const file of files) {
+    if (!/\.(js|css|html|json)$/.test(file))
+      continue;
+
+    hash.update(file);
+    hash.update(await fsPromises.readFile(path.join(dist, file)));
+  }
+
+  const popupPath = path.join(dist, 'popup.html');
+  const popup = await fsPromises.readFile(popupPath, 'utf8');
+  await fsPromises.writeFile(popupPath, popup.replace('__BUILD_HASH__', hash.digest('hex').slice(0, 8)));
 
   for (const file of await fsPromises.readdir(path.join(src, 'icons'))) {
     if (file.endsWith('.png') === false)
