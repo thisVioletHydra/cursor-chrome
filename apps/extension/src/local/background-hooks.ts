@@ -49,9 +49,24 @@ export async function linkPaused(): Promise<boolean> {
   return gateOpen(gate) === false;
 }
 
+let repaintBadge: () => Promise<void> = async () => {};
+let lastGateOpen: boolean | null = null;
+
+// background.ts hands over setBadge(connected): when the link comes back, the «!» is replaced at once.
+export function onGateReopen(repaint: () => Promise<void>): void {
+  repaintBadge = repaint;
+}
+
 async function paintGateBadge(gate: Awaited<ReturnType<typeof readGate>>): Promise<void> {
-  if (gateOpen(gate))
+  const open = gateOpen(gate);
+  const reopened = open && lastGateOpen !== true;
+  lastGateOpen = open;
+  if (open) {
+    if (reopened)
+      await repaintBadge().catch(() => {});
+
     return;
+  }
   try {
     await browser.action.setBadgeText({ text: '!' });
     await browser.action.setBadgeBackgroundColor({ color: '#b45309' });

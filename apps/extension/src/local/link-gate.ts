@@ -81,3 +81,22 @@ export async function refreshGate(area: Area, url: string, key: string, fetcher:
 export function adminUrl(gate: LinkGate | null | undefined): string {
   return gate?.host ? `https://${gate.host}/admin` : '';
 }
+
+// Messages that act on sites (open/drive tabs, autofill, queue, negotiations sync): refused while the gate is closed.
+export const GATED_MESSAGES = ['run-queue', 'sync-negotiations', 'open-hh', 'hh-same-tab', 'ensure-hh', 'open-worker-url', 'pull-resume', 'answer-question', 'pin-tab', 'command', 'make-good', 'run-apply'] as const;
+
+export function isGatedMessage(type: string): boolean {
+  return (GATED_MESSAGES as readonly string[]).includes(type);
+}
+
+export const PAUSED_REPLY = { ok: false, paused: true, status: 'skip', reason: NOT_LINKED_TEXT, error: NOT_LINKED_TEXT };
+
+// Content scripts: read the gate the worker keeps fresh; closed/missing/stale → no actions on the page.
+export async function contentGateOpen(area: Pick<Area, 'get'>, now = Date.now()): Promise<boolean> {
+  try {
+    return gateOpen(await readGate(area as Area), now);
+  }
+  catch {
+    return false;
+  }
+}

@@ -15,7 +15,8 @@ import { detectHolding } from './apply/detect-hold';
 import { captchaHolding, clearSearchBusy, clearSearchSoon, isPaused, kickedRecently, markKicked, markSearchSoon, queueBusy, runQueue } from './apply/queue-run';
 import { rpc } from './link/rpc';
 import { browser } from './browser-host';
-import { linkPaused, startLocalHooks } from './local/background-hooks';
+import { linkPaused, onGateReopen, startLocalHooks } from './local/background-hooks';
+import { isGatedMessage, PAUSED_REPLY } from './local/link-gate.ts';
 
 const ALARM = 'cc-keepalive';
 const QUEUE_ALARM = 'cc-queue';
@@ -57,6 +58,7 @@ browser.runtime.onStartup.addListener(() => {
   void armSearchSoon(false);
 });
 installFocusLock();
+onGateReopen(() => setBadge(connected));
 startLocalHooks();
 void boot();
 
@@ -165,9 +167,21 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (typeof type !== 'string')
     return false;
 
-  return onRuntimeMessage[type]?.(message, sender, sendResponse)
+  const dispatch = () => onRuntimeMessage[type]?.(message, sender, sendResponse)
     ?? rpc[type]?.(message as Record<string, unknown>, sendResponse, sender)
     ?? false;
+  if (isGatedMessage(type) === false)
+    return dispatch();
+
+  // gate «без связи — пауза»: site actions from popup/content only while linked to the admin
+  void linkPaused().then((paused) => {
+    if (paused)
+      sendResponse(PAUSED_REPLY);
+    else
+      dispatch();
+  });
+
+  return true;
 });
 
 function replyAsync(reply: Reply, job: Promise<unknown>): true {
@@ -245,6 +259,8 @@ async function onQueueAlarm(): Promise<void> {
 }
 
 async function syncNegotiationsIfDue(): Promise<void> {
+  if (await linkPaused())
+    return;
   const stored = await browser.storage.local.get(NEGOTIATIONS_AT_KEY);
   const at = stored[NEGOTIATIONS_AT_KEY];
   if (typeof at === 'number' && Date.now() - at < NEGOTIATIONS_EVERY_MS)
@@ -441,6 +457,12 @@ async function onNativeMessage(message: unknown): Promise<void> {
     return;
 
   const request = rec as unknown as WsRequest;
+  // gate «без связи — пауза»: native/MCP commands act on sites too
+  if (await linkPaused()) {
+    sendNative(nativePort, { id: request.id, ok: false, error: PAUSED_REPLY.reason });
+
+    return;
+  }
   try {
     const result = await runCommand(request.method, request.params || {}, connected);
     sendNative(nativePort, { id: request.id, ok: true, result });

@@ -35,3 +35,10 @@ test('D: wiring — hooks mark, /api/link answers 401 without token, admin shows
   assert.match(page, /Скачать расширение/);
   assert.match(read('./src/routes/admin/+layout.server.ts'), /extDownload: preview \|\| !account\.extToken \? '' : `\/dl\/\$\{signDl/);
 });
+
+test('До старта: warning next to «Скачать расширение» — do not delete the old extension', () => {
+  const page = fs.readFileSync(new URL('./src/routes/admin/+page.svelte', import.meta.url), 'utf8');
+  const at = page.indexOf('Скачать расширение');
+  const warn = page.indexOf('Для обновления не удаляй старое расширение — данные хранятся в нём.');
+  assert.ok(at > 0 && warn > at && warn - at < 400);
+});

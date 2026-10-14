@@ -691,6 +691,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
         <p class="mt-1 pl-4 text-xs text-zinc-500">
           {#if data.extDownload}
             <a class="text-zinc-300 underline underline-offset-4 hover:text-zinc-100" href={data.extDownload} download>Скачать расширение</a> (zip, ссылка на 24 часа).
+            <span class="block text-amber-200/90" data-ext-keep>Для обновления не удаляй старое расширение — данные хранятся в нём.</span>
           {:else}
             Сначала выпусти ссылку в <a class="text-zinc-300 underline-offset-4 hover:underline" href="/admin/extension">Extension</a>.
           {/if}

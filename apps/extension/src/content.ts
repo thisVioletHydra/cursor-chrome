@@ -4,9 +4,14 @@ import { runApply } from './hh/apply-run';
 import { click, hover, pressKey, selectOption, typeInto } from './page/actions';
 import { byRef, bySelector, snapshot } from './page/snapshot';
 import { browser } from './browser-host';
+import { contentGateOpen, isGatedMessage, PAUSED_REPLY } from './local/link-gate.ts';
 
 keepHhClicks();
-startHhJob();
+// gate «без связи — пауза»: no autonomous page job while the extension is not linked to the admin
+void contentGateOpen({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>> }).then((open) => {
+  if (open)
+    startHhJob();
+});
 watchResumePull();
 
 const logs: Array<{ type: string; text: string; time: number }> = [];
@@ -57,7 +62,19 @@ browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (typeof type !== 'string')
     return false;
 
-  return onPageMessage[type]?.(message, sendResponse) ?? false;
+  if (isGatedMessage(type) === false)
+    return onPageMessage[type]?.(message, sendResponse) ?? false;
+  if (onPageMessage[type] === undefined)
+    return false;
+
+  void contentGateOpen({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>> }).then((open) => {
+    if (open)
+      onPageMessage[type]?.(message, sendResponse);
+    else
+      sendResponse(PAUSED_REPLY);
+  });
+
+  return true;
 });
 
 function watchResumePull(): void {

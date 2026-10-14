@@ -73,3 +73,35 @@ test('fix: setBadge checks the gate first and puts «!» before OFF/counter', ()
   assert.ok(body.indexOf("text: '!'") < body.indexOf("text: 'OFF'"));
   assert.match(body, /setTitle\(\{ title: gateText\(gate\) \}\)/);
 });
+
+test('gate pack 2: popup/content actions, autofill and negotiations sync pause without the link', async () => {
+  const { contentGateOpen, isGatedMessage, PAUSED_REPLY } = await import('./src/local/link-gate.ts');
+  for (const type of ['run-apply', 'command', 'run-queue', 'sync-negotiations', 'open-hh', 'answer-question'])
+    assert.equal(isGatedMessage(type), true, type);
+  for (const type of ['get-sync-url', 'set-sync-url', 'get-status', 'ping', 'page-log-get'])
+    assert.equal(isGatedMessage(type), false, type);
+  assert.equal(PAUSED_REPLY.paused, true);
+  const now = Date.now();
+  assert.equal(await contentGateOpen({ get: async () => ({}) }, now), false);
+  assert.equal(await contentGateOpen({ get: async () => ({ linkGate: { state: 'unauthorized', host: 'a', at: now } }) }, now), false);
+  assert.equal(await contentGateOpen({ get: async () => ({ linkGate: { state: 'ok', host: 'a', at: now } }) }, now), true);
+  assert.equal(await contentGateOpen({ get: async () => { throw new Error('x'); } }, now), false);
+  const bg = fs.readFileSync(new URL('./src/background.ts', import.meta.url), 'utf8');
+  assert.match(bg, /if \(isGatedMessage\(type\) === false\)\n    return dispatch\(\);/);
+  assert.match(bg, /async function syncNegotiationsIfDue\(\): Promise<void> \{\n  if \(await linkPaused\(\)\)\n    return;/);
+  const content = fs.readFileSync(new URL('./src/content.ts', import.meta.url), 'utf8');
+  assert.match(content, /then\(\(open\) => \{\n  if \(open\)\n    startHhJob\(\);/);
+  assert.match(content, /sendResponse\(PAUSED_REPLY\)/);
+});
+
+test('gate fix 3: native commands paused; badge repainted when the link comes back', () => {
+  const bg = fs.readFileSync(new URL('./src/background.ts', import.meta.url), 'utf8');
+  const fn = bg.slice(bg.indexOf('async function onNativeMessage'));
+  const gate = fn.indexOf('if (await linkPaused()) {');
+  assert.ok(gate > 0 && gate < fn.indexOf('await runCommand('));
+  assert.match(fn, /sendNative\(nativePort, \{ id: request\.id, ok: false, error: PAUSED_REPLY\.reason \}\);\n\n    return;/);
+  assert.match(bg, /onGateReopen\(\(\) => setBadge\(connected\)\);/);
+  const hooks = fs.readFileSync(new URL('./src/local/background-hooks.ts', import.meta.url), 'utf8');
+  assert.match(hooks, /if \(reopened\)\n      await repaintBadge\(\)/);
+  assert.match(hooks, /alarm\.name === LINK_ALARM\)\n      void getSyncUrl\(\)[^\n]*linkPaused\(\)/);
+});
