@@ -183,16 +183,13 @@ function turn<T>(job: () => Promise<T>): Promise<T> {
   return run;
 }
 
+// Open the store of the CURRENT tenant every time (cached, cheap): a once-per-process boot opened only
+// the first tenant's DB, so the next account got «база не открыта».
 async function runJob<T>(job: () => Promise<T>): Promise<T> {
-  if (booted === false)
-    await boot();
-
-  return job();
-}
-
-async function boot(): Promise<void> {
   await openStore();
   booted = true;
+
+  return job();
 }
 
 async function noteSent(id: string): Promise<void> {
