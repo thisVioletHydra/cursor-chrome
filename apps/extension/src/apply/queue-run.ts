@@ -25,7 +25,7 @@ import { requireTabId } from '../link/inject';
 import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 
-type ApplyReply = { status?: string; reason?: string; hints?: unknown };
+type ApplyReply = { status?: string; reason?: string; hints?: unknown; form?: unknown };
 
 type Status = 'sent' | 'needsHuman' | 'skip';
 
@@ -829,7 +829,7 @@ async function noteReply(base: string, key: string, run: QueueRun, item: QueueIt
     await tellPage(`queue-run.ts · ${landed ? describe(status, reply) : 'админка не приняла отклик'}`);
 
   if (status === 'needsHuman')
-    await report(base, key, item, { status, hints: hintsOf(reply) });
+    await report(base, key, item, { status, hints: hintsOf(reply), ...formOf(reply) });
   else if (status === 'skip')
     await report(base, key, item, { status: 'failed', reason: reply.reason || '', hints: hintsOf(reply) });
 
@@ -1375,6 +1375,11 @@ function describe(status: Status, reply: ApplyReply): string {
     return waiterLine(hintsOf(reply), reply.reason || '');
 
   return `мимо, ${reply.reason || 'без причины'}`;
+}
+
+// Capture only: the admin stores the form for «Разбор»; nothing new is sent to hh.
+function formOf(reply: ApplyReply): { form?: unknown } {
+  return typeof reply.form === 'object' && reply.form !== null ? { form: reply.form } : {};
 }
 
 function hintsOf(reply: ApplyReply): string[] {

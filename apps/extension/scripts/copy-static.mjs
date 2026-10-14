@@ -17,7 +17,7 @@ async function main() {
   manifest.version = version;
   await fsPromises.writeFile(path.join(dist, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 
-  for (const file of ['offscreen.html', 'popup.html', 'popup.css'])
+  for (const file of ['offscreen.html', 'popup.html', 'popup.css', 'options.html', 'options.css'])
     await fsPromises.copyFile(path.join(src, file), path.join(dist, file));
 
   for (const file of await fsPromises.readdir(path.join(src, 'icons'))) {

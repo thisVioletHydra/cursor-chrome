@@ -18,4 +18,5 @@ export default defineConfig([
   { ...shared, entry: { offscreen: 'src/offscreen.ts' } },
   { ...shared, entry: { popup: 'src/popup/popup.ts' } },
   { ...shared, entry: { content: 'src/content.ts' } },
+  { ...shared, entry: { options: 'src/options/options.ts' } },
 ]);

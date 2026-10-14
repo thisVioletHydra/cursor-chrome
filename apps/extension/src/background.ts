@@ -15,6 +15,7 @@ import { detectHolding } from './apply/detect-hold';
 import { captchaHolding, clearSearchBusy, clearSearchSoon, isPaused, kickedRecently, markKicked, markSearchSoon, queueBusy, runQueue } from './apply/queue-run';
 import { rpc } from './link/rpc';
 import { browser } from './browser-host';
+import { startLocalHooks } from './local/background-hooks';
 
 const ALARM = 'cc-keepalive';
 const QUEUE_ALARM = 'cc-queue';
@@ -56,6 +57,7 @@ browser.runtime.onStartup.addListener(() => {
   void armSearchSoon(false);
 });
 installFocusLock();
+startLocalHooks();
 void boot();
 
 browser.storage.onChanged.addListener((changes, area) => {

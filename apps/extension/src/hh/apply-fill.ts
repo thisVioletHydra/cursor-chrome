@@ -1,10 +1,14 @@
 import type { ApplyBlock } from './apply-detect';
+import type { CapturedForm } from './form-capture';
 
 import { typeInto } from '../page/actions';
 import { applyBlocker, captchaOnPage } from './apply-detect';
 import { ask } from './bridge';
 import { compact, pause, until, visible } from './dom';
 import { coverLetter } from './letter';
+import { localStore } from '../local/chrome-store';
+import { decideWithIndex, FULL_LOOKUP } from '../local/fill-decision';
+import { browser } from '../browser-host';
 import { noteLive } from './live-log';
 import { pickResume, resumeKind, vacancyBody, vacancyTitle } from './resume';
 import { applyRoot, employerQuestionnaire, isCoverLetter, isStandardQuestion, promptFields } from './screen-questions';
@@ -14,6 +18,7 @@ export type FillFail = {
   status: 'skip' | 'needsHuman';
   reason: string;
   hints?: string[];
+  form?: CapturedForm;
 };
 
 type QuestionKind = 'city' | 'pay' | 'ip' | 'open' | 'schedule' | 'citizen';
@@ -55,7 +60,7 @@ export async function fillApply(): Promise<FillFail | null> {
 
   const asked = employerQuestionnaire();
   if (asked)
-    return { ok: false, status: 'needsHuman', reason: asked.reason, hints: asked.hints };
+    return { ok: false, status: 'needsHuman', reason: asked.reason, hints: asked.hints, ...(asked.form ? { form: asked.form } : {}) };
 
   const kind = resumeKind(vacancyTitle(), vacancyBody());
   noteLive(`apply-fill.ts · резюме ${kind}`);
@@ -132,10 +137,24 @@ async function fillByCloud(prompt: string, block: HTMLElement): Promise<FillFail
   if (question === null)
     return humanFail(`поле не разобрал: ${prompt}`, [prompt]);
 
-  const reply = await ask<CloudAnswer>({ type: 'answer-question', ...question });
-  const answer = reply?.answer;
-  if (typeof answer !== 'string' || answer.length === 0)
-    return humanFail(`${prompt}: ${reply?.reason || 'нет ответа'}`, [prompt]);
+  // local data first (chrome.storage); filling only, never submitting
+  // index in chrome.storage first; misses → background reads full memory from IndexedDB
+  const local = await decideWithIndex(question, await localStore.loadIndexed().catch(() => null), { title: vacancyTitle() },
+    (q, vacancy) => browser.runtime.sendMessage({ type: FULL_LOOKUP, question: q, vacancy }));
+  if (local.use === 'human')
+    return humanFail(local.reason, [prompt]);
+
+  let answer: string | undefined;
+  if (local.use === 'local') {
+    noteLive(`apply-fill.ts · локально (${local.source}, ${local.via}): ${prompt}`);
+    answer = local.answer;
+  }
+  else {
+    const reply = await ask<CloudAnswer>({ type: 'answer-question', ...question });
+    answer = reply?.answer;
+    if (typeof answer !== 'string' || answer.length === 0)
+      return humanFail(`${prompt}: ${reply?.reason || 'нет ответа'}`, [prompt]);
+  }
 
   const ok = question.kind === 'choice'
     ? clickChoice(block, exactRe(answer))

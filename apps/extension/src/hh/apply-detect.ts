@@ -1,10 +1,14 @@
+import type { CapturedForm } from './form-capture';
+
 import { applyMeta } from './apply-watch';
 import { hhCaptchaShown } from './captcha';
+import { captureForm } from './form-capture';
 import { applyRoot, employerQuestionnaire, reviewHints } from './screen-questions';
 
 export type ApplyBlock = {
   reason: string;
   hints: string[];
+  form?: CapturedForm;
 };
 
 const REASON: Record<string, string> = {
@@ -50,6 +54,9 @@ function hintBlock(): ApplyBlock | null {
   if (hints.length === 0)
     return null;
 
-  return { reason: REASON[hints[0] || ''] || 'свои вопросы HH', hints: hints.slice(0, 8) };
+  const root = applyRoot();
+  const form = root ? captureForm(root) : null;
+
+  return { reason: REASON[hints[0] || ''] || 'свои вопросы HH', hints: hints.slice(0, 8), ...(form ? { form } : {}) };
 }
 

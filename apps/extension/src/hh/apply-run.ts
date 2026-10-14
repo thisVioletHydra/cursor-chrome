@@ -1,3 +1,5 @@
+import type { CapturedForm } from './form-capture';
+
 import { click } from '../page/actions';
 import { budgetSec, waitMark, waitPulse, type WaitMark } from '../pilot/wait-pulse';
 import { applyMeta, applySucceeded } from './apply-watch';
@@ -23,6 +25,7 @@ export type ApplyResult = {
   url?: string;
   vacancyId?: string;
   hints?: string[];
+  form?: CapturedForm;
   navigateTo?: string;
 };
 

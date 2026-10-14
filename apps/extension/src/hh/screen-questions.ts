@@ -1,7 +1,10 @@
+import type { CapturedForm } from './form-capture';
+
 import { applyMeta } from './apply-watch';
 import { ask } from './bridge';
 import { compact, visible } from './dom';
 import { EMPLOYER_REASON, employerHints } from './employer-ask';
+import { captureForm } from './form-capture';
 import { refreshOverlay } from './overlay';
 
 const APPLY_SEL = [
@@ -85,14 +88,16 @@ export function promptFields(): PromptField[] {
     .filter(row => row.prompt.length >= 8 && SKIP_PROMPT.test(row.prompt) === false);
 }
 
-export function employerQuestionnaire(): { reason: string; hints: string[] } | null {
+export function employerQuestionnaire(): { reason: string; hints: string[]; form?: CapturedForm } | null {
   const root = questionnaireRoot();
   if (root === null)
     return null;
 
   const questions = employerHints(taskQuestions(root));
 
-  return { reason: EMPLOYER_REASON, hints: questions.length > 0 ? questions : [EMPLOYER_REASON] };
+  const form = captureForm(root);
+
+  return { reason: EMPLOYER_REASON, hints: questions.length > 0 ? questions : [EMPLOYER_REASON], ...(form ? { form } : {}) };
 }
 
 function taskQuestions(root: HTMLElement): string[] {
