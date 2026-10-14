@@ -492,8 +492,9 @@ function dataDir(): string {
   if (login.length === 0 || ownerLogin(login))
     return root;
 
+  // Invalid tenant login must never fall back to the owner's root DB. Empty login stays owner (background jobs, CLI).
   if (/^[A-Za-z0-9-]{1,39}$/.test(login) === false)
-    return root;
+    throw new Error('tenant login');
 
   return path.join(root, 'tenants', login);
 }

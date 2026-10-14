@@ -76,6 +76,28 @@ async function save(): Promise<void> {
   note = reply?.ok ? 'Сохранено. Ответы подставятся в «Разборе» (↻ для уже открытых вакансий).' : `не сохранилось: ${reply?.detail ?? 'сервер не ответил'}`;
 }
 
+let backupNote = $state('');
+let backingUp = $state(false);
+
+async function downloadBackup(): Promise<void> {
+  backingUp = true;
+  backupNote = '';
+  const res = await fetch('/admin/backup', { method: 'POST' }).catch(() => null);
+  backingUp = false;
+  if (res === null || res.ok === false) {
+    backupNote = 'не скачалось: сервер не ответил';
+    return;
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'nojobnoproblem-backup.zip';
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(url);
+  backupNote = 'Бэкап скачан. Секреты в нём замаскированы.';
+}
+
 const input = 'rounded-lg border border-white/10 bg-[#0b0d12] px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-400';
 </script>
 
@@ -91,6 +113,12 @@ const input = 'rounded-lg border border-white/10 bg-[#0b0d12] px-2 py-1.5 text-x
   </div>
   <p class="text-sm text-zinc-400 tabular-nums">заполнено {filled} из {Object.keys(rows).length}</p>
 </header>
+
+<section class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-white/8 bg-[#10131a] px-4 py-3 text-xs" data-testid="backup">
+  <button class="rounded-lg bg-white/5 px-3 py-1.5 text-zinc-200 hover:bg-white/10 disabled:opacity-50" type="button" disabled={backingUp} onclick={downloadBackup}>{backingUp ? 'Собираю…' : 'Скачать бэкап'}</button>
+  <span class="text-zinc-500">Серверные данные твоего аккаунта, без секретов. Данные расширения сохраняй через «Экспорт JSON» в расширении.</span>
+  {#if backupNote}<span class="text-zinc-300">{backupNote}</span>{/if}
+</section>
 
 {#if data.first}
   <p class="mb-4 rounded-xl border border-indigo-400/40 bg-indigo-500/10 px-4 py-3 text-sm text-indigo-100">Первый вход: ответь на частые вопросы с hh. Можно заполнить не всё и вернуться позже — пустые поля в откликах останутся пустыми.</p>

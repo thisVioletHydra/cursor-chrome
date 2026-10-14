@@ -11,14 +11,13 @@ test('isDemoSession: only vasya-pupkin, never guest preview', () => {
   assert.equal(isDemoSession('vasya-pupkin', true), false);
 });
 
-test('admin layout: demo bar rendered only under data.isDemo, fixed bottom, with padding', () => {
+test('admin layout: bottom demo bar removed (warning only in the sidebar), no pb-16, disclaimer kept', () => {
   const svelte = readFileSync(new URL('./src/routes/admin/+layout.svelte', import.meta.url), 'utf8');
-  const block = svelte.match(/\{#if data\.isDemo\}([\s\S]*?)\{\/if\}/);
-  assert.ok(block, 'bar must be inside {#if data.isDemo}');
-  assert.ok(block[1].includes(DEMO_BAR_TEXT));
-  assert.match(block[1], /fixed[^"]*bottom-0/);
-  assert.equal(svelte.split(DEMO_BAR_TEXT).length, 2, 'text appears once, only in the guarded block');
-  assert.match(svelte, /data\.isDemo \? 'pb-16/);
+  assert.ok(!svelte.includes(DEMO_BAR_TEXT));
+  assert.doesNotMatch(svelte, /data-testid="demo-bar"/);
+  assert.doesNotMatch(svelte, /pb-16/);
+  assert.match(svelte, /data-testid="disclaimer"/);
+  assert.match(svelte, /\{#if data\.isDemo === true\}[\s\S]*?>Временно</);
   const server = readFileSync(new URL('./src/routes/admin/+layout.server.ts', import.meta.url), 'utf8');
   assert.match(server, /isDemo: isDemoSession\(session\.login, preview\)/);
 });

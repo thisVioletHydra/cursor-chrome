@@ -38,3 +38,13 @@ test('our server key (MODEL_CHAIN) is never handed to vasya-pupkin', () => {
     delete process.env.MODEL_CHAIN;
   }
 });
+
+test('storePath: invalid tenant login throws, empty login and owner stay on root', async () => {
+  const { runTenant, storePath } = await import('./src/index.ts');
+  const root = storePath();
+  assert.equal(runTenant('thisVioletHydra', () => storePath()), root);
+  assert.equal(runTenant('', () => storePath()), root);
+  assert.match(runTenant('some-user', () => storePath()), /tenants[\\/]some-user[\\/]hh\.sqlite$/);
+  for (const bad of ['../x', 'a/b', 'x'.repeat(40), 'имя'])
+    assert.throws(() => runTenant(bad, () => storePath()), /tenant login/);
+});

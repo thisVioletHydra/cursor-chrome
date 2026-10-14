@@ -178,6 +178,16 @@ export async function readAccount(login: string): Promise<Account> {
   return account;
 }
 
+// Read-only raw text of the account file (for the user's own backup). null if missing. Never writes.
+export async function readAccountText(login: string): Promise<string | null> {
+  try {
+    return await fsPromises.readFile(accountPath(login), 'utf8');
+  }
+  catch {
+    return null;
+  }
+}
+
 export async function writeAccount(login: string, next: Account): Promise<void> {
   await writeJsonAtomic(accountPath(login), next);
   await rememberToken(login, next.extToken);
