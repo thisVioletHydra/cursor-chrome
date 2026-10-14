@@ -1,6 +1,6 @@
 import type { Provider } from './model.ts';
 
-import { FACTS } from './copy.ts';
+import { ANSWER_HINTS, FACTS } from './copy.ts';
 import { askChain } from './model.ts';
 
 export type QuestionKind = 'text' | 'number' | 'choice';
@@ -33,8 +33,7 @@ export function answerPrompt(question: Question): string {
   return [
     'Ты отвечаешь на вопрос работодателя в форме отклика на hh.ru от имени кандидата.',
     'Используй только факты ниже. Если ответа в фактах нет — верни human.',
-    'Зарплата: «по рынку, готов обсудить». Если поле числовое — 250000.',
-    'Связь: Telegram @rtxRoman. Телефон и почту не пиши.',
+    ...hintLines(),
     'Тестовое, задача, код, портфолио, «почему вы», «расскажите о себе» — human.',
     'Не выдумывай Python, Kubernetes, английский C1, гражданство.',
     'Факты:',
@@ -44,6 +43,15 @@ export function answerPrompt(question: Question): string {
     shape,
     'Ответ одной строкой JSON: {"answer":"...","human":false} или {"human":true,"reason":"коротко"}',
   ].filter(part => part.length > 0).join('\n');
+}
+
+// Salary and contacts come from the owner profile; without them the model must hand the field to a human.
+export function hintLines(): string[] {
+  const { salary, salaryNumber, contacts } = ANSWER_HINTS;
+  const pay = salary ? `Зарплата: «${salary}».` : 'Зарплату не придумывай: если её спрашивают — human.';
+  const number = salaryNumber ? ` Если поле числовое — ${salaryNumber}.` : salary ? ' Если поле числовое — human.' : '';
+
+  return [pay + number, contacts ? `Связь: ${contacts}. Телефон и почту не пиши.` : 'Контакты не выдумывай: если их спрашивают — human.'];
 }
 
 export function parseAnswer(raw: string): Answer {

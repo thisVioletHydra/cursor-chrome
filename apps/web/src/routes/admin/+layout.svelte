@@ -7,6 +7,9 @@ let accountOpen = $state(false);
 
 const items = $derived([
   { href: '/admin', label: 'Главная', exact: true, icon: 'home' },
+  { href: '/admin/review', label: 'Разбор', exact: false, icon: 'cards' },
+  { href: '/admin/memory', label: 'Память', exact: false, icon: 'memory' },
+  { href: '/admin/profile', label: 'Профиль', exact: false, icon: 'person' },
   { href: '/admin/telegram', label: 'Telegram', exact: false, icon: 'plane' },
   { href: '/admin/model', label: 'Модель', exact: false, icon: 'spark' },
   { href: '/admin/hh', label: 'HeadHunter', exact: false, icon: 'briefcase' },

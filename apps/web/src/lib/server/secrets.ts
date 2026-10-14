@@ -1,6 +1,6 @@
 import type { AtsFlag, Provider } from '@cursor-chrome/hh';
 
-import { asAtsFlags, parseChain, parseJsonLoose, writeJsonAtomic } from '@cursor-chrome/hh';
+import { applyAccount, asAtsFlags, parseChain, parseJsonLoose, writeJsonAtomic } from '@cursor-chrome/hh';
 import crypto from 'node:crypto';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -29,6 +29,12 @@ export type Labels = {
 
 export type Texts = {
   coverLetter: string;
+  // «Профиль»: personal facts + conditional rules as JSON (parseProfile in @cursor-chrome/hh)
+  profile: string;
+  // personal facts for prompts: JSON { rules: string[], notes, resume } (parseFacts in @cursor-chrome/hh)
+  facts: string;
+  // canon rules seeded once into the review db: JSON { key, items: [{ title, answer, aliases }] }
+  canonSeed: string;
 };
 
 export type Stored = Secrets & Labels & Texts;
@@ -91,6 +97,9 @@ const empty = (): Account => ({
   telegramLabel: '',
   hhLabel: '',
   coverLetter: '',
+  profile: '',
+  facts: '',
+  canonSeed: '',
   balance: 0,
   history: [],
   imitation: { ...IMITATION },
@@ -403,6 +412,8 @@ export function newExtToken(): string {
 
 export async function applySavedSecrets(): Promise<void> {
   const saved = await readAccount(CREATOR);
+  // server-wide facts, profile hints and cover letter come from the owner account (same as the hh CLI)
+  applyAccount(saved);
   for (const key of Object.keys(envKeys) as (keyof Secrets)[]) {
     if (saved[key].length > 0)
       process.env[envKeys[key]] = saved[key];

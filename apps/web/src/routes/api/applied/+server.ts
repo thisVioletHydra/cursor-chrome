@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 
-import { markDone, markFailed, markSent, notePassed, readQueue, remember, watchAlarm, watchCaptcha } from '@cursor-chrome/hh';
+import { asCapturedForm, markDone, markFailed, markSent, notePassed, readQueue, remember, saveWaiterForm, watchAlarm, watchCaptcha } from '@cursor-chrome/hh';
 import { notifyVacancy } from '@cursor-chrome/telegram';
 import { json } from '@sveltejs/kit';
 import { extLogin } from '$lib/server/ext-auth';
@@ -14,6 +14,7 @@ type Body = {
   title?: string;
   url?: string;
   hints?: unknown;
+  form?: unknown;
   reason?: string;
   captcha?: boolean;
   alarm?: boolean;
@@ -71,8 +72,10 @@ export const POST: RequestHandler = async ({ request }) => {
   const prior = (await readQueue()).find(row => row.id === id);
   const hints = Array.isArray(body?.hints) ? body.hints.filter((item): item is string => typeof item === 'string') : [];
   const done = await markDone(id, status, hints);
-  if (status === 'needsHuman')
+  if (status === 'needsHuman') {
     await noteEmployer(id, reason, done?.company, done?.title, body);
+    await keepForm(id, body?.form);
+  }
 
   const company = done?.company || String(body?.company ?? '').trim() || 'без компании';
   const url = done?.url || String(body?.url ?? '').trim() || `https://hh.ru/vacancy/${id}`;
@@ -99,6 +102,13 @@ export const POST: RequestHandler = async ({ request }) => {
 
   return json({ ok: true, queued: done !== null });
 };
+
+// Stores the captured questionnaire for the «Разбор» tab. Storage only, never sent anywhere.
+async function keepForm(id: string, raw: unknown): Promise<void> {
+  const form = asCapturedForm(raw);
+  if (form !== null)
+    await saveWaiterForm(id, form);
+}
 
 function noteEmployer(id: string, reason: string, company: string | undefined, title: string | undefined, body: Body | null): Promise<void> {
   if (id === '0' || reason.includes('вопросы работодателя') === false)

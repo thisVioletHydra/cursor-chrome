@@ -58,6 +58,17 @@ export async function writeQueue(items: QueueItem[]): Promise<void> {
   await writeJsonAtomic(queuePath(), items.slice(0, MAX));
 }
 
+// Undo for a «Разбор» reject: puts the dropped waiter back exactly as it was.
+export async function restoreWaiter(row: QueueItem): Promise<boolean> {
+  const queue = await readQueue();
+  if (queue.some(item => item.id === row.id))
+    return false;
+
+  await writeQueue([row, ...queue]);
+
+  return true;
+}
+
 export async function enqueue(item: Omit<QueueItem, 'at' | 'status'>): Promise<boolean> {
   const queue = await readQueue();
   if (queue.some(row => row.id === item.id))

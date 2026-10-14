@@ -12,3 +12,7 @@ web-secrets.json
 local-debug/*.json
 local-debug/*.sqlite
 local-debug/*.sqlite-*
+local-debug/*.png
+apps/extension/dist-local/
+apps/web/data/access.sqlite
+local-debug/shots/

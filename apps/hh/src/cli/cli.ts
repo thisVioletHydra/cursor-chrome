@@ -2,6 +2,7 @@ import { DEFAULT_QUERY } from '../mix/queries.ts';
 import { PRESETS, probeProvider } from '../model/model.ts';
 import { ping } from './ping.ts';
 import { preflight } from './preflight.ts';
+import { loadOwnerAccount } from '../model/account.ts';
 import { scan } from '../scan/scan.ts';
 
 import process from 'node:process';
@@ -38,6 +39,9 @@ async function probe(): Promise<void> {
 }
 
 async function dryScan(): Promise<void> {
+  // same as the web server at start: owner facts, profile hints and cover letter from the account file
+  const owner = await loadOwnerAccount();
+  console.error(owner.found ? `аккаунт: ${owner.file} (правил ${owner.applied.facts.rules.length}, профиль ${owner.applied.profile ? 'есть' : 'нет'}, письмо ${owner.applied.coverLetter ? 'есть' : 'нет'})` : `аккаунт не найден: ${owner.file} — факты пустые (HH_ACCOUNT_FILE или HH_ACCOUNTS_DIR)`);
   const query = process.argv.slice(3).find(part => part !== '--')
     ?? process.env.HH_QUERY
     ?? DEFAULT_QUERY;
