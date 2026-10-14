@@ -1,4 +1,5 @@
 <script lang="ts">
+import { DISCLAIMER } from '$lib/disclaimer';
 import { goto } from '$app/navigation';
 import { onMount } from 'svelte';
 
@@ -18,7 +19,7 @@ let arrived = $state(false);
 let signingIn = $state(false);
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-const navigation = ['Главная', 'Telegram', 'Модель', 'HeadHunter', 'Extension', 'Сопроводительное', 'ATS', 'Billing', 'Конфиг', 'Имитация'];
+const navigation = ['Главная', 'Telegram', 'Модель', 'Сайт вакансий', 'Extension', 'Сопроводительное', 'ATS', 'Billing', 'Конфиг', 'Имитация'];
 
 function finish(): void {
   if (demo) {
@@ -123,9 +124,11 @@ onMount(() => {
       {/if}
     </div>
   </section>
+  <p class="disclaimer" data-testid="disclaimer">{DISCLAIMER}</p>
 </main>
 
 <style>
+  .disclaimer { position: absolute; left: 0; right: 0; bottom: 10px; z-index: 4; margin: 0 auto; max-width: 720px; padding: 0 16px; text-align: center; font-size: 11px; line-height: 1.4; color: #71717a; }
   :global(body) { margin: 0; background: #0b0d12; }
   .login-scene { position: relative; isolation: isolate; min-height: 100dvh; overflow: hidden; background: #0b0d12; color: #f2f1e9; font-family: system-ui, sans-serif; }
   .landscape, .shade { position: absolute; inset: 0; pointer-events: none; }

@@ -57,6 +57,6 @@ function hintBlock(): ApplyBlock | null {
   const root = applyRoot();
   const form = root ? captureForm(root) : null;
 
-  return { reason: REASON[hints[0] || ''] || 'свои вопросы HH', hints: hints.slice(0, 8), ...(form ? { form } : {}) };
+  return { reason: REASON[hints[0] || ''] || 'свои вопросы площадки', hints: hints.slice(0, 8), ...(form ? { form } : {}) };
 }
 

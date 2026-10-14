@@ -11,6 +11,7 @@ import { browser } from '../browser-host';
 import { byokInfo, idbKeyStore, saveByok } from '../local/byok.ts';
 import { bannerHtml, updateFlag } from '../local/version.ts';
 import { watchUpdating } from '../local/updating.ts';
+import { paintLinkPanel } from '../local/link-panel.ts';
 import { maskKey, readClipboardKey, STEPS, testKey, validXaiKey, XAI_KEYS_URL } from '../local/key-wizard.ts';
 // provider ids the server accepts in x-llm-provider (server-side presets; no custom URLs from the client)
 const PRESETS = [{ id: 'xai', name: 'xAI Grok' }, { id: 'groq', name: 'Groq' }, { id: 'gemini', name: 'Gemini' }, { id: 'zai', name: 'Z.ai' }, { id: 'openrouter', name: 'OpenRouter' }, { id: 'cohere', name: 'Cohere' }, { id: 'deepseek', name: 'DeepSeek' }, { id: 'mistral', name: 'Mistral' }];
@@ -225,6 +226,7 @@ async function serverBase(): Promise<string> {
 async function drawUpdate(): Promise<void> {
   document.getElementById('update')!.innerHTML = bannerHtml(await updateFlag(storageArea), await serverBase());
   void watchUpdating(document.getElementById('updating'), await serverBase(), () => location.reload());
+  void paintLinkPanel(document.getElementById('link-state'), await getSyncUrl(), await getSyncKey(), storageArea).catch(() => null);
 }
 
 // BYOK: own LLM key, encrypted (WebCrypto AES-GCM) in chrome.storage.local, sent only as x-llm-key.

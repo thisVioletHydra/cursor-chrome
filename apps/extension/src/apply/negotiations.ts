@@ -81,7 +81,7 @@ async function collect(tabId: number, url: string): Promise<NegotiationItem[]> {
   if ((tab.url || '').startsWith(LOGIN_URL)) {
     await holdDetect();
 
-    throw new Error('hh.ru просит войти (login)');
+    throw new Error('площадка просит войти (login)');
   }
 
   await delay(RENDER_WAIT_MS);

@@ -36,7 +36,7 @@ const HUNT_MARK = waitMark({
 
 const LOAD_MARK = waitMark({
   id: 'search.load',
-  human: 'страница hh',
+  human: 'страница площадки',
   budget: budgetSec(PAGE_LOAD_MS),
   next: 'search.read',
   kind: 'p',

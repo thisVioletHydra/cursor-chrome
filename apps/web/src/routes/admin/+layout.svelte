@@ -1,4 +1,5 @@
 <script lang="ts">
+import { DISCLAIMER } from '$lib/disclaimer';
 import { page } from '$app/stores';
 import { onMount } from 'svelte';
 import { installUpdatingWatch } from '$lib/updating';
@@ -21,7 +22,7 @@ const items = $derived([
   { href: '/admin/profile', label: 'Профиль', exact: false, icon: 'person' },
   { href: '/admin/telegram', label: 'Telegram', exact: false, icon: 'plane' },
   { href: '/admin/model', label: 'Модель', exact: false, icon: 'spark' },
-  { href: '/admin/hh', label: 'HeadHunter', exact: false, icon: 'briefcase' },
+  { href: '/admin/source', label: 'Сайт вакансий', exact: false, icon: 'briefcase' },
   { href: '/admin/extension', label: 'Extension', exact: false, icon: 'puzzle' },
   { href: '/admin/letter', label: 'Сопроводительное', exact: false, icon: 'letter' },
   { href: '/admin/ats', label: 'ATS', exact: false, icon: 'doc' },
@@ -35,7 +36,7 @@ const iconByLabel: Record<string, string> = {
   'Главная': 'home',
   Telegram: 'plane',
   'Модель': 'spark',
-  HeadHunter: 'briefcase',
+  'Сайт вакансий': 'briefcase',
   Extension: 'puzzle',
   'Сопроводительное': 'letter',
   ATS: 'doc',
@@ -98,7 +99,10 @@ const current = (href: string, exact: boolean) => {
         onclick={() => accountOpen = !accountOpen}
       >
         {#if data.isDemo === true}
-          <span class="min-w-0 flex-1 truncate text-sm font-medium text-red-400" data-testid="demo-account">Временный демо-аккаунт</span>
+          <span class="flex min-w-0 flex-1 flex-col leading-tight" data-testid="demo-account">
+            <span class="text-[10px] font-semibold uppercase tracking-wide text-red-400">Временно</span>
+            <span class="relative self-start whitespace-nowrap text-sm text-zinc-300" data-testid="demo-name">{data.demoName}<svg class="pointer-events-none absolute inset-0 size-full text-red-500" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="100" x2="100" y2="0" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" /></svg></span>
+          </span>
         {:else}
           <svg class="size-5 shrink-0" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
             <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8" />
@@ -121,6 +125,7 @@ const current = (href: string, exact: boolean) => {
       </div>
     {/if}
     {@render children()}
+    <p class="mt-10 border-t border-white/5 pt-3 text-[11px] leading-snug text-zinc-500" data-testid="disclaimer">{DISCLAIMER}</p>
   </main>
 </div>
 {#if data.isDemo}

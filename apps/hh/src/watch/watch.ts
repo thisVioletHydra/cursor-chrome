@@ -198,7 +198,7 @@ export async function watchPulse(line: string, version = '', mode = ''): Promise
   noteTick(text);
   if (searchHang(text)) {
     bag().pulse = { at: Date.now(), line: 'ищу вакансию' };
-    await mark('extension', 'не прочиталась страница hh', false);
+    await mark('extension', 'не прочиталась страница площадки', false);
 
     return false;
   }
@@ -256,8 +256,8 @@ export function watchDeath(who: WatchWho, text: string): void {
 }
 
 const CAPTCHA_LINE = 'капча, позови человека';
-const CAPTCHA_FIRST = 'hh показал капчу. Бот на паузе, пока не решишь её сам и не включишь бота снова.';
-const CAPTCHA_AGAIN = 'hh всё ещё показывает капчу. Бот на паузе, пока не решишь её сам и не включишь бота снова.';
+const CAPTCHA_FIRST = 'Сайт вакансий показал капчу. Бот на паузе, пока не решишь её сам и не включишь бота снова.';
+const CAPTCHA_AGAIN = 'Сайт вакансий всё ещё показывает капчу. Бот на паузе, пока не решишь её сам и не включишь бота снова.';
 
 export async function watchRestart(): Promise<void> {
   bag().captchaTold = false;
@@ -376,7 +376,7 @@ async function silence(): Promise<void> {
   if (where.includes('ищу вакансию') || searchTick(where) || where.includes('жду страницу') || where.includes('не прочиталась')) {
     bag().silenceNoted = true;
     try {
-      await mark('extension', 'не прочиталась страница hh', false);
+      await mark('extension', 'не прочиталась страница площадки', false);
     }
     catch (error) {
       bag().silenceNoted = false;
@@ -413,7 +413,7 @@ async function mark(who: WatchWho, text: string, death: boolean, stage = false):
     return;
 
   if (death && searchHang(clean)) {
-    await mark(who, 'не прочиталась страница hh', false);
+    await mark(who, 'не прочиталась страница площадки', false);
 
     return;
   }

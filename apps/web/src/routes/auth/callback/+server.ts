@@ -5,6 +5,7 @@ import { ensureAccount } from '$lib/server/secrets';
 import { githubLogin, signSession } from '$lib/server/session';
 
 import process from 'node:process';
+import { WEB_USER_AGENT } from '$lib/server/user-agent';
 
 export const GET: RequestHandler = async ({ url, cookies }) => {
   const state = url.searchParams.get('state');
@@ -32,7 +33,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
     headers: {
       authorization: `Bearer ${token.access_token}`,
       accept: 'application/vnd.github+json',
-      'user-agent': 'NoJobNoProblemBuddy-web',
+      'user-agent': WEB_USER_AGENT,
     },
   });
   const user = await userRes.json() as { login?: string };

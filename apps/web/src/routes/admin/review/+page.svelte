@@ -360,7 +360,7 @@ function cardKey(card: Card, key: string): boolean {
   <div>
     <h1 class="text-xl font-semibold text-white">Разбор</h1>
     <p class="mt-1 max-w-2xl text-xs text-zinc-500">
-      Ждуны с вопросами работодателя. «Ок» сохраняет твои ответы и запоминает их для таких же вопросов. Отправка отклика с ответами на hh — пункт 8, пока не подключена.
+      Ждуны с вопросами работодателя. «Ок» сохраняет твои ответы и запоминает их для таких же вопросов. Отправка отклика с ответами на сайт вакансий — пункт 8, пока не подключена.
     </p>
   </div>
   <dl class="flex gap-4 text-sm tabular-nums">
@@ -415,7 +415,7 @@ function cardKey(card: Card, key: string): boolean {
     onRule={question => current && void rule(current, question)}
   />
 
-<p class="mt-4 text-[11px] text-zinc-600">* «отправлено» = одобрено с ответами; реальная отправка на hh появится в п.8.</p>
+<p class="mt-4 text-[11px] text-zinc-600">* «отправлено» = одобрено с ответами; реальная отправка на сайт вакансий появится в п.8.</p>
 
 {#if pending}
   <div class="fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-white/10 bg-[#1c212b] px-4 py-2 text-sm shadow-lg" transition:fly={{ y: 20, duration: 160 }}>

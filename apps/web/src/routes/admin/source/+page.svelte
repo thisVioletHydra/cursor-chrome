@@ -38,14 +38,14 @@ function openResume() {
 </script>
 
 <header class="mb-5">
-  <p class="text-xs tracking-wide text-zinc-500 uppercase">HeadHunter</p>
+  <p class="text-xs tracking-wide text-zinc-500 uppercase">Сайт вакансий</p>
   <h1 class="mt-1 text-3xl font-semibold tracking-tight">Отклики</h1>
 </header>
 
 <div class="mb-4 grid gap-3">
   {#if data.resumeId}
     <div class="flex items-center gap-3 rounded-2xl border border-white/8 bg-[#151922] px-4 py-3">
-      <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-[#d6001c] text-sm font-semibold text-white">hh</span>
+      <span class="grid size-9 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/5 text-zinc-300" aria-hidden="true"><svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" /><path d="M3 13h18" /></svg></span>
       <div class="min-w-0">
         <a class="block truncate text-sm text-indigo-300 underline-offset-4 hover:underline" href="https://hh.ru/resume/{data.resumeId}" target="_blank" rel="noreferrer">{data.resumeId}</a>
         <p class="mt-0.5 flex items-center gap-1.5 text-xs text-zinc-500">
@@ -101,7 +101,7 @@ function openResume() {
           class="input input-bordered h-11 min-w-0 flex-1 border-white/10 bg-black/30 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
           name="hhResumeId"
           autocomplete="off"
-          placeholder="https://hh.ru/resume/..."
+          placeholder="ссылка на резюме"
           readonly={resumePhase === 'checking'}
           bind:value={resumeDraft}
         />
@@ -114,7 +114,7 @@ function openResume() {
 
 <section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
   <h2 class="text-base font-semibold text-white">Фильтрация</h2>
-  <p class="mt-2 text-sm text-zinc-400">Поиск по словам выключен. Бот открывает одну ленту hh и идёт по вакансиям сверху вниз. Левая колонка не используется, правая по-прежнему выкидывает.</p>
+  <p class="mt-2 text-sm text-zinc-400">Поиск по словам выключен. Бот открывает одну ленту сайта вакансий и идёт по вакансиям сверху вниз. Левая колонка не используется, правая по-прежнему выкидывает.</p>
   {#if queryMessage}
     <p class="mt-3 font-mono text-xs {queryOk ? 'text-emerald-300' : 'text-rose-300'}">{queryMessage}</p>
   {/if}

@@ -43,13 +43,13 @@ export async function vacancyPing(token: string): Promise<void> {
     },
   }).catch(() => null);
   if (res === null)
-    throw new Error('hh не ответил');
+    throw new Error('площадка не ответила');
 
   if (res.status === 403)
     throw new Error('приложение не пускает к вакансиям');
 
   if (res.ok === false)
-    throw new Error(`hh ${res.status}`);
+    throw new Error(`площадка ${res.status}`);
 }
 
 async function exchangeApp(clientId: string, clientSecret: string): Promise<string> {
@@ -69,7 +69,7 @@ async function exchangeApp(clientId: string, clientSecret: string): Promise<stri
     signal: AbortSignal.timeout(PING_MS),
   }).catch(() => null);
   if (res === null)
-    throw new Error('hh не ответил');
+    throw new Error('площадка не ответила');
 
   const json = await res.json().catch(() => null) as TokenBody | null;
   const token = accessToken(json);
@@ -77,7 +77,7 @@ async function exchangeApp(clientId: string, clientSecret: string): Promise<stri
     if (json?.error === 'invalid_client')
       throw new Error('id или секрет приложения не те');
 
-    throw new Error(`hh token ${res.status}`);
+    throw new Error(`площадка token ${res.status}`);
   }
 
   const ttl = Math.max(60, (json?.expires_in ?? 3600) - 120) * 1000;

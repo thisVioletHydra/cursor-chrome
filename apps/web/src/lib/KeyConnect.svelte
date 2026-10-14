@@ -72,7 +72,7 @@ let resumeOpen = $state(false);
 const hints: Record<string, string> = {
   telegramToken: '7123456789:AAHxx...',
   hhAccessToken: 'USER...',
-  hhResumeId: 'https://hh.ru/resume/...',
+  hhResumeId: 'ссылка на резюме',
 };
 
 function hint(name: string): string {
@@ -187,7 +187,7 @@ $effect(() => {
               class="input input-bordered h-11 w-full border-white/10 bg-black/30 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
               name="hhResumeId"
               autocomplete="off"
-              placeholder="https://hh.ru/resume/..."
+              placeholder="ссылка на резюме"
               readonly={phase === 'checking'}
               bind:value={draft.hhResumeId}
             />

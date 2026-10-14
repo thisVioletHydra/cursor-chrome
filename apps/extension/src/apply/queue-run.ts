@@ -54,6 +54,8 @@ const MORNING_HOUR = 9;
 const WORK_FROM_HOUR = 9;
 const WORK_TO_HOUR = 22;
 const LOGIN_URL = 'https://hh.ru/account/login';
+// Старое значение принимаем для совместимости.
+const UNREAD: readonly unknown[] = ['не прочиталась страница площадки', 'не прочиталась страница hh'];
 
 const LIMIT = /максимум вакансий|лимит откликов|слишком много откликов/i;
 const LOGIN = /login|войти/i;
@@ -110,7 +112,7 @@ export async function runQueue(): Promise<QueueRun> {
       return run;
     }
     catch {
-      return blank('вкладка hh закрыта');
+      return blank('вкладка площадки закрыта');
     }
   }
   finally {
@@ -413,7 +415,7 @@ async function drain(): Promise<QueueRun> {
       continue;
     }
 
-    if (feedLight && lightDue && filled.note !== 'не прочиталась страница hh') {
+    if (feedLight && lightDue && !UNREAD.includes(filled.note)) {
       lightDue = false;
       if (await napLight() === false)
         break;
@@ -439,7 +441,7 @@ async function drain(): Promise<QueueRun> {
     if (pending.length > 0)
       continue;
 
-    if (filled.note === 'не прочиталась страница hh')
+    if (UNREAD.includes(filled.note))
       continue;
 
     if (await restCycle() === false)
@@ -837,7 +839,7 @@ async function noteReply(base: string, key: string, run: QueueRun, item: QueueIt
   if (stop.length === 0)
     return null;
 
-  if (stop.startsWith('лимит откликов hh'))
+  if ((stop.startsWith('лимит откликов площадки') || stop.startsWith('лимит откликов hh')))
     await stopForToday();
   else
     await pauseUntilMorning();
@@ -1108,12 +1110,12 @@ async function fillHunt(base: string, key: string, hunt: Hunt): Promise<{ stop: 
     return { note: 'сервер не записал круг', saved: found.saved, more: false, done: false, retry: true };
 
   const retry = found.done === false && found.saved === 0 && found.reason.length > 0;
-  if (feedLight && found.reason !== 'не прочиталась страница hh' && (found.done || found.saved > 0)) {
+  if (feedLight && !UNREAD.includes(found.reason) && (found.done || found.saved > 0)) {
     lightDue = true;
     lightBare = true;
   }
 
-  if (feedMode === 'words' && found.reason !== 'не прочиталась страница hh' && (found.done || found.saved > 0))
+  if (feedMode === 'words' && !UNREAD.includes(found.reason) && (found.done || found.saved > 0))
     wordPageDone = true;
 
   return { note: found.reason, saved: found.saved, more: found.more, done: found.done, retry };
@@ -1269,7 +1271,7 @@ async function showVacancy(url: string, read?: { base: string; key: string; id: 
     return { status: 'skip', reason: 'вакансия не открылась' };
 
   if (await loginPage(tabId))
-    return { status: 'skip', reason: 'hh.ru просит войти (login)' };
+    return { status: 'skip', reason: 'площадка просит войти (login)' };
 
   return { tabId };
 }
@@ -1324,7 +1326,7 @@ async function applyOne(item: QueueItem, already = false): Promise<ApplyReply> {
     return { status: 'skip', reason: 'капча' };
 
   if (await loginPage(tabId))
-    return { status: 'skip', reason: 'hh.ru просит войти (login)' };
+    return { status: 'skip', reason: 'площадка просит войти (login)' };
 
   await pacedWait();
   if (await tabShowsDetect(tabId))
@@ -1334,7 +1336,7 @@ async function applyOne(item: QueueItem, already = false): Promise<ApplyReply> {
     return { status: 'skip', reason: 'капча' };
 
   if (await loginPage(tabId))
-    return { status: 'skip', reason: 'hh.ru просит войти (login)' };
+    return { status: 'skip', reason: 'площадка просит войти (login)' };
 
   const raw = await runHhApply().catch((error: unknown) => ({
     status: 'skip',
@@ -1402,10 +1404,10 @@ function stopReason(status: Status, reply: ApplyReply): string {
 
 function stopLabel(status: Status, reason: string, text: string): string {
   if (LIMIT.test(text))
-    return 'лимит откликов hh';
+    return 'лимит откликов площадки';
 
   if (LOGIN.test(text))
-    return 'слетел вход на hh.ru';
+    return 'слетел вход на площадку';
 
   if (status === 'needsHuman' && TEST.test(reason))
     return 'обязательный тест';

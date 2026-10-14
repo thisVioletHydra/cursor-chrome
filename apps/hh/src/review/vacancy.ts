@@ -1,4 +1,5 @@
 import { readVacancyInfo, saveVacancyInfo } from './store.ts';
+import { APP_USER_AGENT } from '../limits.ts';
 
 import timers from 'node:timers/promises';
 
@@ -34,7 +35,7 @@ type HhVacancy = {
 const API = 'https://api.hh.ru/vacancies/';
 const GAP_MS = 1_500;
 const TIMEOUT_MS = 10_000;
-const AGENT = 'NoJobNoProblemBuddy-review/1.0 (read-only)';
+const AGENT = `${APP_USER_AGENT} (read-only)`;
 
 let line: Promise<unknown> = Promise.resolve();
 let lastAt = 0;
@@ -71,7 +72,7 @@ async function fetchOnce(id: string): Promise<VacancyInfo | null> {
   }
 
   if (res.ok === false)
-    throw new Error(`hh ${res.status}`);
+    throw new Error(`площадка ${res.status}`);
 
   const info = parseVacancy(id, await res.json() as HhVacancy);
   await saveVacancyInfo(id, info);

@@ -1,6 +1,7 @@
+import { shortDemoName } from '$lib/demo-name';
 import type { LayoutServerLoad } from './$types';
 
-import { isDemoLogin, isDemoSession } from '$lib/server/demo';
+import { DEMO_NAME, isDemoLogin, isDemoSession } from '$lib/server/demo';
 import { COVER_LETTER, extensionLamp, hiddenCount, parkStaleWaiters, passedCount, PRESETS, providerName, readMemory, readPassed, readQueue, readState, seenCount, watchView } from '@cursor-chrome/hh';
 import { boardFrom } from '$lib/server/board';
 import { telegramOn } from '@cursor-chrome/telegram';
@@ -11,6 +12,7 @@ import { chainOf, collapseChain, DEFAULT_QUERY, ensureAccount, GUEST_BALANCE, is
 import { extensionBuild } from '$lib/server/extension-build';
 import { githubLogin, readSession } from '$lib/server/session';
 import { dlSecret, signDl } from '$lib/server/thin/dl';
+import { extSeenLamp, readExtSeen } from '$lib/server/ext-seen';
 import { compareVersions, policyOf } from '$lib/server/thin/version';
 
 import process from 'node:process';
@@ -73,6 +75,8 @@ function guestShell() {
       live: false,
     },
     extensionLamp: 'quiet' as const,
+    extSeen: 'never' as const,
+    extDownload: '',
     extensionBuild: '',
     extensionVersion: '',
     searchMode: '',
@@ -136,6 +140,7 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
     canPreview: creator,
     demoAccount: isDemoLogin(session.login),
     isDemo: isDemoSession(session.login, preview),
+    demoName: isDemoSession(session.login, preview) ? shortDemoName(DEMO_NAME, session.login) : '',
     links,
     polling: preview ? false : telegramOn(),
     billing: {
@@ -176,6 +181,8 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
     extensionLamp: preview ? 'quiet' as const : extensionLamp(build, stats.autopilot.auto),
     extensionBuild: preview ? '' : build,
     extensionVersion: preview ? '' : watchView().clientVersion,
+    extSeen: preview ? 'never' as const : extSeenLamp(await readExtSeen(session.login)),
+    extDownload: preview || !account.extToken ? '' : `/dl/${signDl(session.login, account.extToken, dlSecret(process.env))}`,
     extUpdate: preview ? null : extUpdateOf(session.login, account.extToken, (process.env.RAILWAY_ENVIRONMENT ? '' : process.env.EXT_FAKE_CLIENT_VERSION ?? '') || watchView().clientVersion, build),
     searchMode: preview ? '' : watchView().searchMode,
     stats,

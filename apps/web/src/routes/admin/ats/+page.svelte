@@ -105,7 +105,7 @@ function takeResume() {
 </script>
 
 <header class="mb-5">
-  <p class="text-xs tracking-wide text-zinc-500 uppercase">HeadHunter</p>
+  <p class="text-xs tracking-wide text-zinc-500 uppercase">Сайт вакансий</p>
   <h1 class="mt-1 bg-[linear-gradient(to_bottom,#fff_0%,#fff_30%,#c6c6cc_56%,#2a2a2e_82%,#1c1c1c_100%)] bg-clip-text text-7xl leading-none font-semibold tracking-tight text-transparent">ATS</h1>
 </header>
 
@@ -147,7 +147,7 @@ function takeResume() {
         {pulling ? 'Забираю…' : 'Забрать резюме'}
       </button>
     {:else}
-      <p class="mt-2 text-sm text-zinc-400">Ссылки на резюме нет. Привяжи её в HeadHunter.</p>
+      <p class="mt-2 text-sm text-zinc-400">Ссылки на резюме нет. Привяжи её в разделе «Сайт вакансий».</p>
     {/if}
   </section>
 

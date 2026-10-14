@@ -95,7 +95,7 @@ export async function hhGet<T>(url: URL | string, token = ''): Promise<T> {
 
   const res = await fetch(url, { headers, signal: AbortSignal.timeout(PING_MS) });
   if (res.ok === false)
-    throw new Error(`hh ${res.status}`);
+    throw new Error(`площадка ${res.status}`);
 
   return await res.json() as T;
 }

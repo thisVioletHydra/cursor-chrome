@@ -5,7 +5,8 @@ import { openWorkerUrl, pinHere, refreshWorkerPanel } from './popup-pin';
 import { browser } from '../browser-host';
 import { bannerHtml, updateFlag } from '../local/version';
 import { watchUpdating } from '../local/updating';
-import { getSyncUrl } from '../diary/apply-log';
+import { paintLinkPanel } from '../local/link-panel';
+import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 
 type ApplyRecord = {
   title: string;
@@ -27,7 +28,8 @@ type ViewName = 'main' | 'history' | 'settings';
 
 const QUEUE_LABEL = 'Откликнуться сейчас';
 const CLOSE_TAB = 'Закрыть запиненную вкладку';
-const RAISE_HH = 'Поднять HH';
+const RAISE_HH = 'Поднять вкладку';
+const NO_PIN: readonly unknown[] = ['нет запиненной вкладки площадки', 'нет запиненной вкладки hh'];
 
 window.addEventListener('pagehide', () => {
   void browser.runtime.sendMessage({ type: 'pilot-touch', action: 'popup' });
@@ -217,7 +219,7 @@ browser.runtime.onMessage.addListener((message) => {
     paintStatus('Поиск начнётся примерно через полминуты');
   }
   else if (type === 'queue-busy')
-    paintStatus('Читаю вакансии в запиненной вкладке hh');
+    paintStatus('Читаю вакансии в запиненной вкладке площадки');
   else if (type === 'queue-report' && 'run' in message)
     void paintQueue(message.run);
   else if (type === 'hang-status')
@@ -317,7 +319,7 @@ async function makeGood(): Promise<void> {
     const result = await browser.runtime.sendMessage({ type: 'make-good' }) as GoodResult;
     const report = result?.report || result?.error || 'нет ответа от service worker';
     const ok = result?.ok === true;
-    paintLink(ok ? 'Поднял HH' : 'Не вышло', ok);
+    paintLink(ok ? 'Поднял вкладку' : 'Не вышло', ok);
     reportEl.hidden = false;
     reportEl.textContent = report;
     paintCta(ok);
@@ -330,7 +332,7 @@ async function makeGood(): Promise<void> {
       'step: host',
       'reason: service worker asleep',
       `detail: ${error instanceof Error ? error.message : String(error)}`,
-      'fix: reload unpacked и нажми Поднять HH',
+      'fix: reload unpacked и нажми Поднять вкладку',
     ].join('\n');
     paintCta(false);
   }
@@ -721,7 +723,7 @@ async function paintQueue(run: QueueRun | unknown): Promise<void> {
   }
 
   if (reason === 'уже идёт') {
-    paintStatus('Читаю вакансии в запиненной вкладке hh');
+    paintStatus('Читаю вакансии в запиненной вкладке площадки');
 
     return;
   }
@@ -747,7 +749,7 @@ function isHhHost(url: string): boolean {
 }
 
 function openFail(opened: HhOpen): string {
-  return opened.error || opened.reason || 'не удалось открыть hh';
+  return opened.error || opened.reason || 'не удалось открыть площадку';
 }
 
 async function ensureHh(): Promise<HhOpen> {
@@ -783,7 +785,7 @@ async function reviveHh(kick: boolean): Promise<void> {
     revivedAt = Date.now();
     await refreshWorkerPanel();
     if (kick === false) {
-      paintStatus('Читаю вакансии в запиненной вкладке hh');
+      paintStatus('Читаю вакансии в запиненной вкладке площадки');
 
       return;
     }
@@ -841,14 +843,14 @@ async function paintBootStatus(): Promise<void> {
   };
   const check = await browser.runtime.sendMessage({ type: 'check-worker' }) as HhOpen;
   if (check?.ok !== true || isHhHost(check.url || '') === false) {
-    paintStatus('Включено, но вкладки hh нет', 'fail');
+    paintStatus('Включено, но вкладки площадки нет', 'fail');
     await reviveHh(state?.busy !== true);
 
     return;
   }
 
   if (state?.busy === true) {
-    paintStatus('Читаю вакансии в запиненной вкладке hh');
+    paintStatus('Читаю вакансии в запиненной вкладке площадки');
 
     return;
   }
@@ -856,7 +858,7 @@ async function paintBootStatus(): Promise<void> {
   const report = state?.report;
   const reportReason = report?.reason || '';
   const justKicked = reviving || Date.now() - revivedAt < 45_000;
-  if (report && reportReason !== 'нет запиненной вкладки hh') {
+  if (report && !NO_PIN.includes(reportReason)) {
     const applied = (report.sent ?? 0) + (report.human ?? 0) + (report.skipped ?? 0);
     if (reportReason.length > 0 || applied > 0)
       await paintQueue(report);
@@ -1078,4 +1080,5 @@ void (async () => {
     node.innerHTML = bannerHtml(await updateFlag(area), base);
   // deploy window: small «updating» bar, ping /healthz every 3 s, then reload the popup data
   void watchUpdating(document.getElementById('cc-updating'), base, () => location.reload());
+  void paintLinkPanel(document.getElementById('cc-link'), await getSyncUrl(), await getSyncKey(), area).catch(() => null);
 })();

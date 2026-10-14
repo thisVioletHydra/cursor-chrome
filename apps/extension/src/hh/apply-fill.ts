@@ -62,7 +62,7 @@ type CloudQuestion = {
 
 type CloudAnswer = { answer?: string; human?: boolean; reason?: string; source?: string };
 
-const CUSTOM_REASON = 'свои вопросы HH';
+const CUSTOM_REASONS = ['свои вопросы площадки', 'свои вопросы HH'];
 const FIELD_SEL = 'textarea, input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]):not([type="file"]):not([type="submit"])';
 
 export async function fillApply(): Promise<FillFail | null> {
@@ -129,7 +129,7 @@ async function fillQuestions(): Promise<FillFail | null> {
 }
 
 function coveredBy(reason: string, hints: string[], answered: string[]): boolean {
-  if (reason !== CUSTOM_REASON || answered.length === 0)
+  if (!CUSTOM_REASONS.includes(reason) || answered.length === 0)
     return false;
 
   const norm = (text: string) => compact(text).toLowerCase();

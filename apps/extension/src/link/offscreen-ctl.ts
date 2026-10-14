@@ -1,5 +1,6 @@
 import { getSyncKey, getSyncUrl, todayCount } from '../diary/apply-log';
 import { browser } from '../browser-host';
+import { gateOpen, gateText, readGate } from '../local/link-gate.ts';
 
 // У offscreen нет storage. Адрес и ключ читает воркер и кладёт их в ping.
 type LinkCreds = { origin: string; key: string };
@@ -64,6 +65,18 @@ async function readLinkCreds(): Promise<LinkCreds> {
 }
 
 export async function setBadge(on: boolean): Promise<void> {
+  // gate «без синка — пауза» wins over OFF/counter: no link to the admin → «!» with the same hint
+  const gate = await readGate({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>>, set: async () => {} }).catch(() => null);
+  if (gateOpen(gate) === false) {
+    await browser.action.setBadgeText({ text: '!' });
+    await browser.action.setBadgeBackgroundColor({ color: '#b45309' });
+    await browser.action.setBadgeTextColor({ color: '#fff' });
+    await browser.action.setTitle({ title: gateText(gate) }).catch(() => {});
+
+    return;
+  }
+  await browser.action.setTitle({ title: '' }).catch(() => {});
+
   if (on === false) {
     await browser.action.setBadgeText({ text: 'OFF' });
     await browser.action.setBadgeBackgroundColor({ color: '#c00' });

@@ -148,7 +148,7 @@ const input = 'rounded-lg border border-white/10 bg-[#0b0d12] px-2 py-1.5 text-x
         {#if !('hint' in question)}
           {@const own = custom.find(item => item.key === question.key)}
           {#if own}
-            <label class="mt-2 flex flex-col gap-1 text-[11px] text-zinc-500">формулировки вопроса на hh (по одной в строке)
+            <label class="mt-2 flex flex-col gap-1 text-[11px] text-zinc-500">формулировки вопроса на сайте вакансий (по одной в строке)
               <textarea class="{input} min-h-12" bind:value={own.aliasText}></textarea>
             </label>
           {/if}

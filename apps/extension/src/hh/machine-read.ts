@@ -70,12 +70,12 @@ export function statusLines(snap: Snap): string[] {
 function stateLine(snap: Snap): string {
   const power = snap.link.length > 0 ? snap.link : (snap.auto ? 'бот включён' : 'бот выключен');
   if (snap.pinned === null)
-    return `${power} · вкладка hh не проверена`;
+    return `${power} · вкладка площадки не проверена`;
 
   if (snap.pinned)
-    return `${power} · вкладка hh закреплена`;
+    return `${power} · вкладка площадки закреплена`;
 
-  return `${power} · вкладка hh не закреплена`;
+  return `${power} · вкладка площадки не закреплена`;
 }
 
 function waitText(snap: Snap): string {

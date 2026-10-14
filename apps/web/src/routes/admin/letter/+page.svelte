@@ -71,7 +71,7 @@ async function copyLetter(): Promise<void> {
 
 <header class="mb-5 flex flex-wrap items-end justify-between gap-3">
   <div>
-    <p class="text-xs tracking-wide text-zinc-500 uppercase">HeadHunter</p>
+    <p class="text-xs tracking-wide text-zinc-500 uppercase">Сайт вакансий</p>
     <h1 class="mt-1 text-3xl font-semibold tracking-tight">Сопроводительное</h1>
   </div>
   <button

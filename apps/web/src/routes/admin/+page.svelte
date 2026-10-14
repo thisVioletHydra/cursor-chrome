@@ -1,5 +1,6 @@
 <script lang="ts">
 import { enhance } from '$lib/admin-forms';
+import { neutralText } from '$lib/neutral-text';
 import { onDestroy, onMount, tick } from 'svelte';
 import { searchModeLabel, showLog } from './log-name';
 import { logKey, logPlace, logSnap, readLog, takeRows } from './log-snap.svelte.ts';
@@ -432,7 +433,7 @@ $effect(() => {
 const cards = $derived([
   { href: '/admin/telegram', light: data.links.find(item => item.name === 'Телега') },
   { href: '/admin/model', light: data.links.find(item => item.name === 'Модель') },
-  { href: '/admin/hh', light: data.links.find(item => item.name === 'HeadHunter') },
+  { href: '/admin/source', light: data.links.find(item => (item.name === 'Сайт вакансий' || item.name === 'HeadHunter')) },
 ].flatMap(card => (card.light ? [{ href: card.href, light: card.light }] : [])));
 
 const figures = $derived([
@@ -560,7 +561,7 @@ const statusBadge: Record<string, string> = {
 const checks = $derived([
   { ok: data.ready.telegram, label: 'Токен бота', miss: 'Токена нет. Вставь его в', href: '/admin/telegram', link: 'Telegram' },
   { ok: data.ready.model, label: 'Хотя бы одна модель', miss: 'Моделей нет. Добавь ключ в', href: '/admin/model', link: 'Модель' },
-  { ok: data.ready.resume, label: 'Резюме привязано', miss: 'Резюме не привязано. Вставь ссылку в', href: '/admin/hh', link: 'HeadHunter' },
+  { ok: data.ready.resume, label: 'Резюме привязано', miss: 'Резюме не привязано. Вставь ссылку в', href: '/admin/source', link: 'Сайт вакансий' },
   { ok: data.ready.extension, label: 'Ссылка расширения выпущена', miss: 'Ссылки нет. Выпусти её в', href: '/admin/extension', link: 'Extension' },
   { ok: data.ready.live, label: 'Боевой режим', miss: 'Боевой режим выключен. Включи его кнопкой ниже.', href: '', link: '' },
 ]);
@@ -680,12 +681,22 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
     {/each}
     <li>
       <div class="flex items-center gap-2">
-        <span class="size-2 shrink-0 rounded-full {extensionLamp === 'stale' ? 'bg-amber-300' : extensionLamp === 'ok' ? 'bg-emerald-400' : 'bg-zinc-600'}"></span>
-        <span class={extensionLamp === 'stale' ? 'text-xs text-amber-200' : 'text-xs text-zinc-400'}>{extensionLamp === 'stale' ? 'обнови расширение браузера' : 'Расширение'}</span>
+        <span class="size-2 shrink-0 rounded-full {extensionLamp === 'stale' || data.extSeen === 'stale' ? 'bg-amber-300' : data.extSeen === 'never' ? 'bg-rose-400' : 'bg-emerald-400'}" data-ext-seen={data.extSeen}></span>
+        <span class={extensionLamp === 'stale' || data.extSeen === 'stale' ? 'text-xs text-amber-200' : data.extSeen === 'never' ? 'text-sm text-zinc-200' : 'text-xs text-zinc-400'}>{extensionLamp === 'stale' ? 'обнови расширение браузера' : data.extSeen === 'never' ? 'Расширение не установлено' : data.extSeen === 'stale' ? 'Расширение не на связи' : 'Расширение'}</span>
         {#if extensionVer}
           <span class="text-xs tabular-nums {extensionLamp === 'stale' ? 'text-amber-200/80' : 'text-zinc-500'}">{extensionVer}</span>
         {/if}
       </div>
+      {#if data.extSeen !== 'ok'}
+        <p class="mt-1 pl-4 text-xs text-zinc-500">
+          {#if data.extDownload}
+            <a class="text-zinc-300 underline underline-offset-4 hover:text-zinc-100" href={data.extDownload} download>Скачать расширение</a> (zip, ссылка на 24 часа).
+          {:else}
+            Сначала выпусти ссылку в <a class="text-zinc-300 underline-offset-4 hover:underline" href="/admin/extension">Extension</a>.
+          {/if}
+          Распакуй архив в папку → открой chrome://extensions → включи режим разработчика → «Загрузить распакованное» и выбери эту папку (или перетащи её на страницу).
+        </p>
+      {/if}
     </li>
   </ul>
   </div>
@@ -870,7 +881,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
                   </a>
                 </td>
                 <td>
-                  <p class="line-clamp-2 text-sm leading-snug text-zinc-200" title={row.reason || 'не записано'}>{row.reason || 'не записано'}</p>
+                  <p class="line-clamp-2 text-sm leading-snug text-zinc-200" title={neutralText(row.reason) || 'не записано'}>{neutralText(row.reason) || 'не записано'}</p>
                 </td>
                 <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
               </tr>
@@ -895,7 +906,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
               <td class="max-w-xs break-words whitespace-normal">
                 {@render vacancyLink(row.url, passedName(row), row.at)}
               </td>
-              <td class="max-w-xs break-words whitespace-normal text-sm text-zinc-300">{row.reason}</td>
+              <td class="max-w-xs break-words whitespace-normal text-sm text-zinc-300">{neutralText(row.reason)}</td>
               <td class="whitespace-nowrap text-xs text-zinc-500">{row.when}</td>
             </tr>
           {/each}

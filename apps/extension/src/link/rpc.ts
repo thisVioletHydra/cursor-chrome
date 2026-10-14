@@ -314,7 +314,7 @@ async function enablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; s
   if (next.autoQueue === true) {
     const opened = await ensurePinnedHh();
     if (opened.ok === false)
-      return { ...next, error: opened.reason || 'не удалось открыть hh' };
+      return { ...next, error: opened.reason || 'не удалось открыть площадку' };
   }
 
   await forgetStuckHang();

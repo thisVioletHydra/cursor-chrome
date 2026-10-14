@@ -1,4 +1,5 @@
 import process from 'node:process';
+import rootPackage from '../../../package.json' with { type: 'json' };
 
 export const LOOK_PER_START = 40;
 export const MODEL_PER_START = 40;
@@ -12,9 +13,11 @@ export const MAX_ATTEMPTS = 3;
 export const PING_MS = 8_000;
 
 export const HH_API = 'https://api.hh.ru';
-// Contact for hh.ru User-Agent comes from env HH_CONTACT_EMAIL (never hardcoded).
+// Нейтральный User-Agent: NoJobNoProblemBuddy/<версия из корневого package.json>.
+export const APP_USER_AGENT = `NoJobNoProblemBuddy/${rootPackage.version}`;
+// Contact for User-Agent comes from env HH_CONTACT_EMAIL (never hardcoded).
 export function hhUserAgent(env: Record<string, string | undefined> = process.env): string {
   const contact = (env.HH_CONTACT_EMAIL ?? '').trim();
 
-  return contact ? `NoJobNoProblemBuddy-hh (${contact})` : 'NoJobNoProblemBuddy-hh';
+  return contact ? `${APP_USER_AGENT} (${contact})` : APP_USER_AGENT;
 }

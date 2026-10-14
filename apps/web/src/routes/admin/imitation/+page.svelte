@@ -144,7 +144,7 @@ function onSave() {
 </script>
 
 <header class="mb-5">
-  <p class="text-xs tracking-wide text-zinc-500 uppercase">HeadHunter</p>
+  <p class="text-xs tracking-wide text-zinc-500 uppercase">Сайт вакансий</p>
   <h1 class="mt-1 text-3xl font-semibold tracking-tight">Имитация</h1>
 </header>
 

@@ -20,6 +20,7 @@ button.ghost { background:none; color:var(--fg); border:1px solid var(--line); }
 .tag.human { color:var(--ok); border-color:var(--ok); }
 footer { position:fixed; bottom:12px; right:24px; color:var(--ok); }
 footer.fail { color:var(--warn); }
+#disclaimer { margin:32px 24px 48px; font-size:11px; line-height:1.4; color:#71717a; max-width:720px; }
 pre { white-space:pre-wrap; word-break:break-all; font-size:12px; color:var(--dim); margin:0; }
 table { width:100%; border-collapse:collapse; } td, th { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
 

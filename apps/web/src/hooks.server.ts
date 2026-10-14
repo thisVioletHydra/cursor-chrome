@@ -7,6 +7,7 @@ import { dev } from '$app/environment';
 import { accessStore, safeLogLine } from '$lib/server/access';
 import { DEV_USER, devBypass, warnIgnoredBypass } from '$lib/server/dev-auth';
 import { extLogin } from '$lib/server/ext-auth';
+import { markExtSeen } from '$lib/server/ext-seen';
 import { publishExtLink } from '$lib/server/ext-link';
 import { applySavedSecrets, CREATOR, isCreator, readAccount, takeVacancy } from '$lib/server/secrets';
 import { githubLogin, readSession, signSession } from '$lib/server/session';
@@ -15,6 +16,7 @@ import { dlSecret, signDl } from '$lib/server/thin/dl';
 import { policyOf, versionGate } from '$lib/server/thin/version';
 
 import { healthz, isHealthz } from '$lib/server/healthz';
+import { legacyAdminPath } from '$lib/server/legacy-path';
 import { demoAllow, ensureDemoToken, isDemoLogin } from '$lib/server/demo';
 
 import process from 'node:process';
@@ -51,12 +53,19 @@ export const handle: Handle = async ({ event, resolve }) => {
   if (isHealthz(event.url.pathname))
     return healthz();
 
+  // 308 сохраняет метод и тело: POST-действия форм со старого адреса тоже доходят.
+  const moved = legacyAdminPath(event.url);
+  if (moved)
+    return new Response(null, { status: 308, headers: { location: moved, 'cache-control': 'no-store' } });
+
   if (asset(event.url.pathname))
     return resolve(event);
 
   useDevSession(event);
   const bearer = event.request.headers.get('authorization') ?? '';
   const ext = bearer.startsWith('Bearer ') ? await extLogin(event.request) : null;
+  if (ext !== null)
+    void markExtSeen(ext);
   const session = ext === null ? readSession(event.cookies.get('session')) : null;
   // Version policy: only the server decides. Below min → 426 (except /api/config and /dl/); below recommended → flag.
   const extVersion = event.url.pathname.startsWith('/api/') ? event.request.headers.get('x-ext-version') : null;

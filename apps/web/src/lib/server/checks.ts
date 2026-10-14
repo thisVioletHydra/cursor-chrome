@@ -4,6 +4,7 @@ import { probeProvider, providerName } from '@cursor-chrome/hh';
 import { chainOf, readAccount } from './secrets';
 
 import process from 'node:process';
+import { WEB_USER_AGENT } from './user-agent';
 
 export type LinkStatus = {
   name: string;
@@ -24,7 +25,7 @@ export function guestLinks(): LinkStatus[] {
   return [
     { name: 'Телега', set: false, ok: false, detail: 'токена нет' },
     { name: 'Модель', set: false, ok: false, detail: 'ключей нет' },
-    { name: 'HeadHunter', set: false, ok: false, detail: 'резюме нет' },
+    { name: 'Сайт вакансий', set: false, ok: false, detail: 'резюме нет' },
   ];
 }
 
@@ -59,7 +60,7 @@ export async function storedLinks(login: string): Promise<LinkStatus[]> {
       detail: chainDetail(chain),
     },
     {
-      name: 'HeadHunter',
+      name: 'Сайт вакансий',
       set: hhOn,
       ok: hhOn,
       detail: hhOn ? 'Резюме привязано' : 'резюме нет',
@@ -109,7 +110,7 @@ export async function probeModel(provider: Provider): Promise<Probe> {
 const hhHeaders = (token: string) => ({
   authorization: `Bearer ${token}`,
   // hh asks for a contact in the UA: from env, never hardcoded
-  'user-agent': process.env.HH_CONTACT_EMAIL ? `NoJobNoProblemBuddy-web (${process.env.HH_CONTACT_EMAIL})` : 'NoJobNoProblemBuddy-web',
+  'user-agent': process.env.HH_CONTACT_EMAIL ? `${WEB_USER_AGENT} (${process.env.HH_CONTACT_EMAIL})` : WEB_USER_AGENT,
   accept: 'application/json',
 });
 
@@ -128,7 +129,7 @@ export async function probeHh(token: string, resumeId: string): Promise<Probe> {
     return { ok: false, detail: 'нет ответа', retryAfter: 0 };
 
   if (res.ok === false)
-    return { ok: false, detail: `hh ${res.status}`, retryAfter: await retryAfter(res) };
+    return { ok: false, detail: `площадка ${res.status}`, retryAfter: await retryAfter(res) };
 
   const resume = await fetch(`https://api.hh.ru/resumes/${resumeId}`, {
     signal: AbortSignal.timeout(TIMEOUT),

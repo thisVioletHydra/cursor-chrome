@@ -58,11 +58,11 @@ function printUrl(id: string): string {
 async function readPrint(id: string): Promise<string | { ok: false; reason: string }> {
   const tabId = await hhTab();
   if (tabId === null)
-    return { ok: false, reason: 'нет запиненной вкладки hh' };
+    return { ok: false, reason: 'нет запиненной вкладки площадки' };
 
   const here = await browser.tabs.get(tabId).catch(() => null);
   if (here !== null && isLogin(here.url || ''))
-    return { ok: false, reason: 'на hh нужно войти' };
+    return { ok: false, reason: 'на площадке нужно войти' };
 
   const url = printUrl(id);
   const fetched = await fetchInPage(tabId, url);
@@ -70,18 +70,18 @@ async function readPrint(id: string): Promise<string | { ok: false; reason: stri
   if (fromFetch !== null)
     return fromFetch;
   if (fetched?.login)
-    return { ok: false, reason: 'на hh нужно войти' };
+    return { ok: false, reason: 'на площадке нужно войти' };
 
   await showUrl(tabId, url);
   const read = await readTab(tabId);
   if (read?.login)
-    return { ok: false, reason: 'на hh нужно войти' };
+    return { ok: false, reason: 'на площадке нужно войти' };
 
   const fromTab = taken(read, id);
   if (fromTab !== null)
     return fromTab;
   if (read?.guard || fetched?.guard)
-    return { ok: false, reason: 'hh отдал стену, не текст' };
+    return { ok: false, reason: 'площадка отдала стену, не текст' };
 
   return { ok: false, reason: 'не прочиталась страница резюме' };
 }

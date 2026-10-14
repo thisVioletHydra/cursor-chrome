@@ -13,15 +13,31 @@ type Opts = { fetcher?: typeof fetch; sleep?: (ms: number) => Promise<void>; int
 
 const wait = (ms: number) => new Promise<void>(done => setTimeout(done, ms));
 
-export async function healthy(base: string, fetcher: typeof fetch = fetch): Promise<boolean> {
+export const GONE_TEXT = 'Сервер не найден — вставьте новую ссылку подключения из админки';
+export const GIVE_UP_MS = 10 * 60_000;
+
+export type Health = 'ok' | 'down' | 'gone';
+
+// 'gone' = the domain is dead for good (404/410, Railway fallback, 200 without our «ok» body): waiting is useless.
+export async function probe(base: string, fetcher: typeof fetch = fetch): Promise<Health> {
   try {
     const res = await fetcher(`${base}/healthz`, { cache: 'no-store' });
+    if (res.status === 404 || res.status === 410 || res.headers.get('x-railway-fallback') !== null)
+      return 'gone';
+    if (res.status !== 200)
+      return 'down';
+    const body = (await res.text().catch(() => '')).trim();
 
-    return res.status === 200;
+    // our /healthz says «ok»; anything else with a body (an HTML stub of a foreign/fallback page) = not our server
+    return body === '' || body === 'ok' ? 'ok' : 'gone';
   }
   catch {
-    return false;
+    return 'down';
   }
+}
+
+export async function healthy(base: string, fetcher: typeof fetch = fetch): Promise<boolean> {
+  return await probe(base, fetcher) === 'ok';
 }
 
 // Pings /healthz every `interval` until 200 or maxWait runs out. true = server is back.
@@ -29,8 +45,11 @@ export async function waitHealthy(base: string, opts: Opts = {}): Promise<boolea
   const { fetcher = fetch, sleep = wait, interval = PING_MS, maxWait = MAX_WAIT_MS } = opts;
   for (let spent = 0; spent < maxWait; spent += interval) {
     await sleep(interval);
-    if (await healthy(base, fetcher))
+    const state = await probe(base, fetcher);
+    if (state === 'ok')
       return true;
+    if (state === 'gone')
+      return false;
   }
 
   return false;
@@ -65,20 +84,38 @@ export async function retryWhileUpdating(base: string, run: () => Promise<Respon
 }
 
 // popup/options: on open check /healthz; while down show the bar, ping every 3 s, hide and call onBack.
+// Dead domain (404/410/fallback) → stop at once with GONE_TEXT; still down after GIVE_UP_MS → same text + «Повторить».
 export async function watchUpdating(node: HTMLElement | null, base: string, onBack: () => void = () => {}, opts: Opts = {}): Promise<void> {
   if (node === null || !base)
     return;
-  if (await healthy(base, opts.fetcher))
+  const { fetcher = fetch, sleep = wait, interval = PING_MS, maxWait = GIVE_UP_MS } = opts;
+  let state = await probe(base, fetcher);
+  if (state === 'ok')
     return;
 
   node.hidden = false;
   node.className = 'cc-updating';
   node.setAttribute('role', 'status');
   node.textContent = UPDATING_TEXT;
-  const back = await waitHealthy(base, { ...opts, maxWait: Number.POSITIVE_INFINITY });
-  if (back) {
+  for (let spent = 0; state === 'down' && spent < maxWait; spent += interval) {
+    await sleep(interval);
+    state = await probe(base, fetcher);
+  }
+  if (state === 'ok') {
     node.hidden = true;
     node.textContent = '';
     onBack();
+
+    return;
+  }
+
+  node.textContent = GONE_TEXT;
+  const again = typeof document === 'undefined' ? null : document.createElement('button');
+  if (again !== null) {
+    again.type = 'button';
+    again.textContent = 'Повторить';
+    again.style.marginLeft = '8px';
+    again.onclick = () => void watchUpdating(node, base, onBack, opts);
+    node.append(again);
   }
 }

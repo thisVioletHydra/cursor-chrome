@@ -35,7 +35,7 @@ let abroadNoted = false;
 
 const ANSWER_WAIT = waitMark({
   id: 'apply.answer',
-  human: 'ответ hh',
+  human: 'ответ площадки',
   budget: 8,
   next: 'apply.done',
   hold: true,
@@ -199,7 +199,7 @@ async function submitStep(): Promise<ApplyResult> {
     return paused;
 
   click(btn);
-  await noteLive('apply-run.ts · жду ответ hh');
+  await noteLive('apply-run.ts · жду ответ площадки');
   await beat(8_000, () => {
     acceptAbroad();
 

@@ -193,7 +193,7 @@ test('a named wait replaces the same pulse', () => {
   assert.deepEqual(pulseLines(hunt), [
     'ищу вакансию в ленте',
     '12 с',
-    'потом: жду загрузку страницы hh',
+    'потом: жду загрузку страницы площадки',
     'поиск',
   ]);
 });

@@ -25,7 +25,7 @@ export async function ping(): Promise<void> {
 async function pingHh(): Promise<void> {
   const token = await appToken().catch(() => '');
   if (token.length === 0)
-    throw new Error('hh закрыл поиск с сервера');
+    throw new Error('площадка закрыла поиск с сервера');
 
   try {
     await vacancyPing(token);
@@ -33,7 +33,7 @@ async function pingHh(): Promise<void> {
   catch (error) {
     const message = error instanceof Error ? error.message : '';
     if (message.includes('403') || message.includes('не пускает'))
-      throw new Error('hh закрыл поиск с сервера');
+      throw new Error('площадка закрыла поиск с сервера');
 
     throw error;
   }

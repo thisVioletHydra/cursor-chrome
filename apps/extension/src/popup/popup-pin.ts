@@ -135,7 +135,7 @@ export async function pinHere(): Promise<void> {
       : await browser.runtime.sendMessage({ type: 'ensure-hh' }) as WorkerSnap;
     await refreshWorkerPanel();
     if (result?.ok === true) {
-      showNote(pinNote, pinThis ? 'Запинил' : (result.status || 'Открыл hh и запинил'), true);
+      showNote(pinNote, pinThis ? 'Запинил' : (result.status || 'Открыл площадку и запинил'), true);
 
       return;
     }

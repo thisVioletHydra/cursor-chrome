@@ -104,13 +104,13 @@ test('admin overlay: shown on /api network error or 502/503/504, hidden on healt
   assert.match(svelte, /\{#if updating\}[\s\S]*src="\/updating\.html"/);
 });
 
-test('sidebar: demo → red «Временный демо-аккаунт», no GitHub icon/login; regular → as before', () => {
+test('sidebar: demo → «Временно» + name with diagonal strike, no GitHub icon/login; regular → as before', () => {
   const svelte = read('./src/routes/admin/+layout.svelte');
   const m = svelte.match(/\{#if data\.isDemo === true\}([\s\S]*?)\{:else\}([\s\S]*?)\{\/if\}/);
   assert.ok(m);
-  assert.match(m[1], /text-red-400[^>]*>Временный демо-аккаунт</);
-  assert.doesNotMatch(m[1], /<svg|data\.login/);
+  assert.match(m[1], /text-red-400[^>]*>Временно</);
+  assert.doesNotMatch(m[1], /data\.login|viewBox="0 0 16 16"/);
   assert.match(m[2], /<svg class="size-5 shrink-0" viewBox="0 0 16 16"/);
-  assert.match(m[2], /\{data\.login\}/);
+  assert.match(m[2], /<span class="min-w-0 flex-1 truncate text-sm text-zinc-200">\{data\.login\}<\/span>/);
   assert.equal(svelte.split('{data.login}').length, 2, 'login only in the regular branch');
 });

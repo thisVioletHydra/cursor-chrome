@@ -118,9 +118,9 @@ export async function collectVacancies(
     return miss(true, false, '');
 
   if (tabId === null) {
-    await tellPage('нет запиненной вкладки hh');
+    await tellPage('нет запиненной вкладки площадки');
 
-    return miss(false, false, 'нет запиненной вкладки hh');
+    return miss(false, false, 'нет запиненной вкладки площадки');
   }
 
   const here = await browser.tabs.get(tabId).catch(() => null);
@@ -248,7 +248,7 @@ export async function collectVacancies(
         return;
 
       missed = true;
-      await tellPage('hh-search.ts · не прочиталась страница hh');
+      await tellPage('hh-search.ts · не прочиталась страница площадки');
     }
 
     const focus = feedMode === 'words' && wordQuery.length > 0 ? wordQuery : FEED_KEY;
@@ -293,7 +293,7 @@ export async function collectVacancies(
     return { login: true, captcha: false, saved, more: false, done: false, read, reason: '' };
 
   if (missed && saved === 0)
-    return { login: false, captcha: false, saved: 0, more: false, done: wordDone, read, reason: 'не прочиталась страница hh' };
+    return { login: false, captcha: false, saved: 0, more: false, done: wordDone, read, reason: 'не прочиталась страница площадки' };
 
   if (checkFailed && saved === 0) {
     await tellPage('сервер не сверил вакансии');

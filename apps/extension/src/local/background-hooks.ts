@@ -7,6 +7,7 @@ import { collectRaw } from './fingerprint.ts';
 import { importFromServer } from './server-import.ts';
 import { installPassHeader } from './pass-header.ts';
 import { refreshConfig } from './config-cache.ts';
+import { gateOpen, gateText, LINK_OK_TTL_MS, readGate, refreshGate } from './link-gate.ts';
 
 const ACCESS_ALARM = 'cc-access-check';
 
@@ -36,6 +37,30 @@ async function accessTick(): Promise<void> {
   await checkIn(area, await base(), raw);
 }
 
+const LINK_ALARM = 'cc-link-gate';
+
+// true = not linked to the admin (no token / 401 / dead server): all site actions pause quietly.
+export async function linkPaused(): Promise<boolean> {
+  let gate = await readGate(area);
+  if (gate === null || Date.now() - gate.at >= LINK_OK_TTL_MS / 2)
+    gate = await refreshGate(area, await getSyncUrl(), await getSyncKey()).catch(() => gate);
+  void paintGateBadge(gate);
+
+  return gateOpen(gate) === false;
+}
+
+async function paintGateBadge(gate: Awaited<ReturnType<typeof readGate>>): Promise<void> {
+  if (gateOpen(gate))
+    return;
+  try {
+    await browser.action.setBadgeText({ text: '!' });
+    await browser.action.setBadgeBackgroundColor({ color: '#b45309' });
+    await browser.action.setTitle({ title: gateText(gate) });
+  }
+  catch {
+  }
+}
+
 export function startLocalHooks(): void {
   const version = browser.runtime.getManifest().version;
   installPassHeader(area, base, listener => browser.storage.onChanged.addListener(listener), version);
@@ -58,5 +83,14 @@ export function startLocalHooks(): void {
     }
   });
   browser.runtime.onStartup.addListener(() => void accessTick());
+  void browser.alarms.create(LINK_ALARM, { periodInMinutes: 1 });
+  browser.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === LINK_ALARM)
+      void getSyncUrl().then(async url => refreshGate(area, url, await getSyncKey())).then(() => linkPaused()).catch(() => null);
+  });
+  browser.storage.onChanged.addListener((changes) => {
+    if ('applySyncUrl' in changes || 'applySyncKey' in changes)
+      void getSyncUrl().then(async url => refreshGate(area, url, await getSyncKey())).catch(() => null);
+  });
   void accessTick();
 }

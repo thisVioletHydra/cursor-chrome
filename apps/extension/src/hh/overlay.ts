@@ -167,7 +167,7 @@ async function paintOverlay(): Promise<void> {
       waitN.textContent = '?';
 
     if (junkEl)
-      junkEl.textContent = 'обнови вкладку HH';
+      junkEl.textContent = 'обнови вкладку площадки';
 
     if (waitEl)
       waitEl.hidden = true;
@@ -176,7 +176,7 @@ async function paintOverlay(): Promise<void> {
       list.replaceChildren();
       const empty = document.createElement('p');
       empty.className = 'cc-empty';
-      empty.textContent = 'Расширение перезалили — обнови hh.ru';
+      empty.textContent = 'Расширение перезалили — обнови страницу площадки';
       list.append(empty);
     }
 

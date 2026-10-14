@@ -9,6 +9,7 @@
     <p class="brand">NoJobNoProblemBuddy <span id="ver"></span></p>
     <div id="cc-update"></div>
     <div id="cc-updating" hidden></div>
+    <div id="cc-link" hidden></div>
     <div class="tabs" id="tabs">
       <span class="checked-bg" aria-hidden="true"></span>
       <button id="go-main" class="nav on" type="button">Главная</button>
@@ -48,7 +49,7 @@
       </form>
 
       <div class="group">
-        <button id="make-good" class="btn-quiet" type="button">Поднять HH</button>
+        <button id="make-good" class="btn-quiet" type="button">Поднять вкладку</button>
         <p id="link-note" class="power-note" hidden aria-live="polite"></p>
         <pre id="report" hidden></pre>
       </div>
@@ -65,7 +66,7 @@
         <label class="flag">
         <span>
           <strong>Показывать поп</strong>
-          <small>карточка на hh.ru. если плагин OFF — прячется сама</small>
+          <small>карточка на сайте вакансий. если плагин OFF — прячется сама</small>
         </span>
           <input id="flag-show-pop" type="checkbox" />
         </label>
@@ -80,8 +81,8 @@
 
         <label class="flag">
         <span>
-          <strong>Продолжать сессию HH</strong>
-          <small>выкл: тот же пин, сброс на hh.ru. вкл: тот же URL и история</small>
+          <strong>Продолжать сессию на площадке</strong>
+          <small>выкл: тот же пин, сброс на площадку. вкл: тот же URL и история</small>
         </span>
           <input id="flag-keep-session" type="checkbox" />
         </label>
@@ -89,7 +90,7 @@
         <label class="flag">
         <span>
           <strong>Статус машины</strong>
-          <small>панель слева сверху на hh.ru</small>
+          <small>панель слева сверху на сайте вакансий</small>
         </span>
           <input id="flag-show-machine" type="checkbox" />
         </label>
