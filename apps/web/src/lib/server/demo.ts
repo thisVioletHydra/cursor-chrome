@@ -26,6 +26,13 @@ export function isDemoLogin(login: string | null | undefined): boolean {
   return login === DEMO_LOGIN;
 }
 
+export const DEMO_BAR_TEXT = 'Демо-аккаунт: временный, данные могут быть удалены';
+
+// The single server-side check for the demo session (admin layout → red bottom bar). Guest preview is never demo.
+export function isDemoSession(login: string | null | undefined, preview = false): boolean {
+  return preview === false && isDemoLogin(login);
+}
+
 // Seeds the hash of DEMO_LOGIN_TOKEN into the access DB (once). Refuses if that hash belongs to another login.
 export function ensureDemoToken(store: AccessStore, env: Env = process.env): boolean {
   const token = demoToken(env);

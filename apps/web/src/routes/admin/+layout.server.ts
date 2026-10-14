@@ -1,6 +1,6 @@
 import type { LayoutServerLoad } from './$types';
 
-import { isDemoLogin } from '$lib/server/demo';
+import { isDemoLogin, isDemoSession } from '$lib/server/demo';
 import { COVER_LETTER, extensionLamp, hiddenCount, parkStaleWaiters, passedCount, PRESETS, providerName, readMemory, readPassed, readQueue, readState, seenCount, watchView } from '@cursor-chrome/hh';
 import { boardFrom } from '$lib/server/board';
 import { telegramOn } from '@cursor-chrome/telegram';
@@ -47,6 +47,7 @@ function guestShell() {
   return {
     login: 'гость',
     preview: true,
+    isDemo: false,
     canPreview: true,
     links: guestLinks(),
     polling: false,
@@ -135,6 +136,7 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
     preview,
     canPreview: creator,
     demoAccount: isDemoLogin(session.login),
+    isDemo: isDemoSession(session.login, preview),
     links,
     polling: preview ? false : telegramOn(),
     billing: {

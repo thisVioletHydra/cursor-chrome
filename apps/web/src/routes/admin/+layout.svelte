@@ -100,7 +100,7 @@ const current = (href: string, exact: boolean) => {
       </button>
     </div>
   </aside>
-  <main class="min-h-0 overflow-y-auto px-5 py-6 lg:px-10 lg:py-8">
+  <main class="min-h-0 overflow-y-auto px-5 py-6 lg:px-10 lg:py-8 {data.isDemo ? 'pb-16 lg:pb-16' : ''}">
     {#if data.extUpdate?.outdated}
       <div class="mb-4 rounded-lg border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-sm text-amber-100" role="alert" data-testid="ext-update">
         Расширение {data.extUpdate.current} устарело{data.extUpdate.blocked ? ` (минимум ${data.extUpdate.min}, работа остановлена)` : ''}: доступна {data.extUpdate.recommended}.
@@ -110,3 +110,8 @@ const current = (href: string, exact: boolean) => {
     {@render children()}
   </main>
 </div>
+{#if data.isDemo}
+  <div class="fixed inset-x-0 bottom-0 z-40 bg-red-600 px-4 py-2 text-center text-sm font-medium text-white shadow-lg" role="status" data-testid="demo-bar">
+    Демо-аккаунт: временный, данные могут быть удалены
+  </div>
+{/if}
