@@ -6,6 +6,7 @@ import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { channelName } from './channel-feed';
+import { decryptFields, encryptFields, SecretKeyError } from './secret-box';
 
 export type Secrets = {
   telegramToken: string;
@@ -151,7 +152,8 @@ export async function readAccount(login: string): Promise<Account> {
     return empty();
   }
 
-  const raw = parsed.value as Partial<Account> & { mistralKey?: string };
+  // throws SecretKeyError on wrong key: never fall back to empty() (would overwrite data)
+  const raw = decryptFields(parsed.value as Record<string, unknown>) as Partial<Account> & { mistralKey?: string };
   const { mistralKey, ...rest } = raw;
   const account: Account = {
     ...empty(),
@@ -189,7 +191,7 @@ export async function readAccountText(login: string): Promise<string | null> {
 }
 
 export async function writeAccount(login: string, next: Account): Promise<void> {
-  await writeJsonAtomic(accountPath(login), next);
+  await writeJsonAtomic(accountPath(login), encryptFields(next as unknown as Record<string, unknown>));
   await rememberToken(login, next.extToken);
 }
 
@@ -590,7 +592,18 @@ async function rememberToken(login: string, token: string): Promise<void> {
 }
 
 async function tokenMatches(login: string, given: string): Promise<boolean> {
-  const saved = (await readAccount(login)).extToken;
+  let saved: string;
+  try {
+    saved = (await readAccount(login)).extToken;
+  }
+  catch (error) {
+    // one undecryptable account must not break sign-in for everyone
+    if (error instanceof SecretKeyError) {
+      console.error(`account ${login}: ${error.message}`);
+      return false;
+    }
+    throw error;
+  }
   if (saved.length === 0 || saved.length !== given.length)
     return false;
 

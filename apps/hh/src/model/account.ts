@@ -4,6 +4,7 @@ import type { Profile } from '../review/profile.ts';
 import { ownerName } from '../diary/tenant.ts';
 import { evaluateRule, parseProfile } from '../review/profile.ts';
 import { parseFacts, setAccountFacts, setAnswerHints, setCoverLetter } from './copy.ts';
+import { decryptFields } from './secret-box.ts';
 
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -46,7 +47,23 @@ export function applyAccount(account: { facts?: unknown; profile?: unknown; cove
   return { facts, profile, coverLetter };
 }
 
+// Read an account json with secret fields decrypted. null if missing/unparsable.
+// Wrong/missing key for enc:v1 values throws SecretKeyError (loud), never silently drops data.
+export async function readAccountFile(file: string): Promise<Record<string, unknown> | null> {
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    parsed = JSON.parse(await fsPromises.readFile(file, 'utf8')) as Record<string, unknown>;
+  }
+  catch {
+    return null;
+  }
+
+  return decryptFields(parsed);
+}
+
 export async function loadOwnerAccount(file = ownerAccountFile()): Promise<{ file: string; found: boolean; applied: AppliedAccount }> {
+  // only facts/profile/coverLetter are used (never secret fields), so no decryption:
+  // works in processes without SECRETS_KEY (CLI) even when secrets are encrypted
   let parsed: Record<string, unknown> | null = null;
   try {
     parsed = JSON.parse(await fsPromises.readFile(file, 'utf8')) as Record<string, unknown>;

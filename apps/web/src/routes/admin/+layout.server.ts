@@ -10,6 +10,7 @@ import { coolLeft, pruneShelvedWaiters } from '$lib/server/admin-actions';
 import { guestLinks, storedLinks } from '$lib/server/checks';
 import { chainOf, collapseChain, DEFAULT_QUERY, ensureAccount, GUEST_BALANCE, isCreator, publishSecrets, VACANCY_RUB, withChain, writeAccount } from '$lib/server/secrets';
 import { extensionBuild } from '$lib/server/extension-build';
+import { deployLabel } from '$lib/server/build-info';
 import { githubLogin, readSession } from '$lib/server/session';
 import { dlSecret, signDl } from '$lib/server/thin/dl';
 import { extSeenLamp, readExtSeen } from '$lib/server/ext-seen';
@@ -107,7 +108,7 @@ async function statsOf(preview: boolean) {
   };
 }
 
-export const load: LayoutServerLoad = async ({ cookies }) => {
+const loadInner = async ({ cookies }: Parameters<LayoutServerLoad>[0]) => {
   const session = readSession(cookies.get('session'));
   if (session === null || githubLogin(session.login) === false)
     redirect(303, '/');
@@ -188,3 +189,6 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
     stats,
   };
 };
+
+// every shell (guest, demo, regular) gets the version · commit line for the sidebar
+export const load: LayoutServerLoad = async event => ({ ...(await loadInner(event)), buildLine: deployLabel() });

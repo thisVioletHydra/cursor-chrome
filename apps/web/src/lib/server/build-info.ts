@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import process from 'node:process';
 
 import { extensionBuild } from './extension-build.ts';
+import { APP_VERSION } from './user-agent.ts';
 
 let commit: string | null = null;
 
@@ -30,4 +31,19 @@ export async function buildLabel(): Promise<string> {
   const version = await extensionBuild();
 
   return [version ? `v${version}` : '', commit].filter(Boolean).join(' · ');
+}
+
+// Admin sidebar line: version + deployed commit (runtime RAILWAY_GIT_COMMIT_SHA), `dev` when not on Railway.
+export function deployCommit(env: Record<string, string | undefined> = process.env): string {
+  const raw = (env.RAILWAY_GIT_COMMIT_SHA || '').trim();
+  return /^[0-9a-f]{7,40}$/i.test(raw) ? raw.slice(0, 7).toLowerCase() : 'dev';
+}
+
+export function deployLine(version: string, env: Record<string, string | undefined> = process.env): string {
+  return [version ? `v${version}` : '', deployCommit(env)].filter(Boolean).join(' · ');
+}
+
+export function deployLabel(): string {
+  // same source as the NoJobNoProblemBuddy/<version> User-Agent (root package.json)
+  return deployLine(APP_VERSION);
 }
