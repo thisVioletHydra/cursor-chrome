@@ -5,6 +5,7 @@ import type { DraftReply, ReviewCard, ReviewCounts } from '$lib/review-types';
 
 import { chainFromEnv, draftAnswers, parseFacts, dropPassed, embedFromChain, judgeFromChain, recheckDraftsOnce, dropWaiters, hintQuestions, isStale, notePassed, readDecisions, readDrafts, readQueue, readVacancyInfo, readWaiterForms, rememberCorrections, restoreWaiter, saveDecision, takeDecision, vacancyInfo } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
+import { serverChainFor } from './demo';
 import { chainOf, isCreator, readAccount, readResume } from './secrets';
 import { readProfile } from './profile';
 import { githubLogin, readSession } from './session';
@@ -36,7 +37,7 @@ function hidden(decisions: readonly Decision[], now: number): Set<string> {
 export async function reviewChain(login: string): Promise<Provider[]> {
   const own = chainOf(await readAccount(login));
 
-  return own.length > 0 ? own : chainFromEnv();
+  return own.length > 0 ? own : serverChainFor(login, chainFromEnv());
 }
 
 export async function reviewBoard(login = '', now = Date.now()): Promise<{ cards: ReviewCard[]; counts: ReviewCounts }> {

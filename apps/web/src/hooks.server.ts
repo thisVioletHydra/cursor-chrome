@@ -10,6 +10,11 @@ import { extLogin } from '$lib/server/ext-auth';
 import { publishExtLink } from '$lib/server/ext-link';
 import { applySavedSecrets, CREATOR, isCreator, readAccount, takeVacancy } from '$lib/server/secrets';
 import { githubLogin, readSession, signSession } from '$lib/server/session';
+import { extensionBuild } from '$lib/server/extension-build';
+import { dlSecret, signDl } from '$lib/server/thin/dl';
+import { policyOf, versionGate } from '$lib/server/thin/version';
+
+import { demoAllow, ensureDemoToken, isDemoLogin } from '$lib/server/demo';
 
 import process from 'node:process';
 
@@ -32,6 +37,12 @@ startWatch(async (text) => {
   await notifyToken(account.telegramToken, text);
 });
 startTelegram();
+try {
+  ensureDemoToken(accessStore());
+}
+catch {
+  // access DB unavailable: demo login simply stays off
+}
 startAutopilot();
 
 export const handle: Handle = async ({ event, resolve }) => {
@@ -42,6 +53,30 @@ export const handle: Handle = async ({ event, resolve }) => {
   const bearer = event.request.headers.get('authorization') ?? '';
   const ext = bearer.startsWith('Bearer ') ? await extLogin(event.request) : null;
   const session = ext === null ? readSession(event.cookies.get('session')) : null;
+  // Version policy: only the server decides. Below min → 426 (except /api/config and /dl/); below recommended → flag.
+  const extVersion = event.url.pathname.startsWith('/api/') ? event.request.headers.get('x-ext-version') : null;
+  const policy = extVersion === null ? null : policyOf(process.env, await extensionBuild());
+  const version = policy === null ? { status: 200 as const, outdated: false } : versionGate(event.url.pathname, extVersion, policy);
+  const decorate = async (response: Response): Promise<Response> => {
+    if (policy === null || version.outdated === false)
+      return response;
+
+    const link = ext === null ? '' : await readAccount(ext).then(account => (account.extToken ? `/dl/${signDl(ext, account.extToken, dlSecret(process.env))}` : '')).catch(() => '');
+    const out = new Response(response.body, response);
+    out.headers.set('x-ext-outdated', '1');
+    out.headers.set('x-ext-recommended', policy.recommended);
+    out.headers.set('x-ext-min', policy.min);
+    if (link)
+      out.headers.set('x-ext-update-url', link);
+    out.headers.set('access-control-expose-headers', 'x-ext-outdated, x-ext-recommended, x-ext-min, x-ext-update-url');
+
+    return out;
+  };
+  if (version.status === 426) {
+    console.info(safeLogLine(event.request.method, event.url.pathname, 426));
+
+    return decorate(json({ error: 'расширение устарело', min: policy?.min ?? '' }, { status: 426 }));
+  }
   if (ext === null && (event.url.pathname === '/admin' || event.url.pathname.startsWith('/admin/')) && (session === null || githubLogin(session.login) === false)) {
     event.cookies.delete('session', { path: '/' });
     redirect(303, '/?expired=1');
@@ -59,18 +94,25 @@ export const handle: Handle = async ({ event, resolve }) => {
     if (gate.ok === false) {
       console.info(safeLogLine(event.request.method, event.url.pathname, gate.status));
 
-      return json({ error: gate.reason }, { status: gate.status });
+      return decorate(json({ error: gate.reason }, { status: gate.status }));
     }
   }
   const who = ext ?? (session !== null && githubLogin(session.login) ? session.login : null);
   if (who === null)
-    return resolve(event);
+    return decorate(await resolve(event));
+
+  // demo account: request limits (per minute / per day)
+  if (isDemoLogin(who)) {
+    const allow = demoAllow();
+    if (allow.ok === false)
+      return decorate(json({ error: allow.reason }, { status: 429 }));
+  }
 
   return runTenant(who, async () => {
     const account = await readAccount(who);
     bindWatch(account.hhLive === '1', account.hhHours !== '0');
 
-    return resolve(event);
+    return decorate(await resolve(event));
   });
 };
 

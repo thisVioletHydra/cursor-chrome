@@ -20,7 +20,7 @@ const items = $derived([
   { href: '/admin/config', label: 'Конфиг', exact: false, icon: 'file' },
   { href: '/admin/imitation', label: 'Имитация', exact: false, icon: 'person' },
   { href: '/admin/people', label: 'Люди', exact: false, icon: 'person' },
-].filter(item => (item.href !== '/admin/model' && item.href !== '/admin/people') || data.canPreview));
+].filter(item => (item.href !== '/admin/model' && item.href !== '/admin/people') || data.canPreview || (item.href === '/admin/model' && data.demoAccount)));
 
 const iconByLabel: Record<string, string> = {
   'Главная': 'home',
@@ -101,6 +101,12 @@ const current = (href: string, exact: boolean) => {
     </div>
   </aside>
   <main class="min-h-0 overflow-y-auto px-5 py-6 lg:px-10 lg:py-8">
+    {#if data.extUpdate?.outdated}
+      <div class="mb-4 rounded-lg border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-sm text-amber-100" role="alert" data-testid="ext-update">
+        Расширение {data.extUpdate.current} устарело{data.extUpdate.blocked ? ` (минимум ${data.extUpdate.min}, работа остановлена)` : ''}: доступна {data.extUpdate.recommended}.
+        {#if data.extUpdate.url}<a class="ml-1 underline" href={data.extUpdate.url}>Скачать zip</a> <span class="text-amber-200/70">(ссылка на 24 часа)</span>{/if}
+      </div>
+    {/if}
     {@render children()}
   </main>
 </div>

@@ -71,10 +71,10 @@ test('signals: only hashes accepted; logs carry no bodies or keys', () => {
   assert.equal(JSON.stringify(s.events()).includes(token), false);
 });
 
-test('DEMO_TOKEN_LOGIN gate: flag on, not Railway, demo login only', () => {
+test('DEMO_TOKEN_LOGIN gate: explicit flag, demo login only', () => {
   assert.equal(demoLoginAllowed({ DEMO_TOKEN_LOGIN: '1' }, 'vasya-pupkin'), true);
   assert.equal(demoLoginAllowed({}, 'vasya-pupkin'), false);
-  assert.equal(demoLoginAllowed({ DEMO_TOKEN_LOGIN: '1', RAILWAY_ENVIRONMENT: 'production' }, 'vasya-pupkin'), false);
+  assert.equal(demoLoginAllowed({ DEMO_TOKEN_LOGIN: '1', RAILWAY_ENVIRONMENT: 'production' }, 'vasya-pupkin'), true);
   assert.equal(demoLoginAllowed({ DEMO_TOKEN_LOGIN: '1' }, 'thisVioletHydra'), false);
   assert.equal(demoLoginAllowed({ DEMO_TOKEN_LOGIN: '1' }, null), false);
 });

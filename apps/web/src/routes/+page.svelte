@@ -4,4 +4,4 @@ import LoginScene from '$lib/LoginScene.svelte';
 let { data } = $props();
 </script>
 
-<LoginScene expired={data.expired} blocked={data.blocked} demo={data.demo} demoVersion={data.demoVersion} />
+<LoginScene expired={data.expired} blocked={data.blocked} demo={data.demo} demoVersion={data.demoVersion} build={data.build} tokenLogin={data.tokenLogin} tokenBad={data.tokenBad} />

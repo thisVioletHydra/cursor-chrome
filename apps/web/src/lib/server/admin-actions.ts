@@ -8,6 +8,8 @@ import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
 import { chainOf, collapseChain, imitationFromFields, isCreator, newExtToken, publishSecrets, readAccount, readResume, withChain, writeAccount, writeAtsScan } from './secrets';
 import { githubLogin, readSession } from './session';
+import { addXaiToChain } from './thin/byok-chain';
+import { testXaiKey } from './thin/byok-check';
 
 const sections = ['telegram', 'model', 'hh'] as const;
 type Section = typeof sections[number];
@@ -662,4 +664,23 @@ function clearSection(section: Section, next: Stored) {
   next.hhClientSecret = '';
   next.hhResumeId = '';
   next.hhLabel = '';
+}
+
+// Key wizard (xAI Grok) → this session's own chain only (never another login's).
+export async function wizardProviderAdmin({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const form = await request.formData();
+  const done = await addXaiToChain(login, String(form.get('key') ?? ''), {
+    read: readAccount,
+    write: async (who, next) => {
+      await writeAccount(who, next);
+      publishSecrets(who, next);
+    },
+    test: key => testXaiKey(key),
+  });
+
+  return { ...done, wait: 0 };
 }

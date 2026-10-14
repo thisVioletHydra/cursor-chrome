@@ -1,5 +1,6 @@
 import type { LayoutServerLoad } from './$types';
 
+import { isDemoLogin } from '$lib/server/demo';
 import { COVER_LETTER, extensionLamp, hiddenCount, parkStaleWaiters, passedCount, PRESETS, providerName, readMemory, readPassed, readQueue, readState, seenCount, watchView } from '@cursor-chrome/hh';
 import { boardFrom } from '$lib/server/board';
 import { telegramOn } from '@cursor-chrome/telegram';
@@ -9,6 +10,19 @@ import { guestLinks, storedLinks } from '$lib/server/checks';
 import { chainOf, collapseChain, DEFAULT_QUERY, ensureAccount, GUEST_BALANCE, isCreator, publishSecrets, VACANCY_RUB, withChain, writeAccount } from '$lib/server/secrets';
 import { extensionBuild } from '$lib/server/extension-build';
 import { githubLogin, readSession } from '$lib/server/session';
+import { dlSecret, signDl } from '$lib/server/thin/dl';
+import { compareVersions, policyOf } from '$lib/server/thin/version';
+
+import process from 'node:process';
+
+// Admin banner: the extension reported a version below the recommended one → signed 24 h link to the zip.
+function extUpdateOf(login: string, extToken: string, current: string, build: string) {
+  const policy = policyOf(process.env, build);
+  if (!current || compareVersions(current, policy.recommended) >= 0)
+    return { outdated: false, blocked: false, current, recommended: policy.recommended, min: policy.min, url: '' };
+
+  return { outdated: true, blocked: compareVersions(current, policy.min) < 0, current, recommended: policy.recommended, min: policy.min, url: extToken ? `/dl/${signDl(login, extToken, dlSecret(process.env))}` : '' };
+}
 
 function emptyStats() {
   return {
@@ -120,6 +134,7 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
     login: preview ? 'гость' : session.login,
     preview,
     canPreview: creator,
+    demoAccount: isDemoLogin(session.login),
     links,
     polling: preview ? false : telegramOn(),
     billing: {
@@ -161,6 +176,7 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
     extensionLamp: preview ? 'quiet' as const : extensionLamp(build, stats.autopilot.auto),
     extensionBuild: preview ? '' : build,
     extensionVersion: preview ? '' : watchView().clientVersion,
+    extUpdate: preview ? null : extUpdateOf(session.login, account.extToken, (process.env.RAILWAY_ENVIRONMENT ? '' : process.env.EXT_FAKE_CLIENT_VERSION ?? '') || watchView().clientVersion, build),
     searchMode: preview ? '' : watchView().searchMode,
     stats,
   };

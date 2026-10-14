@@ -66,6 +66,64 @@ export function cleanSignals(raw: unknown): SignalHashes {
   return out;
 }
 
+// ---- Server-side fingerprint: the extension sends raw signals, the server normalizes and hashes them ----
+// Raw values are never stored: only HMAC(pepper, name:value). Old clients sent sha256(name:value): still matched.
+export const RAW_MAX = 300;
+
+export function gpuChip(renderer: string): string {
+  const text = renderer.toLowerCase();
+  const vendor = /nvidia|geforce/.test(text) ? 'nvidia' : /amd|radeon/.test(text) ? 'amd' : /intel/.test(text) ? 'intel' : /apple/.test(text) ? 'apple' : /swiftshader|llvmpipe|software/.test(text) ? 'software' : 'other';
+  const model = text.match(/\b(rtx|gtx|mx|rx|arc|iris(?: xe)?|uhd|hd|m\d)\s*(?:graphics\s*)?(\d{2,4}[a-z]?)?\b/);
+  const apple = text.match(/apple (m\d(?: pro| max| ultra)?)/);
+
+  return [vendor, apple ? apple[1] : model ? [model[1], model[2]].filter(Boolean).join(' ') : ''].filter(Boolean).join(' ').trim();
+}
+
+export function normalizeRaw(raw: unknown): Partial<Record<Signal, string>> {
+  const out: Partial<Record<Signal, string>> = {};
+  if (typeof raw !== 'object' || raw === null)
+    return out;
+
+  for (const name of Object.keys(WEIGHTS) as Signal[]) {
+    const value = (raw as Record<string, unknown>)[name];
+    if (typeof value !== 'string' && typeof value !== 'number')
+      continue;
+
+    const text = String(value).trim().slice(0, RAW_MAX);
+    out[name] = name === 'gpu' ? gpuChip(text) : name === 'fonts' ? text.split(',').map(font => font.trim()).filter(Boolean).sort().join(',') : text;
+  }
+
+  return out;
+}
+
+export function pepper(env: Record<string, string | undefined> = process.env): string {
+  return env.FP_PEPPER || env.SESSION_SECRET || 'dev-only-fp-pepper';
+}
+
+export function hashRaw(raw: unknown, key = pepper()): { signals: SignalHashes; legacy: SignalHashes } {
+  const clean = normalizeRaw(raw);
+  const signals: SignalHashes = {};
+  const legacy: SignalHashes = {};
+  for (const [name, value] of Object.entries(clean) as Array<[Signal, string]>) {
+    if (!value && name !== 'gpu')
+      continue;
+
+    signals[name] = crypto.createHmac('sha256', key).update(`${name}:${value}`).digest('hex');
+    legacy[name] = sha256(`${name}:${value}`);
+  }
+
+  return { signals, legacy };
+}
+
+// Check body → signal hashes: { raw } (thin client) or { signals } (old client, already hashed).
+export function signalsOf(body: unknown, key = pepper()): { signals: SignalHashes; legacy: SignalHashes | null } {
+  const row = (body ?? {}) as { raw?: unknown; signals?: unknown };
+  if (row.raw !== undefined)
+    return hashRaw(row.raw, key);
+
+  return { signals: cleanSignals(row.signals), legacy: null };
+}
+
 export function openAccess(file: string) {
   const db = new DatabaseSync(file);
   db.exec(`
@@ -92,6 +150,18 @@ export function openAccess(file: string) {
 
       return token;
     },
+    // Registers a known token (only its hash). Never rebinds: returns the login the hash is bound to.
+    adopt(token: string, label: string, login: string, dailyLimit = DAILY_LIMIT): string {
+      const hash = sha256(token);
+      const row = tokenRow(hash);
+      if (row)
+        return row.login;
+
+      db.prepare('INSERT INTO access_token (hash, label, login, created, daily_limit) VALUES (?, ?, ?, ?, ?)').run(hash, label, login, Date.now(), dailyLimit);
+      log(hash, 'adopt', `label=${label} login=${login}`);
+
+      return login;
+    },
     revoke(tokenOrHash: string): boolean {
       const hash = HASH.test(tokenOrHash) ? tokenOrHash : sha256(tokenOrHash);
       const done = db.prepare('UPDATE access_token SET revoked = 1 WHERE hash = ? OR hash LIKE ?').run(hash, `${tokenOrHash}%`);
@@ -117,7 +187,13 @@ export function openAccess(file: string) {
       return row && row.revoked === 0 ? row.login : null;
     },
     // Full check: at browser start and every 4 hours. Returns a pass for the next 4 hours.
-    checkIn(token: string, rawSignals: unknown, now = Date.now()): CheckResult {
+    // body: { raw } from the thin client (hashed here) or old-style hashes.
+    checkBody(token: string, body: unknown, now = Date.now()): CheckResult {
+      const { signals, legacy } = signalsOf(body);
+
+      return this.checkIn(token, signals, now, legacy);
+    },
+    checkIn(token: string, rawSignals: unknown, now = Date.now(), legacy: SignalHashes | null = null): CheckResult {
       const hash = sha256(token);
       const row = tokenRow(hash);
       if (!row)
@@ -133,7 +209,10 @@ export function openAccess(file: string) {
       const devices = db.prepare('SELECT * FROM access_device WHERE token_hash = ? ORDER BY slot').all(hash) as Array<{ slot: number; ref: string }>;
       let best: { slot: number; score: number; perSignal: Record<string, boolean> } | null = null;
       for (const device of devices) {
-        const scored = scoreSignals(JSON.parse(device.ref) as SignalHashes, signals);
+        const ref = JSON.parse(device.ref) as SignalHashes;
+        const fresh = scoreSignals(ref, signals);
+        const old = legacy ? scoreSignals(ref, legacy) : null;
+        const scored = old && old.score > fresh.score ? old : fresh;
         if (best === null || scored.score > best.score)
           best = { slot: device.slot, ...scored };
       }
@@ -262,9 +341,9 @@ export function safeLogLine(method: string, path: string, status: number, tokenI
   return `[access] ${method} ${path.split('?')[0]} ${status}${tokenId ? ` t=${tokenId.slice(0, 8)}` : ''}`;
 }
 
-// DEMO_TOKEN_LOGIN — temporary demo login gate (cut together with routes/auth/demo). Never on Railway, never the owner.
+// DEMO_TOKEN_LOGIN gate: explicit flag (no RAILWAY_ENVIRONMENT check any more), demo login only, never the owner.
 export const DEMO_LOGINS = new Set(['vasya-pupkin']);
 
 export function demoLoginAllowed(env: Record<string, string | undefined>, login: string | null): boolean {
-  return env.DEMO_TOKEN_LOGIN === '1' && !env.RAILWAY_ENVIRONMENT && login !== null && DEMO_LOGINS.has(login);
+  return env.DEMO_TOKEN_LOGIN === '1' && login !== null && DEMO_LOGINS.has(login);
 }

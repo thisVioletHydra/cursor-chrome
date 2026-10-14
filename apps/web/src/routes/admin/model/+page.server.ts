@@ -2,11 +2,14 @@ import type { Actions, PageServerLoad } from './$types';
 
 import { readProbeLog } from '@cursor-chrome/hh';
 import { redirect } from '@sveltejs/kit';
-import { addProviderAdmin, raiseProviderAdmin, removeProviderAdmin, unlinkAdmin } from '$lib/server/admin-actions';
+import { isDemoLogin } from '$lib/server/demo';
+import { readSession } from '$lib/server/session';
+import { addProviderAdmin, raiseProviderAdmin, removeProviderAdmin, unlinkAdmin, wizardProviderAdmin } from '$lib/server/admin-actions';
 
-export const load: PageServerLoad = async ({ parent }) => {
+export const load: PageServerLoad = async ({ parent, cookies }) => {
   const { preview, canPreview } = await parent();
-  if (canPreview === false)
+  // the demo account sets up its own BYOK chain (key wizard) here
+  if (canPreview === false && !isDemoLogin(readSession(cookies.get('session'))?.login))
     redirect(303, '/start');
 
   if (preview)
@@ -29,4 +32,5 @@ export const actions: Actions = {
   remove: removeProviderAdmin,
   raise: raiseProviderAdmin,
   unlink: unlinkAdmin,
+  wizard: wizardProviderAdmin,
 };

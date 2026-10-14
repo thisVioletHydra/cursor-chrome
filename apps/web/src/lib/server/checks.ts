@@ -3,6 +3,8 @@ import type { Provider } from '@cursor-chrome/hh';
 import { probeProvider, providerName } from '@cursor-chrome/hh';
 import { chainOf, readAccount } from './secrets';
 
+import process from 'node:process';
+
 export type LinkStatus = {
   name: string;
   set: boolean;
@@ -106,7 +108,8 @@ export async function probeModel(provider: Provider): Promise<Probe> {
 
 const hhHeaders = (token: string) => ({
   authorization: `Bearer ${token}`,
-  'user-agent': 'cursor-chrome-web (workonsunday@yandex.ru)',
+  // hh asks for a contact in the UA: from env, never hardcoded
+  'user-agent': process.env.HH_CONTACT_EMAIL ? `cursor-chrome-web (${process.env.HH_CONTACT_EMAIL})` : 'cursor-chrome-web',
   accept: 'application/json',
 });
 

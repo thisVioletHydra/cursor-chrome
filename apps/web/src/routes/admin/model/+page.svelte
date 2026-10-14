@@ -1,4 +1,5 @@
 <script lang="ts">
+import { deserialize } from '$app/forms';
 import { enhance } from '$lib/admin-forms';
 import Out from '$lib/Out.svelte';
 
@@ -13,6 +14,68 @@ let message = $state('');
 let ok = $state(false);
 let openUnlink = $state(false);
 let phrase = $state('');
+
+// NoJobNoProblemBuddy key wizard (xAI Grok): open console on click, paste on click, test via /api/byok/test.
+const XAI_KEYS_URL = 'https://console.x.ai/team/default/api-keys';
+const XAI_KEY_RE = /^xai-[A-Za-z0-9_-]{20,200}$/;
+let wizKey = $state('');
+let wizMsg = $state('');
+let wizOk = $state<boolean | null>(null);
+let wizCode = $state('');
+const wizMasked = $derived(wizKey ? `${wizKey.slice(0, 4)}${'•'.repeat(12)}${wizKey.slice(-4)}` : '');
+
+async function wizPaste() {
+  wizOk = null;
+  try {
+    const text = (await navigator.clipboard.readText()).trim();
+    wizKey = XAI_KEY_RE.test(text) ? text : '';
+    wizMsg = wizKey ? 'формат ок: xai-…, проверь ключ' : (text ? 'в буфере не ключ xAI (ждём xai-…)' : 'буфер пуст');
+    if (!wizKey)
+      wizOk = false;
+  }
+  catch {
+    wizMsg = 'нет доступа к буферу: вставь ключ в форму ниже вручную';
+    wizOk = false;
+  }
+}
+
+async function wizTest() {
+  wizMsg = 'проверяю…';
+  wizOk = null;
+  try {
+    const res = await fetch('/api/byok/test', { method: 'POST', headers: { 'x-llm-key': wizKey } });
+    const body = await res.json() as { ok?: boolean; code?: string; message?: string };
+    wizCode = body.code ?? '';
+    wizOk = body.ok === true;
+    wizMsg = body.message ?? `сервер ${res.status}`;
+  }
+  catch {
+    wizOk = false;
+    wizMsg = 'нет связи';
+  }
+}
+
+async function wizUse() {
+  const form = new FormData();
+  form.set('key', wizKey);
+  wizMsg = 'добавляю…';
+  try {
+    const res = await fetch('?/wizard', { method: 'POST', body: form, headers: { 'x-sveltekit-action': 'true' } });
+    const result = deserialize(await res.text());
+    const body = (result.type === 'success' ? result.data : null) as { ok?: boolean; detail?: string } | null;
+    const ok = body?.ok === true;
+    wizOk = ok;
+    wizMsg = body?.detail ?? 'не вышло';
+    if (ok) {
+      wizKey = '';
+      location.reload();
+    }
+  }
+  catch {
+    wizOk = false;
+    wizMsg = 'нет связи';
+  }
+}
 
 const preset = $derived(data.presets.find(item => item.id === providerId) ?? data.presets[0]);
 const custom = $derived(providerId === 'custom');
@@ -103,6 +166,29 @@ $effect(() => {
   {:else if custom}
     <p class="mt-3 text-sm text-zinc-400">Любой сервер с OpenAI-совместимым <span class="font-mono text-xs">POST …/chat/completions</span>.</p>
   {/if}
+
+  <div class="mt-4 rounded-xl border border-indigo-400/30 bg-indigo-400/5 p-4" data-testid="key-wizard">
+    <p class="text-sm font-semibold text-zinc-100">NoJobNoProblemBuddy · ключ xAI Grok</p>
+    <div class="mt-3 flex flex-wrap items-center gap-3">
+      <a class="btn btn-primary btn-sm" href={XAI_KEYS_URL} target="_blank" rel="noopener">Получить ключ Grok</a>
+      <span class="font-mono text-xs text-zinc-500">{XAI_KEYS_URL}</span>
+    </div>
+    <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-zinc-300">
+      <li>Войди в консоль xAI, например через Google.</li>
+      <li>API Keys → Create API key.</li>
+      <li>Скопируй ключ (xai-…) и вернись сюда.</li>
+      <li>«Вставить из буфера» → «Проверить» → «В цепочку».</li>
+    </ol>
+    <div class="mt-3 flex flex-wrap items-center gap-3">
+      <button class="btn btn-sm" type="button" onclick={wizPaste}>Вставить из буфера</button>
+      <input class="input input-bordered input-sm w-72 border-white/10 bg-black/30 font-mono text-xs text-zinc-100" readonly value={wizMasked} placeholder="ключ появится здесь (замаскирован)" />
+      <button class="btn btn-sm" type="button" disabled={!wizKey} onclick={wizTest}>Проверить</button>
+      <button class="btn btn-sm" type="button" disabled={!wizKey || (wizOk !== true && wizCode !== 'key-no-credits')} onclick={wizUse}>В цепочку</button>
+    </div>
+    {#if wizMsg}
+      <p class="mt-2 text-sm {wizOk === true ? 'text-emerald-300' : wizOk === false ? 'text-rose-300' : 'text-zinc-400'}">{wizMsg}</p>
+    {/if}
+  </div>
 
   {#if message}
     <p class="mt-3 font-mono text-xs {ok ? 'text-emerald-300' : 'text-rose-300'}">{message}</p>
