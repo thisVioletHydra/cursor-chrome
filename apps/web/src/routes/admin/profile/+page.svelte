@@ -84,6 +84,9 @@ const input = 'rounded-lg border border-white/10 bg-[#0b0d12] px-2 py-1.5 text-x
 <header class="mb-5 flex flex-wrap items-end justify-between gap-4">
   <div>
     <h1 class="text-xl font-semibold text-white">Профиль</h1>
+    {#if data.isDemo === true}
+      <p class="mt-1 text-sm text-zinc-400" data-testid="demo-login">Аккаунт: <span class="font-medium text-zinc-200">{data.login}</span></p>
+    {/if}
     <p class="mt-1 max-w-2xl text-xs text-zinc-500">Факты о тебе для ответов работодателям. Нейронка личные факты не придумывает: если поля нет ни здесь, ни в правилах, ни в памяти, в «Разборе» будет пусто с пометкой «нужен твой ответ». Значение может зависеть от вакансии.</p>
   </div>
   <p class="text-sm text-zinc-400 tabular-nums">заполнено {filled} из {Object.keys(rows).length}</p>

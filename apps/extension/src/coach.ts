@@ -1,5 +1,5 @@
-// Content script for https://console.x.ai/* only, registered at runtime after the user grants the optional
-// host permission. Overlay only: element lookup + getBoundingClientRect, no clicks, no reading page values.
+// Content script for https://console.x.ai/* only (host access comes from the <all_urls> host permission).
+// Overlay only: element lookup + getBoundingClientRect, no clicks, no reading page values.
 import { browser } from './browser-host';
 import { cachedConfig } from './local/config-cache';
 import { coachSteps, coachView, locate, paint } from './local/coach';
