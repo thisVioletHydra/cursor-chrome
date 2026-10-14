@@ -5,6 +5,7 @@ export const MODEL_PER_START = 40;
 export const SEND_PER_DAY = 110;
 export const QUEUE_TARGET = 25;
 export const SCAN_EVERY_MS = 30 * 60_000;
+export { SEARCH_HOURS_ENABLED } from './feature-flags.ts';
 export const WORK_FROM_HOUR = 9;
 export const WORK_TO_HOUR = 22
 export const MAX_ATTEMPTS = 3;

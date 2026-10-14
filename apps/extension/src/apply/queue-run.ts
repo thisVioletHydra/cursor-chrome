@@ -1,6 +1,7 @@
 import type { Hunt, QueueItem } from './admin-api';
 import type { FoundCard } from '../search/hh-search';
 
+import { SEARCH_HOURS_ENABLED } from '../../../hh/src/feature-flags.ts';
 import { claimRelook, dropKnown, dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, markRead, postFound, postHidden, postWalk, rememberPage, seenAmong } from './admin-api';
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 import { getFlags } from '../pilot/flags';
@@ -1547,7 +1548,7 @@ function nextMorning(now = new Date()): number {
 }
 
 function hoursOpen(now = new Date()): boolean {
-  if (keepWorkHours() === false)
+  if (SEARCH_HOURS_ENABLED === false || keepWorkHours() === false)
     return true;
 
   const text = new Intl.DateTimeFormat('en-GB', {

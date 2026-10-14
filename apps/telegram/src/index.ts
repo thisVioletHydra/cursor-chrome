@@ -1,4 +1,4 @@
-import { parkStaleWaiters, readMemory, storePath, watchDeath, WORK_FROM_HOUR, WORK_TO_HOUR, writeJsonAtomic, writeState } from '@cursor-chrome/hh';
+import { SEARCH_HOURS_ENABLED, parkStaleWaiters, readMemory, storePath, watchDeath, WORK_FROM_HOUR, WORK_TO_HOUR, writeJsonAtomic, writeState } from '@cursor-chrome/hh';
 
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -276,7 +276,7 @@ async function onUpdate(update: Update): Promise<void> {
   await parkStaleWaiters();
   await writeState({ auto: true });
   const memory = await readMemory();
-  await send(message.chat.id, `Автопилот включён. Вакансии принесёт Chrome, пока открыта вкладка hh и включён автопилот расширения. С ${WORK_FROM_HOUR}:00 до ${WORK_TO_HOUR}:00 МСК, до ${memory.cap} откликов в день.`);
+  await send(message.chat.id, `Автопилот включён. Вакансии принесёт Chrome, пока открыта вкладка hh и включён автопилот расширения. ${SEARCH_HOURS_ENABLED ? `С ${WORK_FROM_HOUR}:00 до ${WORK_TO_HOUR}:00 МСК, д` : 'Д'}о ${memory.cap} откликов в день.`);
 }
 
 export function startAutopilot(): void {

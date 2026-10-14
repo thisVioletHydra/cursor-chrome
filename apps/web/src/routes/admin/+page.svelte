@@ -15,6 +15,7 @@ let restarting = $state(false);
 let restartNote = $state('');
 let restartOk = $state(false);
 let hoursOn = $state(data.hours !== false);
+const hoursShown = $derived(data.hoursShown === true);
 let hoursSaving = $state(false);
 let hoursNote = $state('');
 let hoursOk = $state(false);
@@ -619,7 +620,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
   <div class="flex items-center justify-between gap-3 {allGreen ? 'lg:contents' : ''}">
     <div class="flex min-w-0 items-baseline gap-3 {allGreen ? 'lg:contents' : ''}">
       <h2 class="shrink-0 text-base font-semibold">До старта</h2>
-      {#if allGreen}
+      {#if allGreen && hoursShown}
         <p class="shrink-0 text-xs whitespace-nowrap text-zinc-500">С 9:00 до 22:00 МСК.</p>
       {/if}
     </div>
@@ -965,6 +966,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
       <p class="text-xs text-zinc-500">{stats.autopilot.lastNote}</p>
     {/if}
   </div>
+  {#if hoursShown}
   <form
     class="mb-4 max-w-xl rounded-2xl border border-white/8 bg-[#151922] px-5 py-4"
     method="POST"
@@ -1018,4 +1020,5 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
       {/if}
     </div>
   </form>
+  {/if}
 </section>

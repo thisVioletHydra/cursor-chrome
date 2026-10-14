@@ -1,6 +1,6 @@
 import type { PassedNote, PassedRow } from './seen-db.ts';
 
-import { SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from '../limits.ts';
+import { SEARCH_HOURS_ENABLED, SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from '../limits.ts';
 import { hidePhrase } from './hide-phrase.ts';
 import { clearLinks, deleteLinks, insertLinks, listLinks, lookupHeld } from './links-db.ts';
 import { bumpDay, claimRelook, clearSearchPages, countHidden, countPassed, countSeen, forgetPassed, insertHidden, insertSeen, listPassed, lookupBasket, lookupSeen, lookupShelved, openStore, readDay, readSearchPages, savePassed, storePath, writeDay, writeSearchPage } from './seen-db.ts';
@@ -156,7 +156,10 @@ export function moscowHour(now = new Date()): number {
   return Number(text);
 }
 
-export function workHours(now = new Date()): boolean {
+export function workHours(now = new Date(), enabled = SEARCH_HOURS_ENABLED): boolean {
+  if (enabled === false)
+    return true;
+
   const hour = moscowHour(now);
 
   return hour >= WORK_FROM_HOUR && hour < WORK_TO_HOUR;
