@@ -63,7 +63,6 @@ function guestShell() {
     resumeId: '',
     hhQuery: '',
     hasExtToken: false,
-    extToken: '',
     coverLetter: '',
     ready: {
       telegram: false,
@@ -165,7 +164,6 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
     resumeId: preview ? '' : account.hhResumeId,
     hhQuery: preview ? '' : (account.hhQuery || DEFAULT_QUERY),
     hasExtToken: preview ? false : account.extToken.length > 0,
-    extToken: preview ? '' : account.extToken,
     coverLetter: preview ? '' : (account.coverLetter || COVER_LETTER),
     ready: {
       telegram: preview ? false : telegram?.ok === true,

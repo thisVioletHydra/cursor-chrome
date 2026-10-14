@@ -5,8 +5,32 @@ import Mark from '$lib/Mark.svelte';
 
 let { data } = $props();
 let issued = $state('');
-const token = $derived(issued || data.extToken || '');
+let fetched = $state('');
+let loading = $state(false);
+let failed = $state('');
+const token = $derived(issued || fetched);
+const has = $derived(token.length > 0 || data.hasExtToken === true);
 const connectLink = $derived(token.length > 0 ? `${data.origin}/connect#${token}` : '');
+
+// The token is not part of the page; fetch it only when the user asks for the link.
+async function reveal() {
+  loading = true;
+  failed = '';
+  try {
+    const res = await fetch('/admin/ext-token', { method: 'POST', headers: { accept: 'application/json' }, cache: 'no-store', credentials: 'same-origin' });
+    const body = res.ok ? await res.json() : null;
+    if (typeof body?.token === 'string' && body.token.length > 0)
+      fetched = body.token;
+    else
+      failed = 'Не удалось получить ссылку.';
+  }
+  catch {
+    failed = 'Не удалось получить ссылку.';
+  }
+  finally {
+    loading = false;
+  }
+}
 
 const live = [
   { title: 'Поиск', text: 'Перед очередью читает выдачу hh.ru в этом Chrome и отдаёт карточки серверу. Сервер только оценивает и кладёт в очередь. С закрытой крышкой новые вакансии не приходят.' },
@@ -44,6 +68,10 @@ const later = [
       <p class="min-w-0 flex-1 truncate rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-sm text-zinc-100" title={connectLink}>{connectLink}</p>
       <Mark copy icon text={connectLink} />
     </div>
+  {:else if has}
+    <p class="mt-2 text-sm text-zinc-400">Ссылка выпущена. Покажи её, скопируй в попап расширения и нажми «Подключить».</p>
+    <button class="btn btn-primary mt-4 h-11 min-h-11 px-4" type="button" disabled={loading} onclick={reveal}>{loading ? 'Получаю…' : 'Показать ссылку подключения'}</button>
+    {#if failed}<p class="mt-2 text-xs text-red-400">{failed}</p>{/if}
   {:else}
     <p class="mt-2 text-sm text-zinc-400">Ссылки ещё нет. Выпусти её и вставь в попап расширения.</p>
   {/if}
@@ -62,9 +90,9 @@ const later = [
     }}
   >
     <button class="btn btn-ghost h-11 min-h-11 px-4" type="submit">
-      {token.length > 0 ? 'Новая ссылка' : 'Выпустить ссылку'}
+      {has ? 'Новая ссылка' : 'Выпустить ссылку'}
     </button>
-    {#if token.length > 0}
+    {#if has}
       <p class="mt-2 text-xs text-zinc-500">Старая сразу перестанет подходить. В попапе придётся вставить новую.</p>
     {/if}
   </form>

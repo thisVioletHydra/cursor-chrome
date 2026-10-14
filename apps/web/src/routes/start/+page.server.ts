@@ -6,13 +6,13 @@ import { chainOf, ensureAccount, isCreator, readAccount, withChain, writeAccount
 import { githubLogin, readSession } from '$lib/server/session';
 import { weekOpen } from '$lib/server/week';
 
-export const load: PageServerLoad = async ({ cookies, url }) => {
+export const load: PageServerLoad = async ({ cookies }) => {
   const session = readSession(cookies.get('session'));
   if (session === null || githubLogin(session.login) === false)
     redirect(303, '/');
 
   if (isCreator(session.login))
-    return { demo: true, login: session.login, weekOpen: false, hasKey: false, connectUrl: '', spent: false };
+    return { demo: true, login: session.login, weekOpen: false, hasKey: false, hasExtToken: false, spent: false };
 
   const account = await ensureAccount(session.login);
   const open = weekOpen(session.login, account);
@@ -22,7 +22,7 @@ export const load: PageServerLoad = async ({ cookies, url }) => {
     login: session.login,
     weekOpen: open,
     hasKey: chainOf(account).length > 0,
-    connectUrl: account.extToken.length > 0 ? `${url.origin}/connect#${account.extToken}` : '',
+    hasExtToken: account.extToken.length > 0,
     spent: account.weekAt > 0 && open === false,
   };
 };
