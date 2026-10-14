@@ -10,7 +10,7 @@ test('bypass works on the dev server for local hosts only', () => {
     assert.equal(devBypass({ ...base, hostname }), true, hostname);
 
   assert.equal(devBypass({ ...base, hostname: 'example.com' }), false);
-  assert.equal(devBypass({ ...base, hostname: 'web-production-f8ad5.up.railway.app' }), false);
+  assert.equal(devBypass({ ...base, hostname: 'nojobnoproblem.up.railway.app' }), false);
 });
 
 test('bypass is off without the flag or in production', () => {

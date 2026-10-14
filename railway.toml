@@ -1,5 +1,5 @@
 [build]
-buildCommand = "pnpm install --frozen-lockfile && pnpm --filter @cursor-chrome/web build"
+buildCommand = "pnpm install --frozen-lockfile && pnpm --filter @cursor-chrome/extension build && pnpm --filter @cursor-chrome/web build"
 
 [deploy]
 startCommand = "node apps/web/ext-link.mjs"

@@ -10,7 +10,8 @@
     "dev": "pnpm --filter @cursor-chrome/mcp start",
     "install-host": "pnpm --filter @cursor-chrome/native-host run install-host",
     "lint": "oxlint .",
-    "lint:fix": "oxlint --fix ."
+    "lint:fix": "oxlint --fix .",
+    "sync-facts": "pnpm --filter @cursor-chrome/hh sync-facts"
   },
   "devDependencies": {
     "@oxyhub/oxlint-plugin": "^0.3.1",
