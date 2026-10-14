@@ -1,22 +1,21 @@
-// DEMO_TOKEN_LOGIN — temporary demo login by access token, bypassing GitHub. Remove this file to cut it out.
+// DEMO_TOKEN_LOGIN: token login for vasya-pupkin only (see $lib/server/demo). POST from the login form; the token never goes into a URL.
 import type { RequestHandler } from './$types';
 
 import { error, redirect } from '@sveltejs/kit';
-import { accessStore, demoLoginAllowed } from '$lib/server/access';
+import { accessStore } from '$lib/server/access';
+import { demoLoginFor, demoToken } from '$lib/server/demo';
 import { readProfile } from '$lib/server/profile';
-import { githubLogin, signSession } from '$lib/server/session';
+import { signSession } from '$lib/server/session';
 
-import process from 'node:process';
-
-export const GET: RequestHandler = async ({ url, cookies }) => {
-  if (process.env.DEMO_TOKEN_LOGIN !== '1' || process.env.RAILWAY_ENVIRONMENT)
+export const POST: RequestHandler = async ({ request, url, cookies }) => {
+  if (!demoToken())
     error(404, 'нет');
 
-  const login = accessStore().loginOf(url.searchParams.get('token') ?? '');
-  // only demo accounts, never the owner
-  if (demoLoginAllowed(process.env, login) === false || githubLogin(login ?? '') === false)
-    error(403, 'токен не подходит для демо-входа');
+  const form = await request.formData().catch(() => null);
+  const login = demoLoginFor(accessStore(), String(form?.get('token') ?? ''));
+  if (login === null)
+    redirect(303, '/?token=bad');
 
-  cookies.set('session', signSession(login!), { path: '/', httpOnly: true, sameSite: 'lax', secure: url.protocol === 'https:' });
-  redirect(303, (await readProfile(login!)) === null ? '/admin/profile?first=1' : '/admin');
+  cookies.set('session', signSession(login), { path: '/', httpOnly: true, sameSite: 'lax', secure: url.protocol === 'https:' });
+  redirect(303, (await readProfile(login)) === null ? '/admin/profile?first=1' : '/admin');
 };

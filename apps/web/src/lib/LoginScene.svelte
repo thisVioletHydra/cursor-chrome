@@ -2,7 +2,10 @@
 import { goto } from '$app/navigation';
 import { onMount } from 'svelte';
 
-let { authenticated = false, demo = false, expired = false, blocked = false, demoVersion = '' }: {
+let { authenticated = false, demo = false, expired = false, blocked = false, demoVersion = '', build = '', tokenLogin = false, tokenBad = false }: {
+  build?: string;
+  tokenLogin?: boolean;
+  tokenBad?: boolean;
   authenticated?: boolean;
   demo?: boolean;
   expired?: boolean;
@@ -56,7 +59,7 @@ onMount(() => {
 </script>
 
 <svelte:head>
-  <title>{demo ? 'Демо входа' : 'Вход'} · Cursor Chrome</title>
+  <title>{demo ? 'Демо входа' : 'Вход'} · NoJobNoProblemBuddy</title>
   <meta name="theme-color" content="#0b0d12" />
   <link rel="preload" as="image" href="/start-land.jpg" />
 </svelte:head>
@@ -64,7 +67,7 @@ onMount(() => {
 <main class="login-scene" class:entering class:arrived>
   <div class="landscape" aria-hidden="true"></div>
   <div class="shade" aria-hidden="true"></div>
-  <div class="brand">cursor<span>chrome</span><i aria-hidden="true"></i></div>
+  <div class="brand" data-testid="brand">NoJobNoProblem<span>Buddy</span><i aria-hidden="true"></i>{#if build}<small class="build" data-testid="build">{build}</small>{/if}</div>
 
   {#if demo}
     <div class="demo-label">Локальная демка <span class="demo-version">{demoVersion}</span></div>
@@ -87,11 +90,23 @@ onMount(() => {
       <span class="entry-label">{authenticated ? 'Добро пожаловать' : signingIn ? 'Переходим в GitHub…' : 'Войти через GitHub'}</span>
       <span class="entry-arrow" aria-hidden="true">↗</span>
     </a>
+    {#if tokenLogin}
+    <form class="token-entry" method="POST" action="/auth/demo" data-testid="token-login">
+      <label for="token">Вход по токену</label>
+      <div class="token-row">
+        <input id="token" name="token" autocomplete="off" spellcheck="false" placeholder="токен доступа" type="password" />
+        <button type="submit">Войти</button>
+      </div>
+      {#if tokenBad}
+        <p class="token-hint bad" role="alert">Токен не подошёл.</p>
+      {/if}
+    </form>
+    {/if}
   </div>
 
   <section class="admin-preview" aria-hidden={!arrived} inert={!arrived}>
     <aside>
-      <span class="preview-brand">cursor chrome</span>
+      <span class="preview-brand">NoJobNoProblemBuddy</span>
       <nav aria-label="Предпросмотр админки">
         {#each navigation as label, index}
           <span class:active={index === 0}>{label}</span>
@@ -119,6 +134,13 @@ onMount(() => {
   .brand { position: absolute; top: 32px; left: 40px; display: flex; align-items: center; gap: 5px; font-size: 15px; font-weight: 600; letter-spacing: -.5px; color: #dedfd9; transition: opacity .35s; }
   .brand span { font-weight: 400; color: #878b88; }
   .brand i { width: 5px; height: 5px; margin-left: 5px; border-radius: 50%; background: #c9d992; }
+  .build { margin-left: 10px; font-family: monospace; font-size: 11px; font-weight: 400; letter-spacing: 0; color: #7d8490; }
+  .token-entry { position: absolute; top: calc(50% + 150px); display: grid; gap: 8px; width: min(340px, calc(100vw - 48px)); font-size: 12px; color: #aab0a6; }
+  .token-row { display: flex; gap: 8px; }
+  .token-row input { flex: 1; min-width: 0; padding: 9px 11px; border: 1px solid #c4ce9138; border-radius: 10px; background: #151a18e8; color: #e9edca; font: 12px monospace; }
+  .token-row button { padding: 9px 14px; border: 1px solid #c4ce9150; border-radius: 10px; background: #252a21; color: #e9edca; font: inherit; cursor: pointer; }
+  .token-hint { margin: 0; line-height: 1.5; color: #8e958d; word-break: break-all; }
+  .token-hint.bad { color: #f0a0a0; }
   .demo-label { position: absolute; top: 34px; right: 40px; z-index: 4; font-size: 12px; color: #959c99; }
   .demo-version { display: block; margin-top: 5px; font-family: monospace; font-size: 10px; text-align: right; color: #7d8490; }
   .entry { position: relative; display: grid; place-items: center; min-height: 100dvh; padding-bottom: 160px; box-sizing: border-box; transition: opacity .4s ease, transform .8s cubic-bezier(.22,1,.36,1); }

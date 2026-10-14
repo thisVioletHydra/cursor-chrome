@@ -1,15 +1,23 @@
 # Демо: вход под «Вася Пупкин» (DEMO_TOKEN_LOGIN)
 
-Временный вход по токену в обход GitHub. Весь код помечен `DEMO_TOKEN_LOGIN`; вырезать: `apps/web/src/routes/auth/demo/`, блок `DEMO_*` в `apps/web/src/lib/server/access.ts`, `local-debug/demo-vasya.sh`, этот файл.
-Аккаунт Романа не участвует: демо-сервер работает на пустой папке `/tmp/vasya-demo` и порту 5181, а не на local-debug/data.
+Вход по токену рядом с GitHub. Пускает **только** `vasya-pupkin`: токен Романа и любой другой не подходит (тесты `apps/web/demo-login.test.mjs`).
+Код: `apps/web/src/lib/server/demo.ts`, `apps/web/src/routes/auth/demo/+server.ts` (POST), форма в `apps/web/src/lib/LoginScene.svelte`.
 
-1. Запустить демо-сервер:
-   `screen -dmS vasya-demo sh -c './local-debug/demo-vasya.sh > /tmp/vasya-demo.log 2>&1'` и открыть http://localhost:5181.
-2. Выдать Васе токен (печатается один раз, в БД только хэш):
-   `ACCESS_DB=/tmp/vasya-demo/access.sqlite node local-debug/access-token.mjs issue vasya-pupkin "Вася Пупкин"`
-3. Админка: открыть `http://localhost:5181/auth/demo?token=<токен>`. Профиль пустой, поэтому откроется анкета `/admin/profile?first=1`. Debug-панель доступа: `/admin/access`.
-4. Расширение: собрать в `apps/extension/dist-local` (см. отчёт), в Chrome на чистом профиле: chrome://extensions → режим разработчика → «Загрузить распакованное» → `dist-local`. Открыть «Параметры» расширения.
-   Вкладка Profile — анкета; вкладка Debug — вставить токен, «Save & check». Чтобы расширение знало сервер: в консоли страницы параметров `chrome.storage.local.set({ applySyncUrl: 'http://localhost:5181' })`.
-5. Debug показывает: deviceId, каждый признак (сырое значение — только локально, хэш — уходит), скор и причину, слот, пропуск на 4 часа, тело последнего запроса без ключей, что осталось локально, лог.
-6. Управление: `node local-debug/access-token.mjs list | revoke <id> | unbind <id> <slot>` (с тем же ACCESS_DB), либо кнопка Unbind в `/admin/access`.
-7. Остановить: `screen -S vasya-demo -X quit`. Данные демо: `/tmp/vasya-demo`.
+- Включение: `DEMO_TOKEN_LOGIN=1` + `DEMO_LOGIN_TOKEN=<значение>`. Сервер сравнивает ввод с env через `timingSafeEqual`; в access DB только sha256, привязанный к vasya-pupkin.
+- Токен **не показывается** на странице, не печатается и не пишется в логи.
+- У Васи своя пустая база `tenants/vasya-pupkin`, лимиты 30/мин и 300/день, наш LLM-ключ не используется (только BYOK / ключи из его цепочки).
+
+## Локально
+
+1. Запуск (пустая папка `/tmp/vasya-demo`, порт 5181):
+   `screen -dmS vasya-demo sh -c './local-debug/demo-vasya.sh > /tmp/vasya-demo.log 2>&1'`
+   Если `DEMO_LOGIN_TOKEN` не задан, скрипт сам создаёт случайный в `/tmp/vasya-demo/demo-token` (права 600) и ничего не печатает.
+2. Открыть http://localhost:5181, в поле «Вход по токену» вставить значение (например `pbcopy < /tmp/vasya-demo/demo-token`, затем Cmd+V) → «Войти».
+   Это POST `/auth/demo`; в URL токен не попадает. Неверный токен → `/?token=bad`.
+3. Первый вход открывает анкету `/admin/profile?first=1`. Ключ модели: «Модель» → мастер «ключ xAI Grok» → «В цепочку».
+4. Расширение: собрать `apps/extension/dist-local`, загрузить распакованным в чистом профиле; сервер: `chrome.storage.local.set({ applySyncUrl: 'http://localhost:5181' })`.
+5. Остановить: `screen -S vasya-demo -X quit`. Данные демо: `/tmp/vasya-demo`.
+
+## Прод
+
+Переменные `DEMO_TOKEN_LOGIN=1` и `DEMO_LOGIN_TOKEN` задаются в Railway → Variables. Значение передаётся Роману отдельно, в репозиторий и логи не попадает.
