@@ -1,4 +1,5 @@
 import { browser } from '../browser-host';
+import { migrateOldDomain } from '../local/domain-move.ts';
 import { readGate } from '../local/link-gate';
 import { vacancyIdFromUrl } from './history-view';
 
@@ -330,6 +331,9 @@ async function readStoredSync(): Promise<StoredSync> {
 }
 
 async function healStoredSync(): Promise<StoredSync> {
+  // dead old Railway domain in storage → new host (only the URL fields; token untouched)
+  if (browser.storage?.local !== undefined)
+    await migrateOldDomain(browser.storage.local as never).catch(() => []);
   const current = await readStoredSync();
   const parts = connectLinkParts(current.url);
   if (parts === null)
