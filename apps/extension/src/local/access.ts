@@ -2,8 +2,6 @@
 import type { StorageArea } from './store.ts';
 import type { RawSignals } from './fingerprint.ts';
 
-import { hashSignals } from './fingerprint.ts';
-
 export const ACCESS_KEY = 'access:v1';
 export const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;
 
@@ -40,13 +38,13 @@ export function needsCheck(state: AccessState, now = Date.now()): boolean {
   return state.token.length > 0 && (state.pass.length === 0 || state.passExpires - now < 5 * 60_000 || (state.last?.at ?? 0) + CHECK_EVERY_MS <= now);
 }
 
-// Full check: sends only signal hashes (no raw values, no token in the body; token in the header).
+// Full check: sends raw signals; the server normalizes, hashes and scores them (token only in the header).
 export async function checkIn(area: StorageArea, base: string, raw: RawSignals, fetcher: typeof fetch = fetch, now = Date.now()): Promise<AccessState> {
   const state = await loadAccess(area);
   if (!state.token || !base)
     return state;
 
-  const sent = { signals: await hashSignals(raw) };
+  const sent = { raw };
   let status = 0;
   let body: Record<string, unknown> = {};
   try {

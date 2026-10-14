@@ -597,3 +597,6 @@ body {
 @media (prefers-color-scheme: light) {
   :root { color-scheme: dark; }
 }
+
+.cc-update { margin: 6px 0; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(251, 191, 36, .45); background: rgba(251, 191, 36, .12); color: #fde68a; font-size: 12px; }
+.cc-update a { color: #fde68a; margin-left: 4px; text-decoration: underline; }

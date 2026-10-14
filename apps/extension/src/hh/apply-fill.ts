@@ -7,9 +7,11 @@ import { ask } from './bridge';
 import { compact, pause, until, visible } from './dom';
 import { coverLetter } from './letter';
 import { localStore } from '../local/chrome-store';
-import { decideWithIndex, FULL_LOOKUP } from '../local/fill-decision';
-import { browser } from '../browser-host';
+import { standardValue, valueRe } from '../local/standard-fill';
+import type { StandardKind } from '../local/standard-fill';
 import { noteLive } from './live-log';
+import { BUILTIN, cachedConfig, selector } from '../local/config-cache';
+import { browser } from '../browser-host';
 import { pickResume, resumeKind, vacancyBody, vacancyTitle } from './resume';
 import { applyRoot, employerQuestionnaire, isCoverLetter, isStandardQuestion, promptFields } from './screen-questions';
 
@@ -32,13 +34,23 @@ const KIND_RE: Array<[QuestionKind, RegExp]> = [
   ['citizen', /гражданств/i],
 ];
 
+// city / pay / citizenship: values from the user's profile (local data); empty → «нужен твой ответ»
+async function fromProfile(kind: StandardKind, block: HTMLElement): Promise<boolean> {
+  const local = await localStore.loadIndexed().catch(() => null);
+  const value = standardValue(kind, local?.data.profile ?? null, { title: vacancyTitle() });
+  if (!value)
+    return false;
+
+  return typeOrClick(block, value, valueRe(value));
+}
+
 const FILL: Record<QuestionKind, (block: HTMLElement) => Promise<boolean>> = {
-  city: block => typeOrClick(block, 'Бишкек', /бишкек/i),
-  pay: block => typeOrClick(block, 'по рынку', /рынк|договорён|договорен/i),
+  city: block => fromProfile('city', block),
+  pay: block => fromProfile('pay', block),
   ip: block => clickChoice(block, /^(да|yes)\b/i),
   open: block => clickChoice(block, /^(да|yes)\b/i),
   schedule: block => clickChoice(block, /удал|remote|дистанц|гибк/i),
-  citizen: block => typeOrClick(block, 'Кыргызстан', /кыргыз|киргиз/i).then(ok => ok || clickChoice(block, /^(нет|no)\b/i)),
+  citizen: block => fromProfile('citizen', block),
 };
 
 type CloudQuestion = {
@@ -48,7 +60,7 @@ type CloudQuestion = {
   options: string[];
 };
 
-type CloudAnswer = { answer?: string; human?: boolean; reason?: string };
+type CloudAnswer = { answer?: string; human?: boolean; reason?: string; source?: string };
 
 const CUSTOM_REASON = 'свои вопросы HH';
 const FIELD_SEL = 'textarea, input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]):not([type="file"]):not([type="submit"])';
@@ -65,6 +77,9 @@ export async function fillApply(): Promise<FillFail | null> {
   const kind = resumeKind(vacancyTitle(), vacancyBody());
   noteLive(`apply-fill.ts · резюме ${kind}`);
   await pickResume(kind);
+
+  if ((await coverLetter()).length === 0)
+    return humanFail('нужен твой ответ: сопроводительное письмо не задано в профиле', []);
 
   const letterOk = await insertLetter();
   const mid = captchaFail();
@@ -93,7 +108,7 @@ async function fillQuestions(): Promise<FillFail | null> {
         if (blocked)
           return blocked;
 
-        return humanFail(`не заполнил: ${row.prompt}`, [row.prompt]);
+        return humanFail(`нужен твой ответ: ${row.prompt}`, [row.prompt]);
       }
 
       continue;
@@ -127,34 +142,31 @@ function coveredBy(reason: string, hints: string[], answered: string[]): boolean
   });
 }
 
-const SKILL_JUNK = /(?:^|[^\p{L}\p{N}])(?:php|bitrix|битрикс|1с|1c)(?=$|[^\p{L}\p{N}])|react\s*native/iu;
+// selectors / dictionaries from the server config (last valid cached), built-in defaults until it loads
+let remote = BUILTIN;
+void cachedConfig({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>>, set: items => browser.storage.local.set(items) }).then((config) => { remote = config; }).catch(() => null);
+
+const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*');
+function skillJunk(prompt: string): boolean {
+  const words = remote.dictionaries.skillJunk ?? BUILTIN.dictionaries.skillJunk;
+
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}])(?:${words.map(escapeRe).join('|')})(?=$|[^\\p{L}\\p{N}])`, 'iu').test(prompt);
+}
 
 async function fillByCloud(prompt: string, block: HTMLElement): Promise<FillFail | null> {
-  if (SKILL_JUNK.test(prompt))
+  if (skillJunk(prompt))
     return { ok: false, status: 'skip', reason: `не наше: ${prompt}`, hints: [prompt] };
 
   const question = describeField(prompt, block);
   if (question === null)
     return humanFail(`поле не разобрал: ${prompt}`, [prompt]);
 
-  // local data first (chrome.storage); filling only, never submitting
-  // index in chrome.storage first; misses → background reads full memory from IndexedDB
-  const local = await decideWithIndex(question, await localStore.loadIndexed().catch(() => null), { title: vacancyTitle() },
-    (q, vacancy) => browser.runtime.sendMessage({ type: FULL_LOOKUP, question: q, vacancy }));
-  if (local.use === 'human')
-    return humanFail(local.reason, [prompt]);
-
-  let answer: string | undefined;
-  if (local.use === 'local') {
-    noteLive(`apply-fill.ts · локально (${local.source}, ${local.via}): ${prompt}`);
-    answer = local.answer;
-  }
-  else {
-    const reply = await ask<CloudAnswer>({ type: 'answer-question', ...question });
-    answer = reply?.answer;
-    if (typeof answer !== 'string' || answer.length === 0)
-      return humanFail(`${prompt}: ${reply?.reason || 'нет ответа'}`, [prompt]);
-  }
+  // thin client: the server decides (rule → profile → human edit → memory → LLM); we only fill, never submit
+  const reply = await ask<CloudAnswer>({ type: 'answer-question', ...question, vacancyTitle: vacancyTitle() });
+  const answer = reply?.answer;
+  if (typeof answer !== 'string' || answer.length === 0)
+    return humanFail(`${prompt}: ${reply?.reason || 'нет ответа'}`, [prompt]);
+  noteLive(`apply-fill.ts · сервер (${reply?.source ?? '?'}): ${prompt}`);
 
   const ok = question.kind === 'choice'
     ? clickChoice(block, exactRe(answer))
@@ -244,11 +256,7 @@ async function openLetter(): Promise<void> {
 }
 
 function letterField(): HTMLElement | null {
-  const named = document.querySelector<HTMLElement>([
-    'textarea[data-qa*="letter"]',
-    'textarea[name*="letter"]',
-    '[data-qa*="letter"] textarea',
-  ].join(','));
+  const named = document.querySelector<HTMLElement>([selector(remote, 'letterField'), 'textarea[name*="letter"]'].join(','));
   if (named && visible(named))
     return named;
 
@@ -257,7 +265,7 @@ function letterField(): HTMLElement | null {
 }
 
 function letterToggle(): HTMLElement | null {
-  const qa = document.querySelector<HTMLElement>('[data-qa="vacancy-response-letter-toggle"], [data-qa*="letter-toggle"]');
+  const qa = document.querySelector<HTMLElement>(selector(remote, 'letterToggle'));
   if (qa && visible(qa))
     return qa;
 

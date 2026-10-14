@@ -6,7 +6,7 @@ import { localStore } from './chrome-store.ts';
 import { collectRaw } from './fingerprint.ts';
 import { importFromServer } from './server-import.ts';
 import { installPassHeader } from './pass-header.ts';
-import { decideFill, FULL_LOOKUP } from './fill-decision.ts';
+import { refreshConfig } from './config-cache.ts';
 
 const ACCESS_ALARM = 'cc-access-check';
 
@@ -37,16 +37,14 @@ async function accessTick(): Promise<void> {
 }
 
 export function startLocalHooks(): void {
-  installPassHeader(area, base, listener => browser.storage.onChanged.addListener(listener));
+  const version = browser.runtime.getManifest().version;
+  installPassHeader(area, base, listener => browser.storage.onChanged.addListener(listener), version);
   void localStore.migrate().catch(() => null);
-  // full lookup for content scripts: memory rows from IndexedDB (extension origin)
-  browser.runtime.onMessage.addListener((message: { type?: string; question?: never; vacancy?: never }, _sender, reply) => {
-    if (message?.type !== FULL_LOOKUP || !message.question)
-      return false;
-
-    void localStore.load().then(data => reply(decideFill(message.question!, data, message.vacancy ?? {}))).catch(() => reply(null));
-
-    return true;
+  // remote config (selectors, dictionaries, rule order): cached, last valid one wins
+  void base().then(origin => refreshConfig(area, origin, version)).catch(() => null);
+  browser.storage.onChanged.addListener((changes) => {
+    if ('applySyncUrl' in changes)
+      void base().then(origin => refreshConfig(area, origin, version)).catch(() => null);
   });
   void importFromServer(localStore, '', '').then(async (first) => {
     if (first.reason !== 'локальные данные уже есть')
@@ -54,8 +52,10 @@ export function startLocalHooks(): void {
   }).catch(() => null);
   void browser.alarms.create(ACCESS_ALARM, { periodInMinutes: CHECK_EVERY_MS / 60_000 });
   browser.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === ACCESS_ALARM)
+    if (alarm.name === ACCESS_ALARM) {
       void accessTick();
+      void base().then(origin => refreshConfig(area, origin, version)).catch(() => null);
+    }
   });
   browser.runtime.onStartup.addListener(() => void accessTick());
   void accessTick();

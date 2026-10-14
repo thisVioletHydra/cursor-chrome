@@ -1,6 +1,5 @@
 import { checkIn, loadAccess, needsCheck } from './src/local/access.ts';
-import { localAnswer } from './src/local/answer.ts';
-import { gpuChip, hashSignals } from './src/local/fingerprint.ts';
+import { contextFor } from './src/local/thin-answer.ts';
 import { emptyData, exportLocalData, parseLocalData } from './src/local/schema.ts';
 import { importFromServer } from './src/local/server-import.ts';
 import { createLocalStore, DATA_KEY, MEMORY_INLINE_MAX } from './src/local/store.ts';
@@ -43,7 +42,6 @@ const FAKE_ACCOUNT = {
 };
 const account = () => JSON.parse(JSON.stringify(FAKE_ACCOUNT));
 
-const q = (prompt, extra = {}) => ({ prompt, kind: 'text', options: [], choices: [], multi: false, required: false, fieldKey: '', ...extra });
 
 test('server account → local data: profile, facts, canonSeed→rules, letter; keys dropped', () => {
   const raw = { ...account(), mistralApiKey: 'sk-test', openaiKey: 'x', modelChain: 'mistral:abc' };
@@ -111,34 +109,8 @@ test('first-run server import fills an empty store and never overwrites local da
   assert.equal(JSON.stringify(area.bag).includes('sk-x'), false);
 });
 
-test('answers come from local data: rule → profile → human → memory; personal never to LLM', () => {
-  const data = parseLocalData(account()).data;
-  data.memory = [
-    { key: 'a', prompt: 'Сколько лет опыта с Vue?', answer: '3 года' },
-    { key: 'b', prompt: 'Сколько лет опыта с Vue?', answer: '5 лет', human: true },
-  ];
-  const rule = localAnswer(q('Ссылка на GitHub с примерами кода'), data);
-  assert.equal(rule.kind, 'answer'); assert.equal(rule.source, 'rule'); assert.match(rule.answer, /example\.com\/portfolio/);
-  const pay = localAnswer(q('Укажите сумму зарплатных ожиданий цифрами'), data);
-  assert.equal(pay.source, 'profile'); assert.equal(pay.answer, '100000');
-  const city = localAnswer(q('В каком городе вы проживаете?'), data, { city: 'Москва' });
-  assert.equal(city.answer, 'Москва');
-  assert.equal(localAnswer(q('В каком городе вы проживаете?'), data, { city: 'Казань' }).answer, 'Тестоград');
-  const vue = localAnswer(q('Сколько лет опыта с Vue?'), data);
-  assert.equal(vue.source, 'human'); assert.equal(vue.answer, '5 лет');
-  const empty = emptyData();
-  assert.equal(localAnswer(q('Ваше гражданство?'), empty).kind, 'need-human');
-  assert.equal(localAnswer(q('Опишите самый интересный проект'), empty).kind, 'ask-model');
-  // edit in local data changes the answer
-  data.profile.fields.salaryNumber = { mode: 'fixed', value: '300000' };
-  assert.equal(localAnswer(q('Укажите сумму зарплатных ожиданий цифрами'), data).answer, '300000');
-});
-
-test('fingerprint: gpu compared by chip, hashes only in the request body', async () => {
-  assert.equal(gpuChip('ANGLE (NVIDIA, NVIDIA GeForce RTX 4050 Laptop GPU Direct3D11 vs_5_0 ps_5_0, D3D11)'), 'nvidia rtx 4050');
-  assert.equal(gpuChip('ANGLE (NVIDIA, NVIDIA GeForce RTX 4050 Laptop GPU (0x000028E1) Direct3D11 vs_5_0 ps_5_0, D3D11-31.0.15.5222)'), 'nvidia rtx 4050');
-  assert.equal(gpuChip('ANGLE (Apple, ANGLE Metal Renderer: Apple M2 Pro, Unspecified Version)'), 'apple m2 pro');
-  const raw = { deviceId: 'dev-1', gpu: 'nvidia rtx 4050', os: 'macOS', fonts: 'Arial', screen: '1920x1080@2', cores: '8', memory: '8', timezone: 'Asia/Bishkek', language: 'ru-RU' };
+test('fingerprint: thin client sends raw signals (server hashes), token only in the header', async () => {
+  const raw = { deviceId: 'dev-1', gpu: 'nvidia rtx 4050', os: 'macOS', fonts: 'Arial', screen: '1920x1080@2', cores: '8', memory: '8', timezone: 'Etc/Test', language: 'ru-RU' };
   const area = mockArea();
   const state = await loadAccess(area);
   assert.match(state.deviceId, /^[0-9a-f-]{36}$/);
@@ -151,21 +123,8 @@ test('fingerprint: gpu compared by chip, hashes only in the request body', async
   assert.equal(after.pass, 'ccp_1');
   assert.equal(needsCheck(after), false);
   assert.equal(sent.body.includes('cct_secret'), false);
-  assert.equal(sent.body.includes('Asia/Bishkek'), false);
-  assert.deepEqual(JSON.parse(sent.body).signals, await hashSignals(raw));
-});
-
-test('apply-fill decision: local first, personal without data → нужен твой ответ, else cloud; no data → legacy cloud', async () => {
-  const { decideFill } = await import('./src/local/fill-decision.ts');
-  const data = parseLocalData(account()).data;
-  const fq = (prompt, kind = 'text', options = []) => ({ prompt, kind, options });
-  assert.equal(decideFill(fq('Укажите сумму зарплатных ожиданий цифрами', 'number'), data).answer, '100000');
-  assert.equal(decideFill(fq('Готовы выполнить тестовое задание?', 'choice', ['Да', 'Нет']), data).answer, 'Да');
-  const empty = emptyData();
-  const human = decideFill(fq('Ваше гражданство?'), empty);
-  assert.equal(human.use, 'human'); assert.match(human.reason, /нужен твой ответ/);
-  assert.equal(decideFill(fq('Опишите самый интересный проект'), empty).use, 'cloud');
-  assert.equal(decideFill(fq('Ваше гражданство?'), null).use, 'cloud');
+  assert.deepEqual(JSON.parse(sent.body), { raw });
+  assert.equal(new Headers(sent.headers).get('authorization'), 'Bearer cct_secret');
 });
 
 test('pass header: only our /api/* (not /api/access/*), only with a pass', async () => {
@@ -217,8 +176,7 @@ test('migration v1-idb (old big format) → v2-split: no loss', async () => {
   assert.equal(blob.bag.get('backup-5').length, 3000);
 });
 
-test('memory > 1 MB: apply-fill finds answers by index and via IndexedDB (background)', async () => {
-  const { decideFill, decideWithIndex } = await import('./src/local/fill-decision.ts');
+test('memory > 1 MB: index in storage, full rows in IndexedDB; the thin client finds candidates in both', async () => {
   const area = mockArea();
   const blob = mockBlob();
   const memory = [...bigMemory(4000), { key: 'vue', prompt: 'Сколько лет опыта с Vue?', answer: '5 лет', human: true }, { key: 'about', prompt: 'Опишите ваш подход к код-ревью', answer: `Смотрю сначала архитектуру. ${'Подробности. '.repeat(40)}` }];
@@ -229,14 +187,11 @@ test('memory > 1 MB: apply-fill finds answers by index and via IndexedDB (backgr
   const content = createLocalStore(area); // content script: no IndexedDB
   const indexed = await content.loadIndexed();
   assert.equal(indexed.hasLong, true);
-  let asked = 0;
-  const askFull = async (q, v) => { asked++; return decideFill(q, await full.load(), v); };
-  const short = await decideWithIndex({ prompt: 'Сколько лет опыта с Vue?', kind: 'text', options: [] }, indexed, {}, askFull);
-  assert.equal(short.via, 'index'); assert.equal(short.answer, '5 лет'); assert.equal(asked, 0);
-  const long = await decideWithIndex({ prompt: 'Опишите ваш подход к код-ревью', kind: 'text', options: [] }, indexed, {}, askFull);
-  assert.equal(long.via, 'idb'); assert.match(long.answer, /^Смотрю сначала/); assert.equal(asked, 1);
-  const none = await decideWithIndex({ prompt: 'Ваше гражданство?', kind: 'text', options: [] }, indexed, {}, askFull);
-  assert.equal(none.use, 'human');
+  const field = prompt => [{ prompt, kind: 'text', options: [] }];
+  assert.deepEqual(contextFor(field('Сколько лет опыта с Vue?'), indexed.data).memory.map(row => row.answer), ['5 лет']);
+  const long = contextFor(field('Опишите ваш подход к код-ревью'), await full.load()).memory;
+  assert.match(long[0].answer, /^Смотрю сначала/);
+  assert.equal(contextFor(field('Ваше гражданство?'), await full.load()).memory.length, 0);
 });
 
 test('export / import with the split schema: same data, no keys', async () => {

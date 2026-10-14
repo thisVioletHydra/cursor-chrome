@@ -22,3 +22,12 @@ footer { position:fixed; bottom:12px; right:24px; color:var(--ok); }
 footer.fail { color:var(--warn); }
 pre { white-space:pre-wrap; word-break:break-all; font-size:12px; color:var(--dim); margin:0; }
 table { width:100%; border-collapse:collapse; } td, th { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+
+.cc-update { margin: 8px 16px; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(251, 191, 36, .45); background: rgba(251, 191, 36, .12); color: #fde68a; font-size: 13px; }
+.cc-update a { color: #fde68a; margin-left: 6px; text-decoration: underline; }
+
+.wizard .steps { margin: 8px 0 10px 18px; padding: 0; color: #c9ccd3; font-size: 13px; line-height: 1.6; }
+.wizard .masked { min-width: 260px; font-family: ui-monospace, Menlo, monospace; letter-spacing: .5px; }
+.wizard .result { margin-top: 8px; font-size: 13px; }
+.wizard .result.ok { color: #6ee7b7; }
+.wizard .result.fail { color: #fda4af; }

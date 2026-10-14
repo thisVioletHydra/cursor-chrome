@@ -3,6 +3,8 @@ import { WORKER_KEY } from '../tab/worker-tab';
 import { labeledApplies, paintApplyGroup, readWaitingKey } from '../hh/history-list';
 import { openWorkerUrl, pinHere, refreshWorkerPanel } from './popup-pin';
 import { browser } from '../browser-host';
+import { bannerHtml, updateFlag } from '../local/version';
+import { getSyncUrl } from '../diary/apply-log';
 
 type ApplyRecord = {
   title: string;
@@ -1058,3 +1060,19 @@ void bootSettings().finally(() => {
   paintPower();
 });
 requestAnimationFrame(() => syncTabChip());
+
+// Outdated-version banner (flag set by the server's response headers).
+void (async () => {
+  const area = { get: (keys: string | string[]) => browser.storage.local.get(keys) as Promise<Record<string, unknown>>, set: (items: Record<string, unknown>) => browser.storage.local.set(items) };
+  let base = '';
+  try {
+    const url = new URL((await getSyncUrl()).trim());
+    base = `${url.protocol}//${url.host}`;
+  }
+  catch {
+    base = '';
+  }
+  const node = document.getElementById('cc-update');
+  if (node)
+    node.innerHTML = bannerHtml(await updateFlag(area), base);
+})();

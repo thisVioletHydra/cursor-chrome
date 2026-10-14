@@ -19,4 +19,5 @@ export default defineConfig([
   { ...shared, entry: { popup: 'src/popup/popup.ts' } },
   { ...shared, entry: { content: 'src/content.ts' } },
   { ...shared, entry: { options: 'src/options/options.ts' } },
+  { ...shared, entry: { coach: 'src/coach.ts' } },
 ]);

@@ -7,6 +7,12 @@ import { exportLocalData, parseLocalData } from '../local/schema.ts';
 import { importFromServer } from '../local/server-import.ts';
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 import { renderDebug } from './debug-tab.ts';
+import { browser } from '../browser-host';
+import { byokInfo, idbKeyStore, saveByok } from '../local/byok.ts';
+import { bannerHtml, updateFlag } from '../local/version.ts';
+import { maskKey, readClipboardKey, STEPS, testKey, validXaiKey, XAI_KEYS_URL } from '../local/key-wizard.ts';
+// provider ids the server accepts in x-llm-provider (server-side presets; no custom URLs from the client)
+const PRESETS = [{ id: 'xai', name: 'xAI Grok' }, { id: 'groq', name: 'Groq' }, { id: 'gemini', name: 'Gemini' }, { id: 'zai', name: 'Z.ai' }, { id: 'openrouter', name: 'OpenRouter' }, { id: 'cohere', name: 'Cohere' }, { id: 'deepseek', name: 'DeepSeek' }, { id: 'mistral', name: 'Mistral' }];
 
 type Tab = { id: string; label: string; render: (data: LocalData) => HTMLElement };
 
@@ -17,6 +23,7 @@ const TABS: Tab[] = [
   { id: 'rules', label: 'Rules', render: rulesTab },
   { id: 'letter', label: 'Cover letter', render: letterTab },
   { id: 'data', label: 'Export / import', render: dataTab },
+  { id: 'llm', label: 'LLM key', render: () => llmTab() },
   { id: 'debug', label: 'Debug', render: () => renderDebug() },
 ];
 
@@ -197,7 +204,116 @@ async function syncBaseOf(): Promise<string> {
   }
 }
 
+const storageArea = {
+  get: (keys: string | string[]) => browser.storage.local.get(keys) as Promise<Record<string, unknown>>,
+  set: (items: Record<string, unknown>) => browser.storage.local.set(items),
+};
+
+async function serverBase(): Promise<string> {
+  try {
+    const url = new URL((await getSyncUrl()).trim());
+
+    return `${url.protocol}//${url.host}`;
+  }
+  catch {
+    return '';
+  }
+}
+
+// Outdated-version banner: the flag comes from the server's response headers (x-ext-outdated / 426).
+async function drawUpdate(): Promise<void> {
+  document.getElementById('update')!.innerHTML = bannerHtml(await updateFlag(storageArea), await serverBase());
+}
+
+// BYOK: own LLM key, encrypted (WebCrypto AES-GCM) in chrome.storage.local, sent only as x-llm-key.
+async function enableCoach(): Promise<boolean> {
+  const origins = ['https://console.x.ai/*'];
+  const granted = await chrome.permissions.request({ origins });
+  if (!granted)
+    return false;
+
+  const have = await chrome.scripting.getRegisteredContentScripts({ ids: ['xai-coach'] });
+  if (have.length === 0)
+    await chrome.scripting.registerContentScripts([{ id: 'xai-coach', matches: origins, js: ['coach.js'], runAt: 'document_idle', persistAcrossSessions: true }]);
+
+  return true;
+}
+
+// NoJobNoProblemBuddy key wizard: get an xAI Grok key, paste on click, test via our server, save encrypted.
+function keyWizard(onSaved: () => Promise<void>): HTMLElement {
+  let key = '';
+  const card = el('div', { className: 'card wizard' });
+  const masked = el('input', { className: 'masked', readOnly: true, placeholder: 'ключ появится здесь (замаскирован)' });
+  const result = el('div', { className: 'result dim', textContent: '' });
+  const show = (text: string, kind: '' | 'ok' | 'fail' = '') => { result.textContent = text; result.className = `result ${kind || 'dim'}`; };
+  const testBtn = el('button', { className: 'btn', textContent: 'Проверить', disabled: true });
+  const saveBtn = el('button', { className: 'btn', textContent: 'Сохранить', disabled: true });
+  // optional host permission for the coach overlay on console.x.ai, asked on this click only
+  const getBtn = el('button', { className: 'btn', textContent: 'Получить ключ Grok', onclick: async () => {
+    const coach = await enableCoach().catch(() => false);
+    window.open(XAI_KEYS_URL, '_blank', 'noopener');
+    show(coach ? 'подсказки включены: следуй рамке на странице xAI' : 'подсказки поверх консоли выключены: шаги ниже', '');
+  } });
+  const pasteBtn = el('button', { className: 'btn ghost', textContent: 'Вставить из буфера', onclick: async () => {
+    const got = await readClipboardKey();
+    key = got.key;
+    masked.value = key ? maskKey(key) : '';
+    testBtn.disabled = !key;
+    saveBtn.disabled = true;
+    show(got.error || 'формат ок: xai-…, проверь ключ', got.error ? 'fail' : '');
+  } });
+  testBtn.onclick = async () => {
+    if (!validXaiKey(key))
+      return;
+    show('проверяю…');
+    const check = await testKey(await serverBase(), await getSyncKey(), key);
+    show(check.message, check.ok ? 'ok' : 'fail');
+    saveBtn.disabled = check.ok === false && check.code !== 'key-no-credits';
+  };
+  saveBtn.onclick = async () => {
+    await saveByok(storageArea, idbKeyStore(), 'xai', key);
+    key = '';
+    masked.value = '';
+    testBtn.disabled = true;
+    saveBtn.disabled = true;
+    show('ключ сохранён (AES-GCM, только в этом браузере)', 'ok');
+    await onSaved();
+  };
+  card.append(
+    el('b', { textContent: 'NoJobNoProblemBuddy · ключ xAI Grok' }),
+    el('div', { className: 'tools' }, getBtn, el('span', { className: 'dim', textContent: XAI_KEYS_URL })),
+    el('ol', { className: 'steps' }, ...STEPS.map(step => el('li', { textContent: step }))),
+    el('div', { className: 'tools' }, pasteBtn, masked, testBtn, saveBtn),
+    result,
+  );
+
+  return card;
+}
+
+function llmTab(): HTMLElement {
+  const wrap = el('div');
+  const box = el('div', { className: 'card' });
+  const select = el('select', {}, ...PRESETS.map(item => el('option', { value: item.id, textContent: item.name })));
+  const input = el('input', { type: 'password', placeholder: 'API key (stays encrypted in this browser)', autocomplete: 'off' });
+  const info = el('div', { className: 'dim' });
+  const refresh = async () => {
+    const now = await byokInfo(storageArea);
+    info.textContent = now.on ? `Own key on: ${now.provider} ••••${now.tail}. Sent only in the x-llm-key header of /api/answer; the server keeps it for that request only.` : 'No own key: the server uses its own model key.';
+    if (now.provider)
+      select.value = now.provider;
+  };
+  const saveBtn = el('button', { className: 'btn', textContent: 'Save encrypted', onclick: async () => { await saveByok(storageArea, idbKeyStore(), select.value, input.value); input.value = ''; status('Key saved (encrypted)'); await refresh(); } });
+  const clearBtn = el('button', { className: 'btn ghost', textContent: 'Remove key', onclick: async () => { await saveByok(storageArea, idbKeyStore(), '', ''); status('Key removed'); await refresh(); } });
+  box.append(el('b', { textContent: 'Own LLM key (BYOK)' }), el('div', { className: 'tools' }, select, input, saveBtn, clearBtn), info);
+  void refresh();
+  wrap.append(keyWizard(refresh), box);
+
+  return wrap;
+}
+
 async function main(): Promise<void> {
+  void drawUpdate();
+  browser.storage.onChanged.addListener(() => void drawUpdate());
   data = await localStore.loadOrEmpty();
   if (await localStore.initialized() === false) {
     const result = await importFromServer(localStore, await syncBaseOf(), await getSyncKey());
