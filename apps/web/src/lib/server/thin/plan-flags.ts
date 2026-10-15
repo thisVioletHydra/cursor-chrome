@@ -5,6 +5,10 @@ import path from 'node:path';
 import process from 'node:process';
 import sqlite from 'node:sqlite';
 
+import type { Scenario } from '../plan/types.ts';
+
+export const SCENARIOS: readonly Scenario[] = ['savedLinks', 'relook', 'resumePick', 'letter', 'murky', 'testTask', 'jobOffer', 'hideJunk', 'invites', 'inviteAutoReply', 'quota'];
+
 export function planFlagsPath(): string {
   const root = process.env.WEB_SECRETS ? path.dirname(process.env.WEB_SECRETS) : process.env.RAILWAY_ENVIRONMENT ? '/data' : path.join(process.cwd(), 'data');
 
@@ -35,11 +39,13 @@ export function createPlanFlags(file = planFlagsPath()) {
       throw new Error('кривой login');
     open().prepare('INSERT INTO plan_flag (login, enabled, at) VALUES (?, ?, ?) ON CONFLICT(login) DO UPDATE SET enabled = excluded.enabled, at = excluded.at').run(login, on ? 1 : 0, now);
   };
+  // stage C scenarios per account: none is switched on yet (each needs an explicit future toggle)
+  const scenarios = (_login: string): Record<Scenario, boolean> => Object.fromEntries(SCENARIOS.map(s => [s, false])) as Record<Scenario, boolean>;
   const close = () => {
     db?.close();
     db = null;
   };
 
-  return { enabled, setEnabled, close };
+  return { enabled, setEnabled, scenarios, close };
 }
 export type PlanFlags = ReturnType<typeof createPlanFlags>;

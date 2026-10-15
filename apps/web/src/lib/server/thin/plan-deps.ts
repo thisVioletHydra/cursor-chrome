@@ -4,17 +4,39 @@
 import type { Deps, Item, Settings } from '../plan/types.ts';
 import type { NegotiationRow } from '../plan/negotiations.ts';
 
-import { applyOutcomes, askChain, chainFromEnv, knownAmong, markDone, markSent, parseFacts, remember, runTenant } from '@cursor-chrome/hh';
+import { applyOutcomes, askChain, chainFromEnv, coveredWaiters, dayOpen, dropWaiters, forgetLinks, knownAmong, markDone, markSent, noteHidden, notePassed, parseFacts, readLinks, readMemory, readQueue, remember, runTenant, takeRelook } from '@cursor-chrome/hh';
+import { planStoreDeps, type StoreIO } from '../plan/deps-impl.ts';
+import { weekOpen } from '../week';
+import { createPlanFlags } from './plan-flags.ts';
 import { chainOf, readAccount } from '../secrets';
 import { serverChainFor } from '../demo';
 import { completion, thinAnswer } from './answer-api';
 
 type ProdDeps = Omit<Deps, 'enqueue'> & { onNegotiationRows?: (login: string, rows: NegotiationRow[]) => Promise<void> };
 
-export function planDeps(headersOf: (login: string) => Headers): ProdDeps {
+// existing /api/queue + /api/negotiations storage for planStoreDeps (Бекенд 2, plan/deps-impl.ts)
+const storeIO: StoreIO = {
+  inTenant: (login, job) => runTenant(login, job),
+  readLinks: limit => readLinks(limit) as never,
+  readQueue: () => readQueue() as never,
+  takeRelook: (busy, limit) => takeRelook(busy as string[], limit) as never,
+  noteHidden: ids => noteHidden([...ids]) as never,
+  notePassed: rows => notePassed([...rows] as never) as never,
+  coveredWaiters: (queue, ids) => coveredWaiters(queue as never, ids),
+  forgetLinks: ids => forgetLinks([...ids]) as never,
+  dropWaiters: ids => dropWaiters([...ids]) as never,
+  applyOutcomes: rows => applyOutcomes(rows) as never,
+  readMemory: () => readMemory(),
+  dayOpen: memory => dayOpen(memory),
+  readAccount: login => readAccount(login),
+  weekOpen: (login, account) => weekOpen(login, account),
+};
+
+export function planDeps(headersOf: (login: string) => Headers, flags: { scenarios: (login: string) => Settings['scenarios'] } = defaultFlags()): ProdDeps {
   const inTenant = <T>(login: string, job: () => Promise<T>) => runTenant(login, job);
 
   return {
+    ...planStoreDeps(storeIO),
     // existing thin /api/answer engine; BYOK only from the headers of the extension's own request
     answer: (login, body) => inTenant(login, async () => {
       const account = await readAccount(login);
@@ -53,7 +75,14 @@ export function planDeps(headersOf: (login: string) => Headers): ProdDeps {
     settings: login => inTenant(login, async (): Promise<Settings> => {
       const account = await readAccount(login);
       const words = account.hhQuery.split(/[,\n]/).map(word => word.trim()).filter(Boolean);
-      return { keepWorkHours: account.hhHours !== '0', ...(words.length > 0 ? { words } : {}) };
+      // scenarios from plan-flags: all off until switched on per account
+      return { keepWorkHours: account.hhHours !== '0', scenarios: flags.scenarios(login), ...(words.length > 0 ? { words } : {}) };
     }),
   };
+}
+
+let flagsSingleton: ReturnType<typeof createPlanFlags> | null = null;
+function defaultFlags() {
+  flagsSingleton ??= createPlanFlags();
+  return flagsSingleton;
 }

@@ -129,7 +129,7 @@ const later = [
         <li><label class="flex items-center gap-1.5 text-sm text-zinc-200"><input class="accent-indigo-400" type="checkbox" name={row.key} checked={data.settings?.[row.key] ?? row.fallback} />{row.label}</label></li>
       {/each}
     </ul>
-    <button class="btn btn-ghost mt-4 h-11 min-h-11 px-4" type="submit">Сохранить</button>
+    <button class="mt-4 rounded-lg bg-indigo-500/30 px-4 py-2 text-sm text-white hover:bg-indigo-500/40 disabled:opacity-50" type="submit">Сохранить</button>
     {#if settingsMessage !== ''}
       <p class="mt-3 text-sm break-words {settingsOk ? 'text-emerald-300' : 'text-rose-300'}" aria-live="polite">{settingsMessage}</p>
     {/if}

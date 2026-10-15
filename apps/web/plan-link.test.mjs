@@ -96,3 +96,11 @@ test('flag off → /api/ext/next answers 204 at once with x-next-after 15 min, n
   assert.ok(Date.now() - t0 < 1000, 'not held');
   flags.close();
 });
+
+test('plan-flags scenarios: every scenario present and off', () => {
+  const flags = createPlanFlags(tmp());
+  const s = flags.scenarios('roman');
+  assert.ok(Object.keys(s).length >= 11);
+  assert.ok(Object.values(s).every(v => v === false));
+  flags.close();
+});

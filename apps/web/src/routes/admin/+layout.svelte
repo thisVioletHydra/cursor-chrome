@@ -2,6 +2,7 @@
 import { DISCLAIMER } from '$lib/disclaimer';
 import { page } from '$app/stores';
 import { onMount } from 'svelte';
+import { afterNavigate } from '$app/navigation';
 import { installUpdatingWatch } from '$lib/updating';
 import NavIcon from './NavIcon.svelte';
 
@@ -49,8 +50,14 @@ function iconName(item: { label: string; icon?: string }): string {
   return item.icon ?? iconByLabel[item.label] ?? 'mark';
 }
 
+// highlight follows the page really shown: the address after each finished navigation (an aborted or
+// redirected one could leave $page and the shown page out of step)
+let shownPath = $state($page.url.pathname);
+afterNavigate(() => {
+  shownPath = location.pathname;
+});
 const current = (href: string, exact: boolean) => {
-  const path = $page.url.pathname;
+  const path = shownPath;
   if (exact)
     return path === href;
 
