@@ -22,6 +22,17 @@ type ApplyReply = {
   navigateTo?: string;
 };
 
+// Thin client (server planner): form is already open; one pass, no «Откликнуться» click, no blind retry.
+export async function runHhApplyThin(): Promise<unknown> {
+  const beat = applyBeat();
+  try {
+    return await finishApply(await workerTopMessage('run-apply', { thin: true }));
+  }
+  finally {
+    clearInterval(beat);
+  }
+}
+
 export async function runHhApply(): Promise<unknown> {
   const before = await workerHref();
   const beat = applyBeat();

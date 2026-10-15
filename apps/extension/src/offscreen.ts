@@ -3,8 +3,10 @@ import type { CommandName, WsRequest, WsResponse } from '@cursor-chrome/protocol
 import { WS_URL } from '@cursor-chrome/protocol';
 import { browser } from './browser-host';
 import { holdExtLink } from './link/ext-link';
+import { BRIDGE_STEPS_MS, stepAt } from './link/backoff';
 
-const CONNECT_BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
+// local Cursor MCP bridge: growing interval 2 s … 15 min, never a 1 s hammer
+const CONNECT_BACKOFF_MS = BRIDGE_STEPS_MS;
 
 let socket: WebSocket | null = null;
 let keepPort: chrome.runtime.Port | null = null;
@@ -41,7 +43,11 @@ function status(connected: boolean, detail = ''): void {
   void browser.runtime.sendMessage({ type: 'ws-status', connected, detail }).catch(() => {});
 }
 
-function setWsEnabled(enabled: boolean): void {
+// fails: failures counted by the background (survives offscreen re-creation). Repeated «enable» while already
+// enabled is a no-op (it used to reset the counter and reconnect at once → ~3 s hammer on 127.0.0.1:18765).
+function setWsEnabled(enabled: boolean, fails = 0): void {
+  if (enabled && wsEnabled)
+    return;
   wsEnabled = enabled;
   if (!enabled) {
     if (reconnectTimer) {
@@ -54,16 +60,19 @@ function setWsEnabled(enabled: boolean): void {
     return;
   }
 
-  attempt = 0;
-  connect();
+  attempt = Math.max(0, fails);
+  if (attempt > 0)
+    scheduleReconnect();
+  else
+    connect();
 }
 
 function scheduleReconnect(): void {
   if (!wsEnabled || reconnectTimer)
     return;
 
-  const delay = CONNECT_BACKOFF_MS[Math.min(attempt, CONNECT_BACKOFF_MS.length - 1)];
   attempt += 1;
+  const delay = stepAt(CONNECT_BACKOFF_MS, attempt);
   reconnectTimer = setTimeout(() => {
     reconnectTimer = undefined;
     connect();
@@ -138,7 +147,7 @@ async function dispatch(request: WsRequest): Promise<WsResponse> {
   }
 }
 
-const onOffscreenMessage: Record<string, (message: { enabled?: unknown; origin?: unknown; key?: unknown }, reply: (value?: unknown) => void) => boolean> = {
+const onOffscreenMessage: Record<string, (message: { enabled?: unknown; origin?: unknown; key?: unknown; fails?: unknown }, reply: (value?: unknown) => void) => boolean> = {
   'ping-offscreen': (message, reply) => {
     holdExtLink(textOf(message.origin), textOf(message.key));
     reply({
@@ -150,7 +159,7 @@ const onOffscreenMessage: Record<string, (message: { enabled?: unknown; origin?:
     return true;
   },
   'set-ws': (message, reply) => {
-    setWsEnabled(Boolean(message.enabled));
+    setWsEnabled(Boolean(message.enabled), typeof message.fails === 'number' ? message.fails : 0);
     reply({ ok: true, enabled: wsEnabled });
 
     return true;

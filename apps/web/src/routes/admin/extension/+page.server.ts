@@ -1,13 +1,19 @@
 import type { Actions, PageServerLoad } from './$types';
 
-import { issueExtTokenAdmin } from '$lib/server/admin-actions';
+import { extSettingsAdmin, issueExtTokenAdmin } from '$lib/server/admin-actions';
+import { extSettings } from '$lib/server/thin/ext-settings';
+import { readSession } from '$lib/server/session';
 
-export const load: PageServerLoad = async ({ url, parent }) => {
+export const load: PageServerLoad = async ({ url, parent, cookies }) => {
   // extToken itself is never in load data: the client fetches it via POST /admin/ext-token on click.
-  const { hasExtToken } = await parent();
-  return { origin: url.origin, hasExtToken };
+  const { hasExtToken, preview } = await parent();
+  const session = preview ? null : readSession(cookies.get('session'));
+  // null = not set in the admin yet: the extension keeps its local values
+  const settings = session === null ? null : extSettings.get(session.login);
+  return { origin: url.origin, hasExtToken, settings };
 };
 
 export const actions: Actions = {
   extToken: issueExtTokenAdmin,
+  settings: extSettingsAdmin,
 };

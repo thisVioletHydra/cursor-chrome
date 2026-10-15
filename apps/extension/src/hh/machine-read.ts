@@ -1,6 +1,7 @@
 import { pulseLines } from '../pilot/wait-pulse';
 import { browser } from '../browser-host';
 import { ask } from './bridge';
+import { adminSettingsOf, EXT_CONFIG_KEY } from '../pilot/ext-settings';
 
 export type Snap = {
   show: boolean;
@@ -14,7 +15,11 @@ export type Snap = {
   reason: string;
 };
 
+// stage D: an admin value (extConfig:v1 cache in the stored object) wins over the local flag
 export function machineWanted(raw: unknown): boolean {
+  const admin = adminSettingsOf(raw)?.showMachine;
+  if (typeof admin === 'boolean')
+    return admin;
   if (field(raw, 'showMachine') === true)
     return true;
 
@@ -24,7 +29,7 @@ export function machineWanted(raw: unknown): boolean {
 export async function readSnap(): Promise<Snap | null> {
   let stored: unknown;
   try {
-    stored = await browser.storage.local.get(['flags', 'pilotLink', 'queueBusy', 'queueReport']);
+    stored = await browser.storage.local.get(['flags', 'pilotLink', 'queueBusy', 'queueReport', EXT_CONFIG_KEY]);
   }
   catch {
     return null;
@@ -37,7 +42,7 @@ export async function readSnap(): Promise<Snap | null> {
   const flags = field(stored, 'flags');
 
   return {
-    show: field(flags, 'showMachine') === true,
+    show: machineWanted(stored),
     auto: field(flags, 'autoQueue') === true,
     link: textOf(field(stored, 'pilotLink')),
     pinned: pinnedOf(worker),

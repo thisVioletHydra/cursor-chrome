@@ -4,12 +4,15 @@
 export const UPDATING_TEXT = 'Обновляемся, повторим сами…';
 export const PING_MS = 3000;
 export const MAX_WAIT_MS = 120_000;
+// popup deploy-window pings: 3 s, 6 s, 12 s, 30 s, 60 s …, at most 2 min, then «Повторить»
+export const POPUP_STEPS_MS = [3000, 6000, 12_000, 30_000, 60_000] as const;
+export const POPUP_WAIT_MS = 120_000;
 
 export function isUpdatingStatus(status: number): boolean {
   return status === 502 || status === 503 || status === 504;
 }
 
-type Opts = { fetcher?: typeof fetch; sleep?: (ms: number) => Promise<void>; interval?: number; maxWait?: number; onUpdating?: (on: boolean) => void };
+type Opts = { fetcher?: typeof fetch; sleep?: (ms: number) => Promise<void>; interval?: number; maxWait?: number; onUpdating?: (on: boolean) => void; steps?: readonly number[] };
 
 const wait = (ms: number) => new Promise<void>(done => setTimeout(done, ms));
 
@@ -88,7 +91,7 @@ export async function retryWhileUpdating(base: string, run: () => Promise<Respon
 export async function watchUpdating(node: HTMLElement | null, base: string, onBack: () => void = () => {}, opts: Opts = {}): Promise<void> {
   if (node === null || !base)
     return;
-  const { fetcher = fetch, sleep = wait, interval = PING_MS, maxWait = GIVE_UP_MS } = opts;
+  const { fetcher = fetch, sleep = wait, interval = PING_MS, maxWait = GIVE_UP_MS, steps } = opts;
   let state = await probe(base, fetcher);
   if (state === 'ok')
     return;
@@ -97,8 +100,11 @@ export async function watchUpdating(node: HTMLElement | null, base: string, onBa
   node.className = 'cc-updating';
   node.setAttribute('role', 'status');
   node.textContent = UPDATING_TEXT;
-  for (let spent = 0; state === 'down' && spent < maxWait; spent += interval) {
-    await sleep(interval);
+  // steps: growing pause between pings (popup); without steps the old fixed interval
+  for (let spent = 0, round = 0; state === 'down' && spent < maxWait; round += 1) {
+    const pause = steps && steps.length > 0 ? steps[Math.min(round, steps.length - 1)] : interval;
+    await sleep(pause);
+    spent += pause;
     state = await probe(base, fetcher);
   }
   if (state === 'ok') {

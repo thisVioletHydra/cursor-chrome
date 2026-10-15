@@ -41,11 +41,13 @@ const ANSWER_WAIT = waitMark({
   hold: true,
 });
 
-export function runApply(resume = false): Promise<ApplyResult> {
+// thin: the server already clicked «Откликнуться» and waited for the form → never click it again;
+// no open form → error. Fill + submit only.
+export function runApply(resume = false, thin = false): Promise<ApplyResult> {
   if (running)
     return running;
 
-  running = applyOnce(resume).finally(() => {
+  running = applyOnce(resume, thin).finally(() => {
     running = null;
     setApplyLock(false);
   });
@@ -53,8 +55,12 @@ export function runApply(resume = false): Promise<ApplyResult> {
   return running;
 }
 
-async function applyOnce(resume: boolean): Promise<ApplyResult> {
+export const THIN_NO_FORM = 'формы отклика нет (тонкий режим: «Откликнуться» не нажимаю)';
+
+async function applyOnce(resume: boolean, thin = false): Promise<ApplyResult> {
   dismissJobOffer();
+  if (thin && await until(() => formReady() || employerQuestionnaire() !== null, 3000) === false)
+    return fail(THIN_NO_FORM);
   setApplyLock(true);
   abroadNoted = false;
   hadToast = resume ? hadToast : applySucceeded();
@@ -68,7 +74,7 @@ async function applyOnce(resume: boolean): Promise<ApplyResult> {
     async () => pageSkip(),
     async () => murkyStep(),
     async () => humanOrNull(applyBlocker()),
-    async () => openStep(),
+    async () => (thin ? null : openStep()),
     async () => murkyStep(),
     async () => humanOrNull(applyBlocker()),
     async () => fillStep(),

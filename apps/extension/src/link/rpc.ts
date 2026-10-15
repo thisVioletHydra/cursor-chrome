@@ -1,6 +1,7 @@
 import { askCloud } from '../apply/answer';
 import { appendApply, clearWaiting, dropWaiting, getSyncKey, getSyncUrl, listApplies, setSyncKey, setSyncUrl, sweepDismissedWaiting, todayCount, waitingHuman } from '../diary/apply-log';
-import { getFlags, setFlags } from '../pilot/flags';
+import { adminManaged, getFlags, setFlags } from '../pilot/flags';
+import { managedBy } from '../pilot/ext-settings';
 import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from '../apply/human-review';
 import { syncNegotiations } from '../apply/negotiations';
 import { bindPilotSettle, clearStuckHang, forgetStuckHang, liveLines, stallStep, stalling, tellPage } from '../pilot/page-log';
@@ -218,7 +219,8 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
     return true;
   },
   'get-flags': (_message, reply) => {
-    replyJob(reply, reconcilePilot());
+    // managed: keys set in the admin (stage D); popup shows them read-only
+    replyJob(reply, reconcilePilot().then(async flags => ({ ...flags, managed: managedBy(await adminManaged()) })));
 
     return true;
   },

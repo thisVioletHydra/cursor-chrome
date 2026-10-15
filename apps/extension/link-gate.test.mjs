@@ -69,9 +69,9 @@ test('fix: setBadge checks the gate first and puts «!» before OFF/counter', ()
   const body = src.slice(src.indexOf('export async function setBadge'));
   const gate = body.indexOf('if (gateOpen(gate) === false)');
   assert.ok(gate > 0);
-  assert.ok(gate < body.indexOf("text: '!'"));
-  assert.ok(body.indexOf("text: '!'") < body.indexOf("text: 'OFF'"));
-  assert.match(body, /setTitle\(\{ title: gateText\(gate\) \}\)/);
+  assert.ok(gate < body.indexOf("paintBadge('!'"));
+  assert.ok(body.indexOf("paintBadge('!'") < body.indexOf("paintBadge('OFF'"));
+  assert.match(body, /paintBadge\('!', '#b45309', gateText\(gate\)\)/);
 });
 
 test('gate pack 2: popup/content actions, autofill and negotiations sync pause without the link', async () => {
@@ -100,8 +100,8 @@ test('gate fix 3: native commands paused; badge repainted when the link comes ba
   const gate = fn.indexOf('if (await linkPaused()) {');
   assert.ok(gate > 0 && gate < fn.indexOf('await runCommand('));
   assert.match(fn, /sendNative\(nativePort, \{ id: request\.id, ok: false, error: PAUSED_REPLY\.reason \}\);\n\n    return;/);
-  assert.match(bg, /onGateReopen\(\(\) => setBadge\(connected\)\);/);
+  assert.match(bg, /onGateReopen\(async \(\) => \{\n  await setBadge\(connected\);/);
   const hooks = fs.readFileSync(new URL('./src/local/background-hooks.ts', import.meta.url), 'utf8');
   assert.match(hooks, /if \(reopened\)\n      await repaintBadge\(\)/);
-  assert.match(hooks, /alarm\.name === LINK_ALARM\)\n      void getSyncUrl\(\)[^\n]*linkPaused\(\)/);
+  assert.match(hooks, /alarm\.name === LINK_ALARM\)\n      void linkPaused\(\)/);
 });

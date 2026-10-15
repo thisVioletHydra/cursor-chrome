@@ -10,6 +10,7 @@ import { chainOf, collapseChain, imitationFromFields, isCreator, newExtToken, pu
 import { githubLogin, readSession } from './session';
 import { addXaiToChain } from './thin/byok-chain';
 import { testXaiKey } from './thin/byok-check';
+import { extSettings, MANAGED } from './thin/ext-settings';
 
 const sections = ['telegram', 'model', 'hh'] as const;
 type Section = typeof sections[number];
@@ -683,4 +684,19 @@ export async function wizardProviderAdmin({ request, cookies }: RequestEvent) {
   });
 
   return { ...done, wait: 0 };
+}
+
+// stage D: extension settings (booleans only) for the session's own account; the extension picks them up via /api/ext/config
+export async function extSettingsAdmin({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'это просмотр', wait: 0 };
+
+  const form = await request.formData();
+  const patch: Record<string, boolean> = {};
+  for (const key of MANAGED)
+    patch[key] = form.get(key) === 'on';
+  extSettings.set(login, patch);
+
+  return { ok: true, detail: 'Сохранено. Расширение подхватит при открытии попапа.', wait: 0 };
 }

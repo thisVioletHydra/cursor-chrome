@@ -22,7 +22,7 @@ export const CONFIG = {
   order: [...ORDER],
 };
 
-export function configBody(config = CONFIG): { text: string; etag: string } {
+export function configBody(config: { version: number; [k: string]: unknown } = CONFIG): { text: string; etag: string } {
   const text = JSON.stringify(config);
 
   return { text, etag: `"cfg-${config.version}-${crypto.createHash('sha256').update(text).digest('hex').slice(0, 16)}"` };

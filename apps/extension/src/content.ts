@@ -6,8 +6,11 @@ import { byRef, bySelector, snapshot } from './page/snapshot';
 import { browser } from './browser-host';
 import { BIND_MARK_ATTR, BIND_MARK_EVENT, bindMark, contentGateOpen, isGatedMessage, LINK_GATE_KEY, type LinkGate, markOrigins, PAUSED_REPLY, shouldMarkPage } from './local/link-gate.ts';
 import { getSyncUrl } from './diary/apply-log';
+import { installGateFetch } from './local/gate-fetch.ts';
 
 keepHhClicks();
+// every /api/* request from this page (queue, pulse, applied…) passes the link gate; 401 closes it at once
+installGateFetch({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>>, set: items => browser.storage.local.set(items) }, getSyncUrl, listener => browser.storage.onChanged.addListener(listener));
 // gate «без связи — пауза»: no autonomous page job while the extension is not linked to the admin
 let hhJobStarted = false;
 function startHhJobOnce(): void {
@@ -61,6 +64,7 @@ type PageIncoming = {
   method?: string;
   params?: Record<string, unknown>;
   resume?: unknown;
+  thin?: unknown;
 };
 
 type Reply = (value?: unknown) => void;
@@ -75,7 +79,7 @@ const onPageMessage: Record<string, (message: PageIncoming, reply: Reply) => boo
     if (window !== window.top)
       return false;
 
-    void runApply(message.resume === true).then(reply).catch((error) => {
+    void runApply(message.resume === true, message.thin === true).then(reply).catch((error) => {
       reply({
         ok: false,
         status: 'skip',

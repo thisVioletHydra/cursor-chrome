@@ -15,8 +15,13 @@ import { detectHolding } from './apply/detect-hold';
 import { captchaHolding, clearSearchBusy, clearSearchSoon, isPaused, kickedRecently, markKicked, markSearchSoon, queueBusy, runQueue } from './apply/queue-run';
 import { rpc } from './link/rpc';
 import { browser } from './browser-host';
-import { linkPaused, onGateReopen, startLocalHooks } from './local/background-hooks';
+import { linkPaused, onGateReopen, pingGate, startLocalHooks } from './local/background-hooks';
 import { isGatedMessage, PAUSED_REPLY } from './local/link-gate.ts';
+import { BRIDGE_STEPS_MS, makeBackoff } from './link/backoff';
+import { serverLinkLoop, wakeServerLink } from './link/server-link';
+import { syncExtConfig } from './pilot/ext-config-sync';
+import { execServerCmd } from './link/server-exec';
+import { getSyncKey, getSyncUrl } from './diary/apply-log';
 
 const ALARM = 'cc-keepalive';
 const QUEUE_ALARM = 'cc-queue';
@@ -36,6 +41,9 @@ let detail = 'starting';
 let transport: Transport = 'none';
 let nativePort: chrome.runtime.Port | null = null;
 let nativeRetry: ReturnType<typeof setTimeout> | undefined;
+const nativeBackoff = makeBackoff(BRIDGE_STEPS_MS);
+// ws bridge failures in a row, kept here (offscreen documents get re-created and would forget it)
+let wsFails = 0;
 let ignoreNativeDisconnect = false;
 let heldOff = false;
 let armingSearch = false;
@@ -58,7 +66,52 @@ browser.runtime.onStartup.addListener(() => {
   void armSearchSoon(false);
 });
 installFocusLock();
-onGateReopen(() => setBadge(connected));
+onGateReopen(async () => {
+  await setBadge(connected);
+  startServerLink();
+});
+
+// Stage B: server commands over long-poll. One loop at a time; only while linked; ends on 401/closed gate.
+let serverLinkOn = false;
+// popup opened: wake a sleeping loop (flag may have just been enabled) or start it if it ended
+// stage D: admin settings via GET /api/ext/config (ETag/304) → extConfig:v1 cache; seed once if admin is empty
+let configPulling = false;
+function pullExtConfig(): void {
+  if (configPulling)
+    return;
+  configPulling = true;
+  void syncExtConfig({
+    base: getSyncUrl,
+    key: getSyncKey,
+    gateOpen: async () => (await linkPaused()) === false,
+    get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>>,
+    set: items => browser.storage.local.set(items),
+  }).catch(() => 'failed').finally(() => {
+    configPulling = false;
+  });
+}
+function nudgeServerLink(): void {
+  pullExtConfig();
+  wakeServerLink();
+  startServerLink();
+}
+function startServerLink(): void {
+  if (serverLinkOn)
+    return;
+  serverLinkOn = true;
+  pullExtConfig();
+  void serverLinkLoop({
+    base: getSyncUrl,
+    key: getSyncKey,
+    gateOpen: async () => (await linkPaused()) === false,
+    exec: execServerCmd,
+    onUnauthorized: async () => {
+      await linkPaused().catch(() => true);
+    },
+  }).catch(() => 'closed').finally(() => {
+    serverLinkOn = false;
+  });
+}
 startLocalHooks();
 void boot();
 
@@ -141,6 +194,7 @@ const onRuntimeMessage: Record<string, (message: Incoming, sender: chrome.runtim
     connected = Boolean(message.connected);
     detail = String(message.detail || '');
     transport = 'offscreen';
+    wsFails = connected ? 0 : wsFails + 1;
     void setBadge(connected);
 
     return false;
@@ -166,6 +220,14 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const type = message?.type;
   if (typeof type !== 'string')
     return false;
+  if (type === 'gate-ping') {
+    void pingGate();
+    return false;
+  }
+  if (type === 'server-link-wake') {
+    nudgeServerLink();
+    return false;
+  }
 
   const dispatch = () => onRuntimeMessage[type]?.(message, sender, sendResponse)
     ?? rpc[type]?.(message as Record<string, unknown>, sendResponse, sender)
@@ -283,6 +345,7 @@ async function boot(): Promise<void> {
   await clearSearchBusy();
   await continueAfterPatch();
   void pulseNow();
+  startServerLink();
 }
 
 async function continueAfterPatch(): Promise<void> {
@@ -406,6 +469,7 @@ function connectNative(): void {
   }
 
   nativePort.onMessage.addListener((message) => {
+    nativeBackoff.reset();
     void onNativeMessage(message);
   });
   nativePort.onDisconnect.addListener(() => {
@@ -424,10 +488,11 @@ function connectNative(): void {
     if (HOST_MISSING.test(err))
       return;
 
+    // local bridge: growing interval (2 s … 15 min) instead of every second
     nativeRetry = setTimeout(() => {
       nativeRetry = undefined;
       connectNative();
-    }, 1000);
+    }, nativeBackoff.next());
   });
 }
 
@@ -488,5 +553,5 @@ async function enableWsFallback(reason: string): Promise<void> {
   if (connected === false)
     detail = HOST_MISSING.test(reason) ? 'запусти pnpm install-host' : reason;
 
-  await browser.runtime.sendMessage({ type: 'set-ws', enabled: true }).catch(() => {});
+  await browser.runtime.sendMessage({ type: 'set-ws', enabled: true, fails: wsFails }).catch(() => {});
 }

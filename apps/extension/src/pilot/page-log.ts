@@ -1,3 +1,5 @@
+import { makeBackoff, SERVER_STEPS_MS } from '../link/backoff';
+import { contentGateOpen } from '../local/link-gate.ts';
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 import { foldLiveLine, liveTick, PAGE_LOAD_MS } from '../search/page-load';
 import { nameStep, type RunMode } from './log-mode';
@@ -704,11 +706,41 @@ async function deviceId(): Promise<string> {
   return next;
 }
 
+// /api/pulse at most once per PULSE_EVERY_MS: lines collected meanwhile go out joined in one request.
+export const PULSE_EVERY_MS = 10_000;
+const PULSE_MAX_CHARS = 2000;
+let pulseLines: string[] = [];
+let pulseTimer: ReturnType<typeof setTimeout> | undefined;
+let pulseLastAt = 0;
+
 async function postPulse(line: string): Promise<void> {
   if (halted || line.trim().length === 0)
     return;
 
   if (stallText(line) && hangLive === false)
+    return;
+
+  pulseLines.push(line);
+  if (pulseTimer !== undefined)
+    return;
+  const wait = Math.max(0, pulseLastAt + PULSE_EVERY_MS - Date.now());
+  pulseTimer = setTimeout(() => {
+    pulseTimer = undefined;
+    pulseLastAt = Date.now();
+    const joined = joinPulse(pulseLines);
+    pulseLines = [];
+    void sendPulse(joined).catch(() => {});
+  }, wait);
+}
+
+export function joinPulse(lines: readonly string[]): string {
+  const text = lines.join('\n');
+
+  return text.length > PULSE_MAX_CHARS ? text.slice(text.length - PULSE_MAX_CHARS) : text;
+}
+
+async function sendPulse(line: string): Promise<void> {
+  if (halted || line.trim().length === 0)
     return;
 
   const stamp = pilotStamp();
@@ -918,8 +950,15 @@ if (inWorker()) {
   }, SERVER_PING_MS);
 }
 
+// no link / 401 → no pokes at all; failed pokes back off 30 s … 15 min
+const pokeBackoff = makeBackoff(SERVER_STEPS_MS);
+let pokeNextAt = 0;
+
 async function pokeServer(): Promise<void> {
-  if (poking || halted)
+  if (poking || halted || Date.now() < pokeNextAt)
+    return;
+
+  if (await contentGateOpen({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>> }) === false)
     return;
 
   if ((await readPilotLink()) !== SERVER_WAIT)
@@ -945,7 +984,13 @@ async function pokeServer(): Promise<void> {
   poking = true;
   try {
     const body = await pilotFetch('/api/queue?listen=1');
-    if (body === null || halted)
+    if (body === null) {
+      pokeNextAt = Date.now() + pokeBackoff.next();
+      return;
+    }
+    pokeBackoff.reset();
+    pokeNextAt = 0;
+    if (halted)
       return;
 
     await clearPilotLink();

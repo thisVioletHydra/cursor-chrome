@@ -25,6 +25,7 @@ import { collectVacancies, hideOpenVacancy, readVacancyPage, releaseHidePopup, r
 import { requireTabId } from '../link/inject';
 import { adoptHhWorker, getWorkerTabId, requireWorkerTab, waitTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
+import { contentGateOpen } from '../local/link-gate.ts';
 
 type ApplyReply = { status?: string; reason?: string; hints?: unknown; form?: unknown };
 
@@ -851,6 +852,10 @@ async function noteReply(base: string, key: string, run: QueueRun, item: QueueIt
 
 async function cycleOpen(): Promise<boolean> {
   if (hangHalted() || await isPaused())
+    return false;
+
+  // gate «без синка — пауза»: no link / 401 → the retry/rest loop ends instead of spinning
+  if (await contentGateOpen({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>> }) === false)
     return false;
 
   const flags = await getFlags();

@@ -9,6 +9,9 @@ import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 import { byokInfo } from '../local/byok.ts';
 import { CONFIG_KEY, cachedConfig } from '../local/config-cache.ts';
 import { UPDATE_KEY } from '../local/version.ts';
+import { fixtureName, scrubHtml } from '../local/fixture-scrub.ts';
+import { pageSnap } from '../link/server-exec';
+import { getWorkerTabId } from '../tab/worker-tab';
 
 const area = {
   get: (keys: string | string[]) => browser.storage.local.get(keys) as Promise<Record<string, unknown>>,
@@ -76,6 +79,8 @@ async function fill(box: HTMLElement): Promise<void> {
     <div class="card"><b>Sent to server (last request body, no keys)</b><pre>${esc(JSON.stringify(state.last?.sent ?? null, null, 2))}</pre>
       <div class="dim">Header: authorization: Bearer ${esc(mask(state.token))} (token itself never logged)</div></div>
     <div class="card"><b>Stays local</b><pre>${esc(JSON.stringify({ profileFields: Object.keys(data.profile?.fields ?? {}), facts: data.facts.rules.length, rules: data.rules.length, memory: data.memory.length, coverLetterChars: data.coverLetter.length, token: 'chrome.storage.local', llmKey: 'encrypted, chrome.storage.local' }, null, 2))}</pre></div>
+    <div class="card"><b>Test fixture</b> <span class="dim">manual only: snapshot of the pinned job-site tab, personal data stripped, downloaded as a file → put it into apps/web/src/lib/server/plan/fixtures/</span>
+      <div class="tools"><button class="btn ghost" id="fixture">Save page snapshot</button><span id="fixture-note" class="dim"></span></div></div>
     <div class="card"><b>Log</b><pre>${esc(state.log.slice(-20).reverse().map(item => `${new Date(item.at).toLocaleTimeString()} ${item.text}`).join('\n') || 'empty')}</pre></div>`;
   const run = async () => {
     await checkIn(area, server, raw);
@@ -88,6 +93,7 @@ async function fill(box: HTMLElement): Promise<void> {
     await run();
   };
   box.querySelector<HTMLButtonElement>('#again')!.onclick = () => void run();
+  box.querySelector<HTMLButtonElement>('#fixture')!.onclick = () => void saveFixture(box.querySelector('#fixture-note'));
   // calls a normal extension endpoint with the extToken + current pass: shows what the gate answers
   box.querySelector<HTMLButtonElement>('#probe')!.onclick = async () => {
     const now = await loadAccess(area);
@@ -107,4 +113,35 @@ async function fill(box: HTMLElement): Promise<void> {
 
 function esc(text: string): string {
   return text.replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!);
+}
+
+// Manual debug action: pinned tab → snapshot → scrub → download (no network, nothing stored).
+async function saveFixture(note: Element | null): Promise<void> {
+  const say = (text: string) => {
+    if (note)
+      note.textContent = text;
+  };
+  const tabId = await getWorkerTabId();
+  if (tabId === null) {
+    say('нет запиненной вкладки');
+    return;
+  }
+  try {
+    const out = await browser.scripting.executeScript({ target: { tabId }, func: pageSnap, args: [null, 2_000_000] } as never) as Array<{ result?: { url: string; html: string } }>;
+    const snap = out?.[0]?.result;
+    if (!snap?.html) {
+      say('страница пустая');
+      return;
+    }
+    const blob = new Blob([`<!-- ${scrubHtml(snap.url)} -->\n${scrubHtml(snap.html)}`], { type: 'text/html' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = fixtureName(snap.url);
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+    say(`скачан ${link.download}`);
+  }
+  catch (error) {
+    say(error instanceof Error ? error.message : 'не вышло');
+  }
 }

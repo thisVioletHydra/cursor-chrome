@@ -46,6 +46,15 @@ const live = [
   { title: 'Приглашения и отказы', text: 'Автопилот заглядывает в отклики и приносит исход на сервер. В телегу уходит сразу, не в общую пачку.' },
 ];
 
+const settingRows = [
+  { key: 'hideJunk', label: 'Скрывать мусорные вакансии', fallback: false },
+  { key: 'showPop', label: 'Показывать поп', fallback: true },
+  { key: 'keepSession', label: 'Продолжать сессию HH', fallback: false },
+  { key: 'showMachine', label: 'Статус машины', fallback: false },
+] as const;
+let settingsMessage = $state('');
+let settingsOk = $state(false);
+
 const later = [
   { title: 'Chrome на связи', text: 'Эта страница не знает, открыт ли Chrome и когда был последний клик. Зелёная галка значит только то, что ссылка выпущена.' },
   { title: 'Автопилот отсюда', text: 'Включить разбор очереди и увидеть паузу до утра можно только в попапе. Сюда галка не дотягивается.' },
@@ -94,6 +103,35 @@ const later = [
     </button>
     {#if has}
       <p class="mt-2 text-xs text-zinc-500">Старая сразу перестанет подходить. В попапе придётся вставить новую.</p>
+    {/if}
+  </form>
+</section>
+
+<section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+  <h2 class="text-base font-semibold text-white">Настройки расширения</h2>
+  <p class="mt-2 text-sm text-zinc-400">{data.settings === null ? 'Пока не заданы здесь: расширение берёт свои локальные значения и при первом подключении передаст их сюда.' : 'Расширение берёт их отсюда при открытии попапа. В попапе эти галки только показывают значение.'}</p>
+  <form
+    class="mt-4"
+    method="POST"
+    action="?/settings"
+    use:enhance={() => {
+      settingsMessage = '';
+      return async ({ result, update }) => {
+        const body = result.type === 'success' ? result.data : null;
+        settingsOk = body?.ok === true;
+        settingsMessage = typeof body?.detail === 'string' ? body.detail : 'не вышло';
+        await update({ reset: false });
+      };
+    }}
+  >
+    <ul class="flex flex-col gap-2">
+      {#each settingRows as row (row.key)}
+        <li><label class="flex items-center gap-1.5 text-sm text-zinc-200"><input class="accent-indigo-400" type="checkbox" name={row.key} checked={data.settings?.[row.key] ?? row.fallback} />{row.label}</label></li>
+      {/each}
+    </ul>
+    <button class="btn btn-ghost mt-4 h-11 min-h-11 px-4" type="submit">Сохранить</button>
+    {#if settingsMessage !== ''}
+      <p class="mt-3 text-sm break-words {settingsOk ? 'text-emerald-300' : 'text-rose-300'}" aria-live="polite">{settingsMessage}</p>
     {/if}
   </form>
 </section>

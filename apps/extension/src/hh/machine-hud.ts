@@ -1,5 +1,6 @@
 import { machineWanted, readSnap, statusLines } from './machine-read';
 import { browser } from '../browser-host';
+import { EXT_CONFIG_KEY } from '../pilot/ext-settings';
 
 const HOST_ID = 'cc-hh-machine';
 const Z = '2147483646';
@@ -22,7 +23,7 @@ export function mountMachine(): void {
   paintCss();
   ensureHost();
   listen();
-  void browser.storage.local.get('flags').then((stored) => {
+  void browser.storage.local.get(['flags', EXT_CONFIG_KEY]).then((stored) => {
     arm(machineWanted(stored));
   }).catch(() => {
     arm(false);
@@ -54,8 +55,8 @@ function listen(): void {
     if (area !== 'local')
       return;
 
-    if (changes.flags !== undefined) {
-      arm(machineWanted(changes.flags.newValue));
+    if (changes.flags !== undefined || changes[EXT_CONFIG_KEY] !== undefined) {
+      void browser.storage.local.get(['flags', EXT_CONFIG_KEY]).then(stored => arm(machineWanted(stored))).catch(() => {});
 
       return;
     }

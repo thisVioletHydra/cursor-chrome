@@ -4,9 +4,11 @@ import { labeledApplies, paintApplyGroup, readWaitingKey } from '../hh/history-l
 import { openWorkerUrl, pinHere, refreshWorkerPanel } from './popup-pin';
 import { browser } from '../browser-host';
 import { bannerHtml, updateFlag } from '../local/version';
-import { watchUpdating } from '../local/updating';
+import { POPUP_STEPS_MS, POPUP_WAIT_MS, watchUpdating } from '../local/updating';
 import { paintLinkPanel } from '../local/link-panel';
-import { adminUrl, BIND_TITLE, bindMode, DEFAULT_ADMIN_URL, gateText, gateTransition, LINK_GATE_KEY, type LinkGate, parseConnectInput, readGate } from '../local/link-gate';
+import { EXT_CONFIG_KEY } from '../pilot/ext-settings';
+import { makePowerQueue } from '../pilot/power-queue';
+import { adminUrl, BIND_TITLE, bindMode, DEFAULT_ADMIN_URL, gateText, LINK_GATE_KEY, type LinkGate, parseConnectInput, readGate } from '../local/link-gate';
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 
 type ApplyRecord = {
@@ -31,6 +33,11 @@ const QUEUE_LABEL = 'Откликнуться сейчас';
 const CLOSE_TAB = 'Закрыть запиненную вкладку';
 const RAISE_HH = 'Поднять вкладку';
 const NO_PIN: readonly unknown[] = ['нет запиненной вкладки площадки', 'нет запиненной вкладки hh'];
+
+// popup open: wake the server-command loop at once (a just-enabled plan flag is picked up without waiting 15 min)
+void browser.runtime.sendMessage({ type: 'server-link-wake' }).catch(() => {});
+// stage A: while the popup is open, a dead server must show within ~5 s (live check of an open gate)
+setInterval(() => void browser.runtime.sendMessage({ type: 'gate-ping' }).catch(() => {}), 3000);
 
 window.addEventListener('pagehide', () => {
   void browser.runtime.sendMessage({ type: 'pilot-touch', action: 'popup' });
@@ -90,7 +97,7 @@ let waitCleared = false;
 
 const clicks: Record<string, () => void> = {
   'make-good': () => void (linked ? hangUp() : makeGood()),
-  'power': () => void togglePower(),
+  'power': () => void powerClick(),
   'pin-here': () => {
     if (bindOn)
       return;
@@ -159,21 +166,47 @@ reportEl?.addEventListener('click', () => {
   }).catch(() => {});
 });
 
-hideJunkEl?.addEventListener('change', () => {
-  void browser.runtime.sendMessage({ type: 'set-flags', hideJunk: hideJunkEl.checked === true });
-});
+// stage D: a setting managed in the admin is read-only here; a click leads to the admin instead
+let managedKeys = new Set<string>();
+async function openAdminSettings(): Promise<void> {
+  const [gate, syncUrlNow] = await Promise.all([
+    readGate({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>>, set: async () => {} }).catch(() => null),
+    getSyncUrl().catch(() => ''),
+  ]);
+  const base = adminUrl(gate, syncUrlNow) || DEFAULT_ADMIN_URL;
+  await browser.tabs.create({ url: `${base.replace(/\/+$/, '')}/extension` });
+}
+function flagBox(element: HTMLInputElement | null, key: 'hideJunk' | 'showPop' | 'keepSession' | 'showMachine'): void {
+  element?.addEventListener('change', () => {
+    if (managedKeys.has(key)) {
+      element.checked = !element.checked;
+      void openAdminSettings();
+      return;
+    }
+    void browser.runtime.sendMessage({ type: 'set-flags', [key]: element.checked === true });
+  });
+}
+flagBox(hideJunkEl, 'hideJunk');
+flagBox(showPopEl, 'showPop');
+flagBox(keepSessionEl, 'keepSession');
+flagBox(showMachineEl, 'showMachine');
 
-showPopEl?.addEventListener('change', () => {
-  void browser.runtime.sendMessage({ type: 'set-flags', showPop: showPopEl.checked === true });
-});
-
-keepSessionEl?.addEventListener('change', () => {
-  void browser.runtime.sendMessage({ type: 'set-flags', keepSession: keepSessionEl.checked === true });
-});
-
-showMachineEl?.addEventListener('change', () => {
-  void browser.runtime.sendMessage({ type: 'set-flags', showMachine: showMachineEl.checked === true });
-});
+async function paintFlagBoxes(): Promise<void> {
+  const flags = await browser.runtime.sendMessage({ type: 'get-flags' }) as { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; showMachine?: boolean; managed?: unknown };
+  managedKeys = new Set(Array.isArray(flags?.managed) ? flags.managed.filter((k): k is string => typeof k === 'string') : []);
+  const boxes: Array<[HTMLInputElement | null, string, boolean]> = [
+    [hideJunkEl, 'hideJunk', flags?.hideJunk === true],
+    [keepSessionEl, 'keepSession', flags?.keepSession === true],
+    [showPopEl, 'showPop', flags?.showPop !== false],
+    [showMachineEl, 'showMachine', flags?.showMachine === true],
+  ];
+  for (const [element, key, on] of boxes) {
+    if (element === null)
+      continue;
+    element.checked = on;
+    element.title = managedKeys.has(key) ? 'Настраивается в админке' : '';
+  }
+}
 
 browser.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local')
@@ -181,11 +214,12 @@ browser.storage.onChanged.addListener((changes, area) => {
 
   const gateChange = changes[LINK_GATE_KEY];
   if (gateChange !== undefined) {
-    const turn = gateTransition(gateChange.oldValue as LinkGate | undefined, gateChange.newValue as LinkGate | undefined);
-    if (turn === 'linked' && bindOn)
-      location.reload();
-    else if (turn === 'lost')
+    // by state, not by TTL: a stale «ok» → «unauthorized/down» must switch to the connect screen at once
+    const next = gateChange.newValue as LinkGate | undefined;
+    if (bindMode(next, Date.now(), false) && bindOn === false)
       paintBind(true);
+    else if (bindMode(next) === false && bindOn)
+      location.reload();
   }
 
   const linkChange = changes[PILOT_LINK_KEY];
@@ -195,10 +229,14 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (changes[WORKER_KEY] !== undefined)
     void refreshWorkerPanel();
 
+  if (changes[EXT_CONFIG_KEY] !== undefined)
+    void paintFlagBoxes().catch(() => {});
+
   if (changes.flags === undefined)
     return;
 
-  paintMachineBox(changes.flags.newValue);
+  if (managedKeys.has('showMachine') === false)
+    paintMachineBox(changes.flags.newValue);
   const next = changes.flags.newValue;
   if (typeof next !== 'object' || next === null || !('autoQueue' in next))
     return;
@@ -211,9 +249,10 @@ browser.storage.onChanged.addListener((changes, area) => {
     return;
 
   autoOn = on;
-  paintPower();
+  // mid-toggle: the running togglePower repaints at its end; repainting here showed a stale «Выключить»
   if (powering)
     return;
+  paintPower();
 
   if (on === false)
     paintOff();
@@ -919,6 +958,9 @@ async function paintBootStatus(): Promise<void> {
   kickSearch();
 }
 
+// a click during «Включаю…/Выключаю…» is queued, not dropped (fast on→off)
+const powerClick = makePowerQueue(() => togglePower());
+
 async function togglePower(): Promise<void> {
   if (bindOn)
     return;
@@ -935,7 +977,6 @@ async function togglePower(): Promise<void> {
   powering = true;
   powerFail = '';
   clingUntil = 0;
-  powerBtn.disabled = true;
   powerBtn.textContent = next ? 'Включаю…' : 'Выключаю…';
   clearPowerNote();
   try {
@@ -1066,16 +1107,7 @@ async function bootSettings(): Promise<void> {
     autoQueue?: boolean;
   };
   autoOn = flags?.autoQueue === true;
-  const boxes: Array<[HTMLInputElement | null, boolean]> = [
-    [hideJunkEl, flags?.hideJunk === true],
-    [keepSessionEl, flags?.keepSession === true],
-    [showPopEl, flags?.showPop !== false],
-    [showMachineEl, flags?.showMachine === true],
-  ];
-  for (const [element, on] of boxes) {
-    if (element)
-      element.checked = on;
-  }
+  await paintFlagBoxes().catch(() => {});
 
   await paintConnect();
 
@@ -1115,7 +1147,9 @@ void (async () => {
   if (node)
     node.innerHTML = bannerHtml(await updateFlag(area), base);
   // deploy window: small «updating» bar, ping /healthz every 3 s, then reload the popup data
-  void watchUpdating(document.getElementById('cc-updating'), base, () => location.reload());
+  // no key = connect screen: no deploy-wait loop at all; otherwise growing pings, at most 2 min
+  if ((await getSyncKey()).trim().length > 0)
+    void watchUpdating(document.getElementById('cc-updating'), base, () => location.reload(), { steps: POPUP_STEPS_MS, maxWait: POPUP_WAIT_MS });
   const gate = await paintLinkPanel(document.getElementById('cc-link'), await getSyncUrl(), await getSyncKey(), area).catch(() => null);
   paintBind(bindMode(gate));
 })();
@@ -1168,9 +1202,9 @@ function paintBind(on: boolean): void {
       connectForm.append(bindAdmin);
     }
     bindAdmin.hidden = false;
-    void readGate({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>>, set: async () => {} }).then((gate) => {
+    void Promise.all([readGate({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>>, set: async () => {} }), getSyncUrl().catch(() => '')]).then(([gate, syncUrlNow]) => {
       if (bindAdmin)
-        bindAdmin.href = adminUrl(gate) || DEFAULT_ADMIN_URL;
+        bindAdmin.href = adminUrl(gate, syncUrlNow) || DEFAULT_ADMIN_URL;
     }).catch(() => {
       if (bindAdmin)
         bindAdmin.href = DEFAULT_ADMIN_URL;

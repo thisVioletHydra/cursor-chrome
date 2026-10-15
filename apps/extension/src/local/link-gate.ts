@@ -2,6 +2,7 @@
 // (connect link + extToken stored AND the server accepted an authorized request recently).
 // Never deletes local data and never renames storage keys; it only writes its own LINK_GATE_KEY.
 import { probe } from './updating.ts';
+import { SERVER_STEPS_MS, stepAt } from '../link/backoff.ts';
 
 export const LINK_GATE_KEY = 'linkGate';
 export const LINK_OK_TTL_MS = 3 * 60_000;
@@ -10,7 +11,9 @@ export const RELINK_TEXT = 'Переподключи расширение: вс�
 
 export type LinkState = 'ok' | 'none' | 'gone' | 'unauthorized' | 'down';
 // login: account of the extToken as the server reported it (optional, old gates have none)
-export type LinkGate = { state: LinkState; host: string; at: number; login?: string };
+// fast: closed by a live failure (network error / 502-504 seen by the fetch guard); first re-check in FAST_PROBE_MS
+export type LinkGate = { state: LinkState; host: string; at: number; login?: string; fails?: number; fast?: boolean };
+export const FAST_PROBE_MS = 2000;
 
 export function hostOf(url: string): string {
   try {
@@ -74,16 +77,54 @@ export async function readGate(area: Area): Promise<LinkGate | null> {
   return raw && typeof raw.state === 'string' ? raw : null;
 }
 
-export async function refreshGate(area: Area, url: string, key: string, fetcher: typeof fetch = fetch): Promise<LinkGate> {
-  const gate = await checkLink(url, key, fetcher);
+export async function refreshGate(area: Area, url: string, key: string, fetcher: typeof fetch = fetch, prev: LinkGate | null = null): Promise<LinkGate> {
+  const checked = await checkLink(url, key, fetcher);
+  // failures in a row (own field inside linkGate): drives the growing probe interval
+  // an open gate that fails its own check is «lost» at once with a quick 2 s re-check (same as the fetch guard)
+  const lost = checked.state === 'down' && gateOpen(prev);
+  const gate = checked.state === 'ok' ? checked : lost ? { ...checked, fails: 1, fast: true } : { ...checked, fails: (prev?.fails ?? 0) + 1 };
   await area.set({ [LINK_GATE_KEY]: gate });
 
   return gate;
 }
 
+// Background probe schedule: open gate → refresh at half TTL; closed → 30 s, 1, 2, 4, 8, 15 min (cap).
+// User actions («Подключить», popup open, new link saved) call checkLink/refreshGate directly, bypassing this.
+export function probeDue(gate: LinkGate | null | undefined, now = Date.now()): boolean {
+  if (gate === null || gate === undefined)
+    return true;
+  if (gate.state === 'none')
+    return false; // nothing to probe until the user pastes a key
+  if (gate.state === 'ok')
+    return now - gate.at >= LINK_OK_TTL_MS / 2;
+  if (gate.fast === true)
+    return now - gate.at >= FAST_PROBE_MS;
+
+  return now - gate.at >= stepAt(SERVER_STEPS_MS, Math.max(1, gate.fails ?? 1));
+}
+
+// Popup: stored server and the gate's server differ → the link is stale, ask to relink.
+export function serverMismatch(gate: LinkGate | null | undefined, syncUrl: string): boolean {
+  const synced = hostOf(syncUrl);
+
+  return Boolean(gate?.host) && synced.length > 0 && gate?.host !== synced;
+}
+
 // Admin URL for the «Открыть админку» button; empty when there is no server yet.
-export function adminUrl(gate: LinkGate | null | undefined): string {
-  return gate?.host ? `https://${gate.host}/admin` : '';
+// Scheme comes from the stored sync URL when it is the same host (http for localhost dev), else https.
+export function adminUrl(gate: LinkGate | null | undefined, syncUrl = ''): string {
+  if (!gate?.host)
+    return '';
+  let scheme = 'https:';
+  try {
+    const u = new URL(syncUrl.trim());
+    if (u.host === gate.host)
+      scheme = u.protocol;
+  }
+  catch {
+  }
+
+  return `${scheme}//${gate.host}/admin`;
 }
 
 // Messages that act on sites (open/drive tabs, autofill, queue, negotiations sync): refused while the gate is closed.
@@ -175,7 +216,7 @@ function originOf(url: string): string {
 
 // Origins allowed to receive the mark: admin of the gate host and the sync URL; nothing known → DEFAULT_ADMIN_URL.
 export function markOrigins(gate: LinkGate | null | undefined, syncUrl = ''): string[] {
-  const list = [originOf(adminUrl(gate)), originOf(syncUrl)].filter(o => o.length > 0);
+  const list = [originOf(adminUrl(gate, syncUrl)), originOf(syncUrl)].filter(o => o.length > 0);
 
   return list.length > 0 ? list : [originOf(DEFAULT_ADMIN_URL)];
 }

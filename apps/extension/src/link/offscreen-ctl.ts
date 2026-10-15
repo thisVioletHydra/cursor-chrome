@@ -64,28 +64,39 @@ async function readLinkCreds(): Promise<LinkCreds> {
   }
 }
 
+// Same badge as last time → no repaint: repeated setBadge calls from reconnect loops made the icon flicker («яйцо»).
+let lastBadge = '';
+
+// someone else painted the badge (gate «!» in background-hooks): next setBadge must repaint
+export function forgetBadge(): void {
+  lastBadge = '';
+}
+
+async function paintBadge(text: string, color: string, title: string): Promise<void> {
+  const key = `${text}|${color}|${title}`;
+  if (key === lastBadge)
+    return;
+  lastBadge = key;
+  await browser.action.setBadgeText({ text });
+  await browser.action.setBadgeBackgroundColor({ color });
+  await browser.action.setBadgeTextColor({ color: '#fff' });
+  await browser.action.setTitle({ title }).catch(() => {});
+}
+
 export async function setBadge(on: boolean): Promise<void> {
   // gate «без синка — пауза» wins over OFF/counter: no link to the admin → «!» with the same hint
   const gate = await readGate({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>>, set: async () => {} }).catch(() => null);
   if (gateOpen(gate) === false) {
-    await browser.action.setBadgeText({ text: '!' });
-    await browser.action.setBadgeBackgroundColor({ color: '#b45309' });
-    await browser.action.setBadgeTextColor({ color: '#fff' });
-    await browser.action.setTitle({ title: gateText(gate) }).catch(() => {});
+    await paintBadge('!', '#b45309', gateText(gate));
 
     return;
   }
-  await browser.action.setTitle({ title: '' }).catch(() => {});
 
   if (on === false) {
-    await browser.action.setBadgeText({ text: 'OFF' });
-    await browser.action.setBadgeBackgroundColor({ color: '#c00' });
-    await browser.action.setBadgeTextColor({ color: '#fff' });
+    await paintBadge('OFF', '#c00', '');
 
     return;
   }
 
-  await browser.action.setBadgeText({ text: String(await todayCount()) });
-  await browser.action.setBadgeBackgroundColor({ color: '#111' });
-  await browser.action.setBadgeTextColor({ color: '#fff' });
+  await paintBadge(String(await todayCount()), '#111', '');
 }

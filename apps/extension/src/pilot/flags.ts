@@ -2,6 +2,8 @@ import { clearPilotStop, pilotStopped } from './pilot-stop';
 import { clearTeaClock, resetTeaClock } from '../apply/tea-clock';
 import { openingTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
+import { waitUntil } from './power-queue.ts';
+import { adminSettingsOf, EXT_CONFIG_KEY, localPatch, mergeSettings } from './ext-settings';
 
 export type Flags = {
   hideJunk: boolean;
@@ -14,9 +16,22 @@ export type Flags = {
 const KEY = 'flags';
 const DEFAULTS: Flags = { hideJunk: false, keepSession: false, showPop: true, showMachine: false, autoQueue: false };
 
+// effective flags: admin value (extConfig:v1 cache) wins, else the local one
 export async function getFlags(): Promise<Flags> {
+  const stored = await browser.storage.local.get([KEY, EXT_CONFIG_KEY]);
+  return mergeSettings(localOf(stored[KEY]), adminSettingsOf(stored));
+}
+
+export async function adminManaged() {
+  return adminSettingsOf(await browser.storage.local.get(EXT_CONFIG_KEY));
+}
+
+async function getLocalFlags(): Promise<Flags> {
   const stored = await browser.storage.local.get(KEY);
-  const raw = stored[KEY];
+  return localOf(stored[KEY]);
+}
+
+function localOf(raw: unknown): Flags {
   if (!raw || typeof raw !== 'object')
     return { ...DEFAULTS };
 
@@ -31,12 +46,14 @@ export async function getFlags(): Promise<Flags> {
   };
 }
 
-export async function setFlags(patch: Partial<Flags>): Promise<Flags> {
+export async function setFlags(asked: Partial<Flags>): Promise<Flags> {
+  const patch = localPatch(asked, await adminManaged());
   const prev = await getFlags();
   const next = { ...prev, ...patch };
   const turningOn = prev.autoQueue === false && next.autoQueue === true;
   const turningOff = prev.autoQueue === true && next.autoQueue === false;
-  if (turningOff && openingTab())
+  // the bot tab is still opening (fast on→off): wait for it instead of silently keeping the pilot on
+  if (turningOff && openingTab() && await waitUntil(() => openingTab() === false, 8000) === false)
     return prev;
 
   if (turningOn)
@@ -55,11 +72,11 @@ export async function setFlags(patch: Partial<Flags>): Promise<Flags> {
   if ((turningOn && live.autoQueue === true) || (turningOff && live.autoQueue === false))
     return live;
 
-  const stored = { ...live, ...patch };
+  const stored = { ...(await getLocalFlags()), ...patch };
   if (stored.autoQueue === true && live.autoQueue === false)
     await clearPilotStop();
 
   await browser.storage.local.set({ [KEY]: stored });
 
-  return stored;
+  return getFlags();
 }
