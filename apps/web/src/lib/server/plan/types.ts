@@ -35,7 +35,9 @@ export interface Deps {
   settings?: (login: string) => Promise<Settings>;
 }
 
-export interface Settings { pace?: unknown; keepWorkHours?: boolean; words?: string[]; feed?: 'feed' | 'light'; maxPages?: number; dailyCap?: number }
+export type Scenario = 'savedLinks' | 'relook' | 'resumePick' | 'letter' | 'murky' | 'testTask' | 'jobOffer' | 'hideJunk' | 'invites' | 'inviteAutoReply' | 'quota';
+
+export interface Settings { scenarios?: Partial<Record<Scenario, boolean>>; pace?: unknown; keepWorkHours?: boolean; words?: string[]; feed?: 'feed' | 'light'; maxPages?: number; dailyCap?: number }
 
 export type Step =
   | { type: 'cmd'; cmd: Cmd; execMs?: number }

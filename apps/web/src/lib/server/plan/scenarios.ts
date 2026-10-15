@@ -2,10 +2,12 @@
 // queue-run TEST/week/day, negotiations invitations. Each one is behind its own settings flag (default off).
 import type { Settings } from './types.ts';
 
-export type Scenario = 'savedLinks' | 'relook' | 'resumePick' | 'letter' | 'murky' | 'testTask' | 'jobOffer' | 'hideJunk' | 'invites' | 'inviteAutoReply' | 'quota';
-// Additive view over Settings: settings(login) may return { scenarios: { letter: true, ... } }.
-export type PlanSettings = Settings & { scenarios?: Partial<Record<Scenario, boolean>> };
-export const on = (set: Settings, s: Scenario) => (set as PlanSettings).scenarios?.[s] === true;
+import type { Scenario } from './types.ts';
+
+export type { Scenario };
+export type PlanSettings = Settings; // alias, scenarios now live in Settings
+// inviteAutoReply is reserved and intentionally not wired: invitations are only notified.
+export const on = (set: Settings, s: Scenario) => set.scenarios?.[s] === true;
 
 const MURKY: Array<[RegExp, string]> = [
   [/шарад/i, 'шарады'], [/ребус/i, 'ребусы'], [/головолом/i, 'головоломки'], [/цыганщин/i, 'цыганщина'], [/загадк/i, 'загадки'],

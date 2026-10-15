@@ -1,5 +1,6 @@
 // Stage B executor: one server primitive → existing extension functions (runCommand, worker tab, captcha/detect checks).
 // Acts only in the pinned worker tab. navigate: https only. Results are size-capped for /api/ext/report.
+import { splitThinAnswers } from '../apply/thin-answers.ts';
 import type { Outcome, Wire } from './server-link.ts';
 
 import { httpsOnly } from './server-link.ts';
@@ -98,7 +99,7 @@ export async function execServerCmd(cmd: Wire): Promise<Outcome> {
     }
     case 'hh_apply':
       // the planner already clicked «Откликнуться» and waited for the form: fill + submit only, no second click
-      return { ok: true, result: await runHhApplyThin() };
+      return { ok: true, result: await runHhApplyThin(splitThinAnswers(p).resumeKind) };
   }
   return { ok: false, error: 'неизвестная команда' };
 }

@@ -79,7 +79,7 @@ const onPageMessage: Record<string, (message: PageIncoming, reply: Reply) => boo
     if (window !== window.top)
       return false;
 
-    void runApply(message.resume === true, message.thin === true).then(reply).catch((error) => {
+    void runApply(message.resume === true, message.thin === true, message.resumeKind === 'frontend' || message.resumeKind === 'fullstack' ? message.resumeKind : null).then(reply).catch((error) => {
       reply({
         ok: false,
         status: 'skip',
