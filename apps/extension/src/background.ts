@@ -1,3 +1,4 @@
+import { serverMode } from './local/server-mode';
 import { idempotentExecutor } from './link/command-receipts';
 import type { CommandName, WsRequest } from '@cursor-chrome/protocol';
 
@@ -106,7 +107,8 @@ function startServerLink(): void {
     base: getSyncUrl,
     key: getSyncKey,
     gateOpen: async () => (await linkPaused()) === false,
-    exec: execOnce,
+    exec: async cmd => (await getFlags()).autoQueue ? execOnce(cmd) : {ok:false,error:'выключено пользователем'},
+    isEnabled: async () => (await getFlags()).autoQueue,
     onUnauthorized: async () => {
       await linkPaused().catch(() => true);
     },
@@ -390,6 +392,7 @@ function autoFlag(value: unknown): boolean {
 }
 
 async function armSearchSoon(force: boolean): Promise<void> {
+  if (await serverMode()) return;
   if (armingSearch)
     return;
 

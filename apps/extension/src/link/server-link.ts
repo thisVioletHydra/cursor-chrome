@@ -5,7 +5,7 @@
 // Auth: Bearer extToken; x-access-pass/x-ext-version are added by the pass-header fetch wrapper.
 import { makeBackoff, MAX_STEP_MS, SERVER_STEPS_MS } from './backoff.ts';
 
-export const CMD_KINDS = ['navigate', 'click', 'type', 'select', 'press_key', 'read', 'snapshot', 'wait', 'hh_apply'] as const;
+export const CMD_KINDS = ['readDOM', 'navigate', 'click', 'type', 'select', 'press_key', 'read', 'snapshot', 'wait', 'hh_apply'] as const;
 export type CmdKind = (typeof CMD_KINDS)[number];
 export type Wire = { id: string; kind: CmdKind; params: Record<string, unknown>; deadline?: number };
 export type Outcome = { ok: true; result: unknown } | { ok: false; error: string };
@@ -15,6 +15,7 @@ export type LinkDeps = {
   base: () => Promise<string>;
   key: () => Promise<string>;
   gateOpen: () => Promise<boolean>;
+  isEnabled?: () => Promise<boolean>;
   exec: (cmd: Wire) => Promise<Outcome>;
   fetcher?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
@@ -88,11 +89,11 @@ export async function serverLinkLoop(d: LinkDeps): Promise<LoopEnd> {
     const key = (await d.key()).trim();
     if (!base || !key)
       return 'closed';
-    const auth = { authorization: `Bearer ${key}` };
+    const auth = { authorization: `Bearer ${key}`, ...(d.isEnabled ? {'x-ext-enabled':String(await d.isEnabled())} : {}) };
     const started = now();
     let res: Response;
     try {
-      res = await fetcher(`${base}/api/ext/next`, { cache: 'no-store', headers: auth });
+      res = await fetcher(`${base}/api/ext/next`, { cache: 'no-store', signal: AbortSignal.timeout(30_000), headers: auth });
     }
     catch {
       await sleep(backoff.next());

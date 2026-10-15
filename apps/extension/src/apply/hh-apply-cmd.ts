@@ -23,10 +23,10 @@ type ApplyReply = {
 };
 
 // Thin client (server planner): form is already open; one pass, no «Откликнуться» click, no blind retry.
-export async function runHhApplyThin(): Promise<unknown> {
+export async function runHhApplyThin(resumeKind: 'frontend' | 'fullstack' | null = null): Promise<unknown> {
   const beat = applyBeat();
   try {
-    return await finishApply(await workerTopMessage('run-apply', { thin: true }));
+    return await finishApply(await workerTopMessage('run-apply', resumeKind ? { thin: true, resumeKind } : { thin: true }));
   }
   finally {
     clearInterval(beat);

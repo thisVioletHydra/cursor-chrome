@@ -4,4 +4,4 @@ import { createPlanLink } from './plan-link.ts';
 import { planDeps } from './plan-deps.ts';
 
 export const planFlags = createPlanFlags();
-export const planLink = createPlanLink({ flags: planFlags, deps: planDeps });
+export const planLink = createPlanLink({ primitiveOnly: true, flags: planFlags, deps: headersOf => planDeps(headersOf, planFlags) });

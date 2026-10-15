@@ -12,7 +12,7 @@ import type { StandardKind } from '../local/standard-fill';
 import { noteLive } from './live-log';
 import { BUILTIN, cachedConfig, selector } from '../local/config-cache';
 import { browser } from '../browser-host';
-import { pickResume, resumeKind, vacancyBody, vacancyTitle } from './resume';
+import { pickResume, resumeKind, vacancyBody, vacancyTitle, type ResumeKind } from './resume';
 import { applyRoot, employerQuestionnaire, isCoverLetter, isStandardQuestion, promptFields } from './screen-questions';
 
 export type FillFail = {
@@ -65,7 +65,7 @@ type CloudAnswer = { answer?: string; human?: boolean; reason?: string; source?:
 const CUSTOM_REASONS = ['свои вопросы площадки', 'свои вопросы HH'];
 const FIELD_SEL = 'textarea, input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]):not([type="file"]):not([type="submit"])';
 
-export async function fillApply(): Promise<FillFail | null> {
+export async function fillApply(forced: ResumeKind | null = null): Promise<FillFail | null> {
   const blocked = captchaFail();
   if (blocked)
     return blocked;
@@ -74,7 +74,7 @@ export async function fillApply(): Promise<FillFail | null> {
   if (asked)
     return { ok: false, status: 'needsHuman', reason: asked.reason, hints: asked.hints, ...(asked.form ? { form: asked.form } : {}) };
 
-  const kind = resumeKind(vacancyTitle(), vacancyBody());
+  const kind = forced ?? resumeKind(vacancyTitle(), vacancyBody());
   noteLive(`apply-fill.ts · резюме ${kind}`);
   await pickResume(kind);
 

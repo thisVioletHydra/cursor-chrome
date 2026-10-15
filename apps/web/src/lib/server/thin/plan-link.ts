@@ -1,3 +1,4 @@
+import { primitivePlanner } from '../plan/primitive-plan.ts';
 // Glue: /api/ext/next ↔ planner (plan/driver.ts). Flag on → planner.kick(login) feeds commands into the bus;
 // a chain that ends with idle/stop is answered to the extension as a pause. Flag off / kick null → old logic.
 // BYOK: headers of the latest poll are kept in memory only (never stored/logged), dropped when the chain ends.
@@ -15,7 +16,7 @@ export type NextAnswer = { kind: 'off'; afterMs: number } | { kind: 'old' } | { 
 
 const KEY_HEADERS = ['x-llm-key', 'x-llm-provider', 'x-llm-model'];
 
-export function createPlanLink(o: { flags: Pick<PlanFlags, 'enabled'>; deps: (headersOf: (login: string) => Headers) => Omit<Deps, 'enqueue'>; bus?: Bus; now?: () => number }) {
+export function createPlanLink(o: { flags: Pick<PlanFlags, 'enabled'>; deps: (headersOf: (login: string) => Headers) => Omit<Deps, 'enqueue'>; primitiveOnly?: boolean; bus?: Bus; now?: () => number }) {
   const bus = o.bus ?? defaultBus;
   const now = o.now ?? Date.now;
   const heads = new Map<string, Headers>();
@@ -23,7 +24,7 @@ export function createPlanLink(o: { flags: Pick<PlanFlags, 'enabled'>; deps: (he
   const headersOf = (login: string) => heads.get(login) ?? new Headers();
   const mem = createStore();
   const store = { ...mem, enabled: (login: string) => o.flags.enabled(login) };
-  const planner = createPlanner(store, { ...o.deps(headersOf), enqueue: bus.enqueue, now });
+  const planner = createPlanner(store, { ...o.deps(headersOf), enqueue: o.primitiveOnly ? primitivePlanner(bus.enqueue) : bus.enqueue, now });
 
   const asPause = (step: Step): Pause | null => step.type === 'idle' ? { type: 'idle', reason: step.reason, retryMs: step.retryMs } : step.type === 'stop' ? { type: 'stop', reason: step.reason, needsHuman: step.needsHuman } : null;
 
@@ -33,6 +34,7 @@ export function createPlanLink(o: { flags: Pick<PlanFlags, 'enabled'>; deps: (he
       pauses.delete(login);
       return { kind: 'off', afterMs: OFF_AFTER_MS };
     }
+    if (request.headers.get('x-ext-enabled') === 'false') return {kind:'pause', pause:{type:'idle',reason:'выключено',retryMs:900000}};
     const held = pauses.get(login);
     if (held && now() < held.until)
       return { kind: 'pause', pause: held.pause.type === 'idle' ? { ...held.pause, retryMs: held.until - now() } : held.pause };

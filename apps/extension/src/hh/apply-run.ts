@@ -43,9 +43,12 @@ const ANSWER_WAIT = waitMark({
 
 // thin: the server already clicked «Откликнуться» and waited for the form → never click it again;
 // no open form → error. Fill + submit only.
-export function runApply(resume = false, thin = false): Promise<ApplyResult> {
+// resumeKind (thin, from the planner's answers.__resumeKind) overrides the title/body guess
+let forcedKind: 'frontend' | 'fullstack' | null = null;
+export function runApply(resume = false, thin = false, resumeKind: 'frontend' | 'fullstack' | null = null): Promise<ApplyResult> {
   if (running)
     return running;
+  forcedKind = thin ? resumeKind : null;
 
   running = applyOnce(resume, thin).finally(() => {
     running = null;
@@ -172,7 +175,7 @@ async function clickOpen(plan: ReturnType<typeof planOpen>): Promise<ApplyResult
 }
 
 async function fillStep(): Promise<ApplyResult | null> {
-  const failFill = await fillApply();
+  const failFill = await fillApply(forcedKind);
   if (failFill === null)
     return null;
 

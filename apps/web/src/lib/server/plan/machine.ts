@@ -322,7 +322,7 @@ export async function advance(st: PlanState, last: Outcome | undefined, deps: Pl
         return begin(st, deps, set, now, rand);
       }
       const given = fieldsOf(last);
-      const fields: unknown[] = given.length > 0 ? given : parsed.fields;
+      const fields: unknown[] = (given.length > 0 ? given : parsed.fields).filter((f:any) => !/resume|letter/i.test(f.name || f.id || '')).map((f:any) => ({...f,prompt:f.prompt || f.label,kind:f.kind || (f.type==='select'?'select':f.type==='radio'||f.type==='checkbox'?'choice':'text'),options:(f.options || []).map((o:any)=>typeof o==='string'?o:o.text)}));
       if (fields.length > 0 && deps.answer) {
         try {
           const ctx = deps.context ? await deps.context(st.login) : {}; // transit, not stored

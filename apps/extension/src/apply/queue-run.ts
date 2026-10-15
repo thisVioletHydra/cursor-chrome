@@ -1,3 +1,4 @@
+import { serverMode } from '../local/server-mode';
 import type { Hunt, QueueItem } from './admin-api';
 import type { FoundCard } from '../search/hh-search';
 
@@ -85,6 +86,7 @@ export function queueBusy(): boolean {
 }
 
 export async function runQueue(): Promise<QueueRun> {
+  if (await serverMode()) return {ok:true} as QueueRun;
   if (running)
     return blank(hangHalted() ? 'расширение зависло' : 'уже идёт');
 
@@ -860,7 +862,7 @@ async function cycleOpen(): Promise<boolean> {
 
   const flags = await getFlags();
 
-  return flags.autoQueue === true && hoursOpen();
+  return await serverMode() === false && flags.autoQueue === true && hoursOpen();
 }
 
 function blank(reason: string): QueueRun {

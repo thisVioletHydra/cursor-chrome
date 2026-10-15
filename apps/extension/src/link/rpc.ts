@@ -1,3 +1,4 @@
+import { serverMode } from '../local/server-mode';
 import { askCloud } from '../apply/answer';
 import { appendApply, clearWaiting, dropWaiting, getSyncKey, getSyncUrl, listApplies, setSyncKey, setSyncUrl, sweepDismissedWaiting, todayCount, waitingHuman } from '../diary/apply-log';
 import { adminManaged, getFlags, setFlags } from '../pilot/flags';
@@ -290,6 +291,10 @@ async function flagsAfter(
 }
 
 async function writeFlags(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; showMachine?: boolean; autoQueue?: boolean }): Promise<unknown> {
+  if (await serverMode() && typeof patch.autoQueue === 'boolean') {
+    const decided = await applyPilot(patch.autoQueue ? {type:'enable'} : {type:'stop',reason:'user'});
+    return flagsAfter(patch, decided.on);
+  }
   if (patch.autoQueue === true)
     return enablePilot(patch);
 

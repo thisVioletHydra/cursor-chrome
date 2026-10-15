@@ -1,3 +1,5 @@
+import { serverMode } from '../local/server-mode';
+import { splitThinAnswers } from '../apply/thin-answers.ts';
 // Stage B executor: one server primitive → existing extension functions (runCommand, worker tab, captcha/detect checks).
 // Acts only in the pinned worker tab. navigate: https only. Results are size-capped for /api/ext/report.
 import type { Outcome, Wire } from './server-link.ts';
@@ -16,22 +18,29 @@ const RESULT_MAX = 200_000;
 const WAIT_MAX_MS = 60_000;
 
 // Runs inside the page (self-contained). Snapshot: {url, html} + {fields} of a form.
-export function pageSnap(selector: string | null, maxChars: number): { url: string; html: string; fields: unknown[]; found: boolean } {
+export function pageSnap(selector: string | null, maxChars: number): { url: string; html: string; fields: unknown[]; controls: unknown[]; found: boolean } {
   const root = selector ? document.querySelector(selector) : document.documentElement;
   const html = root ? (root as HTMLElement).outerHTML.slice(0, maxChars) : '';
   const fields: unknown[] = [];
   if (root && selector) {
     for (const el of Array.from(root.querySelectorAll('input, textarea, select'))) {
       const input = el as HTMLInputElement;
-      if (input.type === 'hidden' || input.type === 'submit')
+      if (input.type === 'hidden' || input.type === 'submit' || input.type === 'password')
         continue;
       const id = input.id || input.name || '';
       const label = (input.id ? document.querySelector(`label[for="${CSS.escape(input.id)}"]`)?.textContent : '') || input.closest('label')?.textContent || input.getAttribute('aria-label') || input.placeholder || '';
-      const options = el.tagName === 'SELECT' ? Array.from((el as HTMLSelectElement).options).map(o => o.text.trim()) : undefined;
-      fields.push({ id, name: input.name || '', type: el.tagName === 'SELECT' ? 'select' : el.tagName === 'TEXTAREA' ? 'textarea' : input.type, label: label.trim().slice(0, 500), required: input.required === true, ...(options ? { options } : {}) });
+      const options = el.tagName === 'SELECT' ? Array.from((el as HTMLSelectElement).options).map(o => ({text:o.text.trim(),value:o.value})) : undefined;
+      const selector = input.id ? `#${CSS.escape(input.id)}` : input.name ? `[name=${JSON.stringify(input.name)}]${input.type==='radio'||input.type==='checkbox'?`[value=${JSON.stringify(input.value)}]`:''}` : '';
+      fields.push({ id, selector, value:input.type==='radio'||input.type==='checkbox'?input.value:'', name: input.name || '', type: el.tagName === 'SELECT' ? 'select' : el.tagName === 'TEXTAREA' ? 'textarea' : input.type, label: label.trim().slice(0, 500), required: input.required === true, ...(options ? { options } : {}) });
     }
   }
-  return { url: location.href, html, fields, found: root !== null };
+  const controls = root ? Array.from(root.querySelectorAll('button, [role="option"], [data-qa="resume-title"]')).map((el) => {
+    const parts:string[]=[]; let node:Element|null=el;
+    while(node && node!==document.documentElement){const parent=node.parentElement;parts.unshift(`${node.tagName}:nth-child(${Array.from(parent?.children || []).indexOf(node)+1})`);node=parent;}
+    const all=Array.from(document.querySelectorAll(el.tagName));
+    return {text:el.textContent?.trim().slice(0,300)||'', selector:el.id?`#${CSS.escape(el.id)}`:`html > ${parts.join(' > ')}` , path:all.indexOf(el)};
+  }) : [];
+  return { url: location.href, html, fields, controls, found: root !== null };
 }
 
 export function pageRead(selector: string, attr: string | null, all: boolean, maxChars: number): { url: string; values: string[]; text: string } {
@@ -59,8 +68,15 @@ const sleep = (ms: number) => new Promise<void>(done => setTimeout(done, ms));
 const num = (v: unknown, dflt: number, max: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(0, v)) : dflt);
 
 export async function execServerCmd(cmd: Wire): Promise<Outcome> {
+  if (await serverMode() && !['navigate','click','type','select','readDOM','wait'].includes(cmd.kind)) return {ok:false,error:'разрешены только примитивы'};
   const p = cmd.params ?? {};
   switch (cmd.kind) {
+    case 'readDOM': {
+      const result = p.mode === 'text'
+        ? await inTab(pageRead, [String(p.selector || 'html'), typeof p.attr === 'string' ? p.attr : null, p.all === true, num(p.maxChars, 4000, RESULT_MAX)])
+        : await inTab(pageSnap, [typeof p.selector === 'string' ? p.selector : null, num(p.maxChars, RESULT_MAX, RESULT_MAX)]);
+      return {ok:true,result};
+    }
     case 'navigate': {
       const url = httpsOnly(p.url);
       if (url === null)
@@ -98,7 +114,7 @@ export async function execServerCmd(cmd: Wire): Promise<Outcome> {
     }
     case 'hh_apply':
       // the planner already clicked «Откликнуться» and waited for the form: fill + submit only, no second click
-      return { ok: true, result: await runHhApplyThin() };
+      return { ok: true, result: await runHhApplyThin(splitThinAnswers(p).resumeKind) };
   }
   return { ok: false, error: 'неизвестная команда' };
 }

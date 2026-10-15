@@ -102,3 +102,15 @@ test('fixture scrub: empty <script> and on* handlers removed', () => {
   assert.equal(out.includes('javascript:'), false);
   assert.ok(out.includes('data-qa="ok"') && out.includes('src="/i.png"'));
 });
+
+test('thin hh_apply: answers.__resumeKind picks the resume, never becomes an answer', async () => {
+  const { splitThinAnswers } = await import('./src/apply/thin-answers.ts');
+  assert.deepEqual(splitThinAnswers({ answers: { __resumeKind: 'fullstack', q1: 'да', __other: 'x' } }), { resumeKind: 'fullstack', answers: { q1: 'да' } });
+  assert.deepEqual(splitThinAnswers({ answers: { __resumeKind: 'designer' } }), { resumeKind: null, answers: {} });
+  assert.deepEqual(splitThinAnswers({}), { resumeKind: null, answers: {} });
+  const fs = await import('node:fs');
+  const src = p => fs.readFileSync(new URL(p, import.meta.url), 'utf8');
+  assert.match(src('./src/link/server-exec.ts'), /runHhApplyThin\(splitThinAnswers\(p\)\.resumeKind\)/);
+  assert.match(src('./src/hh/apply-fill.ts'), /const kind = forced \?\? resumeKind/);
+  assert.match(src('./src/content.ts'), /message\.resumeKind/);
+});

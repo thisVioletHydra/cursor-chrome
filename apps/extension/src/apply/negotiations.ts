@@ -1,3 +1,4 @@
+import { serverMode } from '../local/server-mode';
 import { getSyncKey } from '../diary/apply-log';
 import { getFlags } from '../pilot/flags';
 import { tabShowsCaptcha } from '../tab/hh-captcha';
@@ -26,6 +27,7 @@ const LOGIN_URL = 'https://hh.ru/account/login';
 const RENDER_WAIT_MS = 1_500;
 
 export async function syncNegotiations(): Promise<NegotiationsSync> {
+  if (await serverMode()) return {ok:true} as NegotiationsSync;
   if (await captchaHolding())
     return { ok: true, count: 0, reason: '' };
 

@@ -1,3 +1,4 @@
+import { serverMode } from './local/server-mode';
 import { keepHhClicks } from './hh/stay-on-tab';
 import { startHhJob } from './hh/job';
 import { runApply } from './hh/apply-run';
@@ -17,7 +18,7 @@ function startHhJobOnce(): void {
   if (hhJobStarted)
     return;
   hhJobStarted = true;
-  startHhJob();
+  void serverMode().then(thin => { if (!thin) startHhJob(); });
 }
 void contentGateOpen({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>> }).then((open) => {
   if (open)
@@ -65,6 +66,7 @@ type PageIncoming = {
   params?: Record<string, unknown>;
   resume?: unknown;
   thin?: unknown;
+  resumeKind?: unknown;
 };
 
 type Reply = (value?: unknown) => void;
@@ -79,7 +81,7 @@ const onPageMessage: Record<string, (message: PageIncoming, reply: Reply) => boo
     if (window !== window.top)
       return false;
 
-    void runApply(message.resume === true, message.thin === true).then(reply).catch((error) => {
+    void runApply(message.resume === true, message.thin === true, message.resumeKind === 'frontend' || message.resumeKind === 'fullstack' ? message.resumeKind : null).then(reply).catch((error) => {
       reply({
         ok: false,
         status: 'skip',

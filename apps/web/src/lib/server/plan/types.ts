@@ -1,7 +1,7 @@
 // Contract with stage B transport (thin/cmd-bus.ts): Cmd = { kind, params }, Outcome = { ok, result? , error? }.
 import type { NegotiationRow } from './negotiations.ts';
 
-export type Kind = 'navigate' | 'click' | 'type' | 'select' | 'press_key' | 'read' | 'snapshot' | 'wait' | 'hh_apply';
+export type Kind = 'readDOM' | 'navigate' | 'click' | 'type' | 'select' | 'press_key' | 'read' | 'snapshot' | 'wait' | 'hh_apply';
 export interface Cmd { kind: Kind; params: Record<string, unknown> }
 export type Outcome = { ok: true; result?: unknown } | { ok: false; error: string };
 export type Enqueue = (login: string, cmd: Cmd, opts?: { execMs?: number }) => Promise<Outcome>;
@@ -35,7 +35,9 @@ export interface Deps {
   settings?: (login: string) => Promise<Settings>;
 }
 
-export interface Settings { pace?: unknown; keepWorkHours?: boolean; words?: string[]; feed?: 'feed' | 'light'; maxPages?: number; dailyCap?: number }
+export type Scenario = 'savedLinks' | 'relook' | 'resumePick' | 'letter' | 'murky' | 'testTask' | 'jobOffer' | 'hideJunk' | 'invites' | 'inviteAutoReply' | 'quota';
+
+export interface Settings { scenarios?: Partial<Record<Scenario, boolean>>; pace?: unknown; keepWorkHours?: boolean; words?: string[]; feed?: 'feed' | 'light'; maxPages?: number; dailyCap?: number }
 
 export type Step =
   | { type: 'cmd'; cmd: Cmd; execMs?: number }

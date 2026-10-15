@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import { commandJournal, type CommandJournal } from './command-journal.ts';
 
-export const KINDS = ['navigate', 'click', 'type', 'select', 'press_key', 'read', 'snapshot', 'wait', 'hh_apply'] as const;
+export const KINDS = ['readDOM', 'navigate', 'click', 'type', 'select', 'press_key', 'read', 'snapshot', 'wait', 'hh_apply'] as const;
 export type Kind = (typeof KINDS)[number];
 
 export interface Cmd { kind: Kind; params: Record<string, unknown> }
@@ -35,6 +35,7 @@ export function validate(cmd: unknown): string | null {
     return 'params не объект';
   const p = params as Record<string, unknown>;
   const allow: Record<Kind, string[]> = {
+    readDOM: ['mode', 'selector', 'attr', 'all', 'maxChars'],
     navigate: ['url'],
     click: ['selector', 'timeoutMs'],
     type: ['selector', 'text', 'submit', 'clear', 'timeoutMs'],
@@ -51,6 +52,10 @@ export function validate(cmd: unknown): string | null {
   if (optNum(p.timeoutMs, 0, LIMITS.maxExecMs) === false)
     return 'timeoutMs вне 0..120000';
   switch (kind as Kind) {
+    case 'readDOM':
+      if (p.mode !== 'snapshot' && p.mode !== 'text') return 'mode snapshot/text';
+      if (!optStr(p.selector) || !optStr(p.attr, 100)) return 'selector/attr';
+      return optNum(p.maxChars, 1, 100_000) ? null : 'maxChars';
     case 'navigate': {
       if (str(p.url, 2000) === false)
         return 'url обязателен';
