@@ -1,7 +1,6 @@
 // Gate «без синка — пауза»: the extension acts on sites only while it is linked to the admin
 // (connect link + extToken stored AND the server accepted an authorized request recently).
 // Never deletes local data and never renames storage keys; it only writes its own LINK_GATE_KEY.
-import { probe } from './updating.ts';
 import { SERVER_STEPS_MS, stepAt } from '../link/backoff.ts';
 
 export const LINK_GATE_KEY = 'linkGate';
@@ -31,23 +30,25 @@ export async function checkLink(url: string, key: string, fetcher: typeof fetch 
     return { state: 'none', host, at: now };
 
   const base = `${new URL(url.trim()).protocol}//${host}`;
-  try {
-    const res = await fetcher(`${base}/api/link`, { cache: 'no-store', headers: { authorization: `Bearer ${key.trim()}` } });
-    if (res.status === 200) {
-      const body = await res.json().catch(() => null) as { login?: unknown } | null;
-      const login = typeof body?.login === 'string' ? body.login : '';
-      return login ? { state: 'ok', host, at: now, login } : { state: 'ok', host, at: now };
-    }
-    if (res.status === 401 || res.status === 403)
-      return { state: 'unauthorized', host, at: now };
-    if (res.status === 404 || res.status === 410 || res.headers.get('x-railway-fallback') !== null)
-      return { state: 'gone', host, at: now };
+  // Three bounded observations: immediate HTTP errors take 10 s, stalled requests at most 19 s.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    try {
+      const res = await fetcher(`${base}/api/link`, { cache: 'no-store', signal: controller.signal, headers: { authorization: `Bearer ${key.trim()}` } });
+      if (res.status === 200) {
+        const body = await res.json() as { login?: unknown };
+        const login = typeof body?.login === 'string' ? body.login : '';
+        return { state: 'ok', host, at: Date.now(), ...(login ? { login } : {}) };
+      }
+      if (res.status === 401 || res.status === 403)
+        return { state: 'unauthorized', host, at: Date.now() };
+      if (res.status === 404 || res.status === 410 || res.headers.get('x-railway-fallback') !== null)
+        return { state: 'gone', host, at: Date.now() };
+    } catch {} finally { clearTimeout(timer); }
+    if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 5000));
   }
-  catch {
-  }
-  const health = await probe(base, fetcher);
-
-  return { state: health === 'gone' ? 'gone' : 'down', host, at: now };
+  return { state: 'down', host, at: Date.now() };
 }
 
 export function gateOpen(gate: LinkGate | null | undefined, now = Date.now()): boolean {

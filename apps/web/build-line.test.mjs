@@ -18,3 +18,10 @@ test('sidebar: строка версии и у обычного, и у демо'
   const server = fs.readFileSync(new URL('./src/routes/admin/+layout.server.ts', import.meta.url), 'utf8');
   assert.match(server, /buildLine: deployLabel\(\)/);
 });
+
+test('dev commit: no Railway sha → build-time git short sha, no git → «dev»; Railway wins', () => {
+  assert.equal(deployCommit({}, 'ABCDEF1234'), 'abcdef1');
+  assert.equal(deployCommit({}, ''), 'dev');
+  assert.equal(deployCommit({}, 'not-a-sha'), 'dev');
+  assert.equal(deployCommit({ RAILWAY_GIT_COMMIT_SHA: '8f61fb7aaaa' }, 'abcdef1'), '8f61fb7');
+});

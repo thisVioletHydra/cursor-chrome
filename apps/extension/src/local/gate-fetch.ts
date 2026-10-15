@@ -2,7 +2,7 @@
 // gate closed → no request at all (synthetic 503 «paused»); server answers 401/403 → gate becomes «unauthorized»
 // at once (popup → connect screen, badge «!», queue/autopilot loops stop). Only /api/link and /api/access/* pass
 // while closed (they are how the link gets re-checked). Writes only its own linkGate key.
-import { gateOpen, LINK_GATE_KEY, type LinkGate } from './link-gate.ts';
+import { checkLink, gateOpen, LINK_GATE_KEY, type LinkGate } from './link-gate.ts';
 
 type Area = { get: (keys: string) => Promise<Record<string, unknown>>; set: (items: Record<string, unknown>) => Promise<void> };
 
@@ -43,8 +43,17 @@ export function makeGateFetch(original: typeof fetch, area: Area, origin: () => 
       return new Response(JSON.stringify(PAUSED_BODY), { status: 503, headers: { 'content-type': 'application/json', 'x-cc-paused': '1' } });
     const markLost = async () => {
       const cur = ((await area.get(LINK_GATE_KEY).catch(() => ({})))[LINK_GATE_KEY] ?? null) as LinkGate | null;
-      if (gateOpen(cur, now()))
-        await area.set({ [LINK_GATE_KEY]: lostGate(cur, new URL(base).host, now()) }).catch(() => {});
+      if (gateOpen(cur, now())) {
+        const key = (await area.get('applySyncKey')).applySyncKey;
+        // Confirm using a read-only request; never retry the original mutation.
+        if (typeof key === 'string' && key) {
+          const checked = await checkLink(base, key, original);
+          if (checked.state === 'ok') return;
+          await area.set({ [LINK_GATE_KEY]: { ...checked, login: cur?.login, fails: 3 } });
+        } else {
+          await area.set({ [LINK_GATE_KEY]: lostGate(cur, new URL(base).host, now()) }).catch(() => {});
+        }
+      }
     };
     let res: Response;
     try {

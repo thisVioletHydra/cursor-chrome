@@ -28,3 +28,7 @@ This popup redesign adds no permissions, endpoints, analytics or external assets
 ## Publication requirements still pending
 
 Public privacy policy URL, publisher/contact details, final data disclosure, permission review, accurate listing text and store screenshots must be prepared and verified before Chrome Web Store submission. Microsoft Edge Add-ons requirements must be verified separately if publishing there.
+
+## Version history
+
+- 0.5.130: bounded connection checks, account-safe history, saved power toggle, admin review navigation and build identification. No new permissions. Connection health checks send only the configured extension token to its server.

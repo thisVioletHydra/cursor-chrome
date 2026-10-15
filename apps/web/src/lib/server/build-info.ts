@@ -34,9 +34,14 @@ export async function buildLabel(): Promise<string> {
 }
 
 // Admin sidebar line: version + deployed commit (runtime RAILWAY_GIT_COMMIT_SHA), `dev` when not on Railway.
-export function deployCommit(env: Record<string, string | undefined> = process.env): string {
+// no Railway sha (dev): 7 chars of `git rev-parse` taken at build time (vite define), else `dev`
+declare const __GIT_SHORT__: string | undefined;
+const BUILT_SHA = typeof __GIT_SHORT__ === 'string' ? __GIT_SHORT__ : '';
+export function deployCommit(env: Record<string, string | undefined> = process.env, built: string = BUILT_SHA): string {
   const raw = (env.RAILWAY_GIT_COMMIT_SHA || '').trim();
-  return /^[0-9a-f]{7,40}$/i.test(raw) ? raw.slice(0, 7).toLowerCase() : 'dev';
+  if (/^[0-9a-f]{7,40}$/i.test(raw))
+    return raw.slice(0, 7).toLowerCase();
+  return /^[0-9a-f]{7,40}$/i.test(built.trim()) ? built.trim().slice(0, 7).toLowerCase() : 'dev';
 }
 
 export function deployLine(version: string, env: Record<string, string | undefined> = process.env): string {

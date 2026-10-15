@@ -33,7 +33,7 @@ function keyOf(item: ViewItem): string {
 }
 
 export function viewItems<T extends ViewItem>(items: T[], view: { linked: boolean; login: string }): T[] {
-  if (view.linked === false)
+  if (view.linked === false || !view.login.trim())
     return [];
   const me = (view.login || DEFAULT_OWNER).toLowerCase();
   const seen = new Set<string>();

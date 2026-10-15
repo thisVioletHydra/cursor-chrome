@@ -55,7 +55,7 @@ test('popup: gate change by state → connect screen (no TTL comparison)', () =>
 
 test('badge follows the gate: background repaints «!» on any linkGate change; guard installed everywhere', () => {
   const hooks = src('./src/local/background-hooks.ts');
-  assert.match(hooks, /if \(LINK_GATE_KEY in changes\)\n      void paintGateBadge\(/);
+  assert.match(hooks, /if \(LINK_GATE_KEY in changes\) \{[\s\S]*?void paintGateBadge\(next\)/);
   assert.match(hooks, /installGateFetch\(area, base,/);
   assert.match(src('./src/content.ts'), /installGateFetch\(/);
   const ctl = src('./src/link/offscreen-ctl.ts');
