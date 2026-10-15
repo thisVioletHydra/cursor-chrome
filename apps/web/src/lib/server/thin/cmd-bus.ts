@@ -1,7 +1,9 @@
 // Stage B transport: server → extension commands. In-memory only, per account, no timers left
 // running without a waiter, no background loops. A command of one login never reaches another.
 import crypto from 'node:crypto';
-import { commandJournal, type CommandJournal } from './command-journal.ts';
+import type { CommandJournal } from './command-journal.ts';
+
+import { commandJournal } from './command-journal.ts';
 
 export const KINDS = ['readDOM', 'navigate', 'click', 'type', 'select', 'press_key', 'read', 'snapshot', 'wait', 'hh_apply'] as const;
 export type Kind = (typeof KINDS)[number];
@@ -107,11 +109,36 @@ export function validate(cmd: unknown): string | null {
   }
 }
 
-interface Pending { wire: Wire; queuedAt: number; execMs: number; picked: boolean; done: (o: Outcome) => void; timer?: ReturnType<typeof setTimeout> }
+interface Pending { wire: Wire; queuedAt: number; execMs: number; picked: boolean; holder: string; done: (o: Outcome) => void; timer?: ReturnType<typeof setTimeout> }
 interface Poller { id: number; resolve: (w: Wire | null) => void; timer: ReturnType<typeof setTimeout> }
 interface Box { queue: Pending[]; inflight: Map<string, Pending>; poller: Poller | null }
 
 export interface BusOpts { now?: () => number; limits?: Partial<typeof LIMITS>; log?: (line: string) => void; journal?: CommandJournal }
+
+// Journal row: ids and states only. No params, texts, answers or results ever reach the disk.
+export type JournalStatus = 'queued' | 'sent' | 'done' | 'lost';
+export interface JournalRow { login: string; id: string; kind: string; status: JournalStatus; at: number }
+const KEEP_MS = 86_400_000;
+const HOLDER = /^[\w:.-]{1,100}$/;
+
+// After a restart nothing can be re-sent (params are not stored): every unfinished command becomes lost.
+// v1 journals (with params) are converted the same way and rewritten without params.
+function loadRows(raw: unknown): JournalRow[] {
+  const saved = raw as { version?: number; rows?: JournalRow[]; pending?: { login: string; wire: { id: string; kind: string } }[]; completed?: { login: string; id: string; at: number }[] } | null;
+  if (saved === null || typeof saved !== 'object')
+    return [];
+  if (saved.version === 1) {
+    const done = (saved.completed ?? []).map(r => ({ login: r.login, id: r.id, kind: '', status: 'done' as const, at: r.at }));
+    const lost = (saved.pending ?? []).map(r => ({ login: r.login, id: r.wire.id, kind: r.wire.kind, status: 'lost' as const, at: Date.now() }));
+
+    return [...done, ...lost];
+  }
+
+  if (saved.version !== 2)
+    throw new Error('unsupported command journal');
+
+  return (saved.rows ?? []).map(r => ({ login: r.login, id: r.id, kind: r.kind, at: r.at, status: r.status === 'done' ? 'done' : 'lost' }));
+}
 
 export function createBus(opts: BusOpts = {}) {
   const now = opts.now ?? Date.now;
@@ -119,26 +146,26 @@ export function createBus(opts: BusOpts = {}) {
   const log = opts.log ?? ((line: string) => console.info(line));
   const boxes = new Map<string, Box>();
   let pollSeq = 0;
-  const completed = new Map<string, { login: string; id: string; at: number }>();
-  const receiptKey = (login: string, id: string) => JSON.stringify([login, id]);
-  const persist = () => {
-    for (const [key, row] of completed) if (now() - row.at > 86400_000) completed.delete(key);
-    opts.journal?.save({ version: 1,
-      pending: [...boxes].flatMap(([login, b]) => [...b.queue, ...b.inflight.values()].map(p => ({ login, wire: p.wire, queuedAt: p.queuedAt, execMs: p.execMs }))),
-      completed: [...completed.values()],
-    });
+  const key = (login: string, id: string) => JSON.stringify([login, id]);
+  const rows = new Map<string, JournalRow>();
+  const mark = (login: string, wire: { id: string; kind: string }, status: JournalStatus) => {
+    rows.set(key(login, wire.id), { login, id: wire.id, kind: wire.kind, status, at: now() });
+    persist();
   };
-  const saved = opts.journal?.load() as { version?: number; pending?: {login:string; wire:Wire; queuedAt:number; execMs:number}[]; completed?: {login:string; id:string; at:number}[] } | null;
-  if (saved && saved.version !== 1) throw new Error('unsupported command journal');
-  for (const row of saved?.completed ?? []) completed.set(receiptKey(row.login, row.id), row);
-  for (const row of saved?.pending ?? []) {
-    if (validate(row.wire) || completed.has(receiptKey(row.login, row.wire.id))) continue;
-    if (now() - row.queuedAt > L.queueTtlMs + L.maxExecMs) continue;
-    let b = boxes.get(row.login);
-    if (!b) { b = {queue:[], inflight:new Map(), poller:null}; boxes.set(row.login, b); }
-    b.queue.push({wire:row.wire, queuedAt:now(), execMs:row.execMs, picked:false, done:()=>{}});
-  }
+  const persist = () => {
+    for (const [k, row] of rows) if (now() - row.at > KEEP_MS) rows.delete(k);
+    if (opts.journal === undefined)
+      return;
 
+    opts.journal.save({ version: 2, rows: [...rows.values()] });
+  };
+  if (opts.journal !== undefined) {
+    const raw = opts.journal.load() as { version?: number; rows?: JournalRow[] } | null;
+    for (const row of loadRows(raw)) rows.set(key(row.login, row.id), row);
+    // rewrite only when something changed: v1 (with params) or unfinished rows turned lost
+    if (raw !== null && (raw.version !== 2 || (raw.rows ?? []).some(r => r.status !== 'done' && r.status !== 'lost')))
+      persist();
+  }
 
   const box = (login: string): Box => {
     let b = boxes.get(login);
@@ -160,29 +187,42 @@ export function createBus(opts: BusOpts = {}) {
       if (t - p.queuedAt <= L.queueTtlMs)
         return true;
       log(`ext-cmd ${login} ${p.wire.kind} ${p.wire.id} expired`);
+      mark(login, p.wire, 'lost');
       p.done({ ok: false, error: 'истёк TTL: расширение не забрало команду' });
       return false;
     });
   };
-  const pick = (login: string, b: Box): Wire | null => {
+  // lease: a picked command belongs to the holder (extension tab) that took it
+  const pick = (login: string, b: Box, holder: string): Wire | null => {
     const p = b.queue.shift();
     if (p === undefined)
       return null;
     p.picked = true;
+    p.holder = holder;
     p.wire.deadline = now() + p.execMs;
     b.inflight.set(p.wire.id, p);
-    persist();
+    mark(login, p.wire, 'sent');
     p.timer = setTimeout(() => {
       if (b.inflight.delete(p.wire.id)) {
         log(`ext-cmd ${login} ${p.wire.kind} ${p.wire.id} timeout`);
+        mark(login, p.wire, 'lost');
         p.done({ ok: false, error: 'таймаут выполнения' });
-        persist();
         tidy(login);
       }
     }, p.execMs);
     p.timer.unref?.();
     log(`ext-cmd ${login} ${p.wire.kind} ${p.wire.id} sent`);
     return p.wire;
+  };
+  // re-poll of the same holder (lost response) gets its own leased command again; other holders never do
+  const leased = (b: Box, holder: string): Wire | null => {
+    if (holder === '')
+      return null;
+
+    for (const p of b.inflight.values())
+      if (p.holder === holder && p.wire.deadline > now()) return p.wire;
+
+    return null;
   };
 
   function enqueue(login: string, cmd: Cmd, o: { execMs?: number } = {}): Promise<Outcome> {
@@ -198,35 +238,40 @@ export function createBus(opts: BusOpts = {}) {
     const execMs = Math.min(o.execMs ?? L.execMs, L.maxExecMs);
     return new Promise<Outcome>((resolve) => {
       const wire: Wire = { id: crypto.randomUUID(), kind: cmd.kind, params: structuredClone(cmd.params), deadline: 0 };
-      b.queue.push({ wire, queuedAt: now(), execMs, picked: false, done: resolve });
-      persist();
+      b.queue.push({ wire, queuedAt: now(), execMs, picked: false, holder: '', done: resolve });
+      mark(login, wire, 'queued');
       log(`ext-cmd ${login} ${cmd.kind} ${wire.id} queued`);
       if (b.poller !== null) {
         const pl = b.poller;
         b.poller = null;
         clearTimeout(pl.timer);
-        pl.resolve(pick(login, b));
+        pl.resolve(pick(login, b, pollHolder.get(login) ?? ''));
       }
     });
   }
 
+  const pollHolder = new Map<string, string>();
+
   // Long-poll. A newer poll for the same login closes the older one (it gets null → 204).
-  function next(login: string, signal?: AbortSignal, waitMs = L.pollMs): Promise<Wire | null> {
+  // holder: extension tab id (x-ext-tab); '' = anonymous, never gets a re-delivery.
+  function next(login: string, signal?: AbortSignal, waitMs = L.pollMs, holderIn = ''): Promise<Wire | null> {
+    const holder = HOLDER.test(holderIn) ? holderIn : '';
     const prev = boxes.get(login)?.poller;
-    if (prev != null) {
+    if (prev !== null && prev !== undefined) {
       boxes.get(login)!.poller = null;
       clearTimeout(prev.timer);
       prev.resolve(null); // may tidy() the box away, so take the box only after this
     }
     const b = box(login);
     expire(login, b);
-    const ready = b.inflight.values().next().value?.wire ?? pick(login, b);
+    const ready = leased(b, holder) ?? pick(login, b, holder);
     if (ready !== null || waitMs <= 0) {
       tidy(login);
       return Promise.resolve(ready);
     }
     return new Promise((resolve) => {
       const id = ++pollSeq;
+      pollHolder.set(login, holder);
       const finish = (w: Wire | null) => {
         if (b.poller?.id === id)
           b.poller = null;
@@ -251,7 +296,8 @@ export function createBus(opts: BusOpts = {}) {
   }
 
   // Report from the extension. Unknown id / other login's id → 'unknown' (no leak which).
-  function report(login: string, body: unknown): { status: 'ok' | 'unknown' | 'bad' | 'too_big'; error?: string } {
+  // Repeated report of a finished command → 'ok' without any effect; report of a lost one → 'lost'.
+  function report(login: string, body: unknown): { status: 'ok' | 'lost' | 'unknown' | 'bad' | 'too_big'; error?: string } {
     if (body === null || typeof body !== 'object')
       return { status: 'bad', error: 'тело не объект' };
     const { id, ok, result, error } = body as Record<string, unknown>;
@@ -264,26 +310,32 @@ export function createBus(opts: BusOpts = {}) {
     catch { return { status: 'bad', error: 'result не JSON' }; }
     if (size > L.maxResultBytes)
       return { status: 'too_big', error: `result больше ${L.maxResultBytes} байт` };
-    if (completed.has(receiptKey(login, id as string))) return { status: 'ok' };
     const b = boxes.get(login);
     const p = b?.inflight.get(id as string);
-    if (b === undefined || p === undefined)
-      return { status: 'unknown' };
+    if (b === undefined || p === undefined) {
+      const row = rows.get(key(login, id as string));
+      if (row?.status === 'done')
+        return { status: 'ok' };
+
+      return row?.status === 'lost' ? { status: 'lost' } : { status: 'unknown' };
+    }
+
     b.inflight.delete(id as string);
     clearTimeout(p.timer);
-    completed.set(receiptKey(login, id as string), {login, id: id as string, at:now()});
-    persist();
+    mark(login, p.wire, 'done');
     log(`ext-cmd ${login} ${p.wire.kind} ${p.wire.id} ${ok ? 'ok' : 'fail'} ${size}b`);
     p.done(ok ? { ok: true, result: result ?? null } : { ok: false, error: error as string });
     tidy(login);
     return { status: 'ok' };
   }
 
+  const journal = () => [...rows.values()].map(r => ({ ...r }));
+
   const stats = () => ({ accounts: boxes.size, polls: [...boxes.values()].filter((b) => b.poller !== null).length, queued: [...boxes.values()].reduce((n, b) => n + b.queue.length + b.inflight.size, 0) });
 
-  return { enqueue, next, report, stats };
+  return { enqueue, next, report, stats, journal };
 }
 
 // process-wide singleton used by routes and (stage C) server code
-export const bus = createBus({journal: commandJournal()});
+export const bus = createBus({ journal: commandJournal() });
 export const enqueue = bus.enqueue;

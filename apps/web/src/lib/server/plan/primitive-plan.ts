@@ -139,7 +139,7 @@ export function primitivePlanner(send: Enqueue): Enqueue {
       }
 
       const sel = selector(f);
-      if (sel === null || sel === undefined)
+      if (sel === '')
         return human('поле без устойчивого селектора');
 
       let r: Outcome;
@@ -149,7 +149,7 @@ export function primitivePlanner(send: Enqueue): Enqueue {
             ? o === String(value)
             : o.text === String(value) || o.value === String(value),
         );
-        if (!option) return human(`не найден вариант: ${f.label || f.id}`);
+        if (option === undefined) return human(`не найден вариант: ${f.label || f.id}`);
 
         r = await issue('select', {
           selector: sel,
@@ -171,7 +171,7 @@ export function primitivePlanner(send: Enqueue): Enqueue {
 
     if (typeof cmd.params.letter === 'string' && cmd.params.letter) {
       let field = dom.fields?.find((f) => /letter/i.test(f.name || f.id));
-      if (!field) {
+      if (field === undefined) {
         const opened = await issue('click', {
           selector: FORM_SEL.letterToggle,
         });
@@ -180,7 +180,7 @@ export function primitivePlanner(send: Enqueue): Enqueue {
         field = dom.fields?.find((f) => /letter/i.test(f.name || f.id));
       }
 
-      if (!field) return human('поле сопроводительного не найдено');
+      if (field === undefined) return human('поле сопроводительного не найдено');
 
       const r = await issue('type', {
         selector: selector(field),

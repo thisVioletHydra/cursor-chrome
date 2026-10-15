@@ -700,13 +700,19 @@ export async function extSettingsAdmin({ request, cookies }: RequestEvent) {
     return { ok: false, detail: 'это просмотр', wait: 0 };
 
   const form = await request.formData();
+  // only fields the form really has: each checkbox comes with a hidden «present» marker
+  const present = new Set(form.getAll('present').map(String));
   const patch: Record<string, boolean> = {};
-  for (const key of MANAGED)
+  for (const key of MANAGED.filter(k => present.has(k)))
     patch[key] = form.get(key) === 'on';
 
-  extSettings.set(login, patch);
-  planFlags.setEnabled(login, form.get('serverPlanner') === 'on');
-  planFlags.setScenarios(login, Object.fromEntries(SCENARIOS.filter(s => s !== 'inviteAutoReply').map(s => [s, form.get(`scenario_${s}`) === 'on'])));
+  if (Object.keys(patch).length > 0)
+    extSettings.set(login, patch);
+  if (present.has('serverPlanner'))
+    planFlags.setEnabled(login, form.get('serverPlanner') === 'on');
+  const scenarios = SCENARIOS.filter(s => s !== 'inviteAutoReply' && present.has(`scenario_${s}`));
+  if (scenarios.length > 0)
+    planFlags.setScenarios(login, Object.fromEntries(scenarios.map(s => [s, form.get(`scenario_${s}`) === 'on'])));
 
   return { ok: true, detail: 'Сохранено. Расширение подхватит при открытии попапа.', wait: 0 };
 }

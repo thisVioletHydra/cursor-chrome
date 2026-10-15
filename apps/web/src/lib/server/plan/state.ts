@@ -55,6 +55,25 @@ export function createStore() {
     // Flag: new server-side logic for this account. Off by default → old extension logic keeps running.
     enabled: (login: string) => flags.get(login) === true,
     setEnabled(login: string, on: boolean) { flags.set(login, on); if (!on) states.delete(login); },
+    // New extension run (x-ext-run): lift the hold. A vacancy in progress is re-opened and verified, never
+    // re-applied blindly: from 'apply' on, apply:verify is set so vac_read sends needsHuman unless hh shows «откликнулись».
+    rearm: (login: string) => {
+      const s = states.get(login);
+      if (s === undefined)
+        return;
+
+      s.hold = null;
+      if (s.current === null) {
+        s.phase = 'start';
+
+        return;
+      }
+
+      if ((s.phase === 'apply' || s.phase === 'after') && s.log.includes('apply:verify') === false)
+        s.log.push('apply:verify');
+      if (s.phase !== 'after')
+        s.phase = 'vac_open';
+    },
     // Human solved captcha / checked SMS → resume.
     release(login: string) { const s = states.get(login); if (s) { s.hold = null; s.phase = 'start'; } },
   };

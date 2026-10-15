@@ -7,6 +7,8 @@ type Bus = typeof defaultBus;
 const json = (body: unknown, status = 200, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...extra } });
 const MAX_BODY = LIMITS.maxResultBytes + 4096;
+// lease holder for re-delivery of the same command: the extension tab id
+export const tabOf = (request: Request) => request.headers.get('x-ext-tab') ?? '';
 
 type PlanHook = { onNext: (login: string, request: Request, waitMs?: number) => Promise<{ kind: 'off'; afterMs: number } | { kind: 'old' } | { kind: 'cmd'; cmd: unknown } | { kind: 'pause'; pause: unknown }> };
 
@@ -24,7 +26,7 @@ export async function handleNext(request: Request, loginOf: LoginOf, bus: Bus = 
     if (answer.kind === 'cmd')
       return answer.cmd === null ? new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } }) : json(answer.cmd);
   }
-  const cmd = await bus.next(login, request.signal, waitMs);
+  const cmd = await bus.next(login, request.signal, waitMs, tabOf(request));
   return cmd === null ? new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } }) : json(cmd);
 }
 
@@ -43,15 +45,17 @@ export async function handleReport(request: Request, loginOf: LoginOf, bus: Bus 
   const r = bus.report(login, body);
   if (r.status === 'ok')
     return json({ ok: true });
+  if (r.status === 'lost')
+    return json({ ok: true, lost: true });
   return json({ error: r.error ?? 'команда не найдена' }, r.status === 'unknown' ? 404 : r.status === 'too_big' ? 413 : 400);
 }
 
 // settingsOf (stage D): per-account extension settings from the admin; null → extension keeps local values
-export async function handleConfig(request: Request, loginOf: LoginOf, settingsOf?: (login: string) => unknown): Promise<Response> {
+export async function handleConfig(request: Request, loginOf: LoginOf, settingsOf?: (login: string) => unknown, extraOf?: (login: string) => Record<string, unknown>): Promise<Response> {
   const login = await loginOf(request);
   if (login === null)
     return json({ error: 'нет' }, 401);
-  const { text, etag } = settingsOf ? configBody({ ...CONFIG, settings: settingsOf(login) ?? null }) : configBody();
+  const { text, etag } = settingsOf ? configBody({ ...CONFIG, ...extraOf?.(login), settings: settingsOf(login) ?? null }) : configBody();
   const headers = { etag, 'cache-control': 'no-cache', 'content-type': 'application/json' };
   if (request.headers.get('if-none-match') === etag)
     return new Response(null, { status: 304, headers });

@@ -2,13 +2,13 @@
 // (next/report), the server answers with one command or "idle, ask again in N ms".
 // Long pauses (tea, out of hours, nap) are idle steps, never server-side sleeps; short pauses (≤60 s)
 // are wait commands executed by the extension.
-import type { Deps, Item, Kind, Outcome, Settings, Status, Step } from './types.ts';
+import type { Answer, Deps, Item, Kind, Outcome, Settings, Status, Step } from './types.ts';
 import type { PlanState } from './state.ts';
 
 import { dayOf } from './state.ts';
 import { distractWait, hoursOpen, msToOpen, NEGOTIATIONS, negotiationsDue, pageSignal, paceOf, readWait, TEA, teaRoll, titleStop } from './rules.ts';
 import { FEED, LIGHT, parseSerp, searchUrl } from './search.ts';
-import { answerProblem, FORM_SEL, parseForm } from './form.ts';
+import { answerProblem, FORM_SEL, markHuman, parseForm } from './form.ts';
 import { parseNegotiations } from './negotiations.ts';
 import { hideSelector, JOB_OFFER, JOB_OFFER_CLOSE, msToMonday, murkyBlock, on, resumeKind, testTask } from './scenarios.ts';
 import { feedDry, FEED_DRY_STOP, LIGHT_BATCH, LIGHT_SLEEP_MS } from './rules.ts';
@@ -454,6 +454,8 @@ export async function advance(st: PlanState, last: Outcome | undefined, deps: Pl
           return begin(st, deps, set, now, rand);
         }
       }
+
+      if (fields.length > 0 && deps.answer) st.answers = markHuman(fields, st.answers as Answer[]);
 
       const problem = fields.length > 0 && deps.answer ? answerProblem(fields, st.answers) : '';
       if (problem) {

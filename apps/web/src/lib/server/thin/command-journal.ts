@@ -23,7 +23,7 @@ export function commandJournal(
     },
     save(value) {
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      const tmp = `${file}.tmp`;
+      const tmp = `${file}.${process.pid}.${Date.now()}.tmp`; // unique: parallel processes never share a tmp
       const fd = fs.openSync(tmp, 'w', 0o600);
       try {
         fs.writeFileSync(fd, JSON.stringify(value));

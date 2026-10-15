@@ -139,16 +139,16 @@ const later = [
   >
     <ul class="flex flex-col gap-2">
       {#each settingRows as row (row.key)}
-        <li><label class="flex items-center gap-1.5 text-sm text-zinc-200"><input class="accent-indigo-400" type="checkbox" name={row.key} checked={data.settings?.[row.key] ?? row.fallback} />{row.label}</label></li>
+        <li><label class="flex items-center gap-1.5 text-sm text-zinc-200"><input type="hidden" name="present" value={row.key} /><input class="accent-indigo-400" type="checkbox" name={row.key} checked={data.settings?.[row.key] ?? row.fallback} />{row.label}</label></li>
       {/each}
     </ul>
     <fieldset class="mt-5 border-t border-white/10 pt-4">
       <legend class="text-sm font-medium text-white">Серверный режим</legend>
-      <label class="flex items-center gap-2 text-sm text-zinc-200"><input type="checkbox" name="serverPlanner" checked={data.serverPlanner} />Серверный планировщик</label>
+      <label class="flex items-center gap-2 text-sm text-zinc-200"><input type="hidden" name="present" value="serverPlanner" /><input type="checkbox" name="serverPlanner" checked={data.serverPlanner} />Серверный планировщик</label>
       <p class="mt-2 text-xs text-zinc-400">Старые сценарии сохраняются до переключения. Питание бота переключается кнопкой «Включить» в попапе. Темп, часы, поисковые запросы, профиль и письмо задаются на соответствующих страницах админки.</p>
       <div class="mt-3 grid gap-2 sm:grid-cols-2">
         {#each scenarioRows as [key,label]}
-          <label class="flex items-center gap-2 text-sm text-zinc-200"><input type="checkbox" name={'scenario_' + key} checked={data.scenarios[key] === true} />{label}</label>
+          <label class="flex items-center gap-2 text-sm text-zinc-200"><input type="hidden" name="present" value={'scenario_' + key} /><input type="checkbox" name={'scenario_' + key} checked={(data.scenarios as Record<string, boolean>)[key] === true} />{label}</label>
         {/each}
       </div>
     </fieldset>

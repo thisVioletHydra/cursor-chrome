@@ -4,9 +4,10 @@
 import type { Deps, Item, Settings } from '../plan/types.ts';
 import type { NegotiationRow } from '../plan/negotiations.ts';
 
-import { applyOutcomes, askChain, chainFromEnv, coveredWaiters, dayOpen, dropWaiters, forgetLinks, knownAmong, markDone, markSent, noteHidden, notePassed, restoreWaiter, saveWaiterForm, asCapturedForm, readDecisions, takeDecision, parseFacts, listCanon, listMemory, parseProfile, readLinks, readMemory, readQueue, remember, runTenant, takeRelook } from '@cursor-chrome/hh';
+import { applyOutcomes, askChain, chainFromEnv, coveredWaiters, dayOpen, dropWaiters, forgetLinks, knownAmong, markDone, markSent, noteHidden, notePassed, restoreWaiter, saveWaiterForm, asCapturedForm, readDecisions, takeDecision, readLinks, readMemory, readQueue, remember, runTenant, takeRelook } from '@cursor-chrome/hh';
 import { planStoreDeps } from '../plan/deps-impl.ts';
 import type { StoreIO } from '../plan/deps-impl.ts';
+import type { TransitContext } from './plan-context.ts';
 import { weekOpen } from '../week';
 import { createPlanFlags } from './plan-flags.ts';
 import { chainOf, readAccount } from '../secrets';
@@ -33,7 +34,7 @@ const storeIO: StoreIO = {
   weekOpen: (login, account) => weekOpen(login, account),
 };
 
-export function planDeps(headersOf: (login: string) => Headers, flags: { scenarios: (login: string) => Settings['scenarios'] } = defaultFlags()): ProdDeps {
+export function planDeps(headersOf: (login: string) => Headers, flags: { scenarios: (login: string) => Settings['scenarios'] } = defaultFlags(), contextOf: (login: string) => TransitContext | null = () => null): ProdDeps {
   const inTenant = <T>(login: string, job: () => Promise<T>) => runTenant(login, job);
 
   return {
@@ -47,7 +48,8 @@ export function planDeps(headersOf: (login: string) => Headers, flags: { scenari
       const form=asCapturedForm({url:item.url,at:Date.now(),text,questions:(fields as any[]).map(f=>({prompt:f.prompt || f.label,kind:f.kind==='select' ? 'choice' : f.kind,options:f.options,required:f.required,fieldKey:f.id}))});
       if (form) await saveWaiterForm(item.id,form);
     }),
-    coverLetter: login => inTenant(login, async () => (await readAccount(login)).coverLetter),
+    // transit only; '' → machine marks the vacancy needsHuman
+    coverLetter: async login => contextOf(login)?.letter ?? '',
     // existing thin /api/answer engine; BYOK only from the headers of the extension's own request
     answer: (login, body) => inTenant(login, async () => {
       const account = await readAccount(login);
@@ -60,8 +62,14 @@ export function planDeps(headersOf: (login: string) => Headers, flags: { scenari
       return { answers: out.answers };
     }),
     // transit: the account's own facts for this one answer, never copied into planner state
-    context: login => inTenant(login, async () => { const account = await readAccount(login);
-      return { profile: parseProfile(account.profile), coverLetter: account.coverLetter, facts: parseFacts(account.facts).rules, rules: await listCanon(), memory: await listMemory() }; }),
+    // transit only (POST /api/ext/next body): no readAccount fallback, missing → error → needsHuman
+    context: async (login) => {
+      const c = contextOf(login);
+      if (c === null)
+        throw new Error('нет контекста от расширения');
+
+      return { profile: c.profile, coverLetter: c.letter, facts: c.facts, rules: c.canon, memory: c.memory };
+    },
     // same storage as /api/applied: queue row + seen
     recordApplied: (login, row) => inTenant(login, async () => {
       if (row.status === 'sent' || row.status === 'needsHuman') {

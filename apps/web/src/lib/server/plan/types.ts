@@ -6,6 +6,9 @@ export interface Cmd { kind: Kind; params: Record<string, unknown> }
 export type Outcome = { ok: true; result?: unknown } | { ok: false; error: string };
 export type Enqueue = (login: string, cmd: Cmd, opts?: { execMs?: number }) => Promise<Outcome>;
 
+// One answer for a form field (from /api/answer). human: true → needs a person (empty required / no matching option).
+export interface Answer { id: string; answer?: string; value?: unknown; human?: boolean; reason?: string }
+
 export interface Item { id: string; title: string; url: string; company?: string }
 export type Status = 'sent' | 'needsHuman' | 'skip';
 
@@ -16,7 +19,7 @@ export interface Deps {
   now?: () => number;
   rand?: () => number;
   // existing /api/answer engine; context is fetched per call (transit from the extension).
-  answer?: (login: string, body: { fields: unknown[]; context: unknown }) => Promise<{ answers: unknown[] }>;
+  answer?: (login: string, body: { fields: unknown[]; context: unknown }) => Promise<{ answers: Answer[] }>;
   context?: (login: string) => Promise<unknown>;
   // existing /api/applied, /api/found, seen
   recordApplied?: (login: string, row: { id: string; url: string; title: string; status: Status; reason: string }) => Promise<void>;

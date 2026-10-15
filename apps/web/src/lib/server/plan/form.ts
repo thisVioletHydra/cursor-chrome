@@ -1,3 +1,5 @@
+import type { Answer } from './types.ts';
+
 // Apply form: selectors and parsing, ported (read-only) from extension hh/screen-questions.ts,
 // hh/apply-fill.ts and web thin/config.ts. Parsing runs on HTML the extension's snapshot returns.
 export const FORM_SEL = {
@@ -37,9 +39,7 @@ export function parseForm(html: string): ParsedForm {
 }
 
 // needsHuman rule (lead decision): empty answer on a required field, or a choice that matches no option.
-export function answerProblem(fields: unknown[], answers: unknown[]): string {
-  if (answers.some((a:any)=>a?.human===true)) return 'нужен твой ответ: проверь Разбор';
-
+export function fieldProblems(fields: unknown[], answers: unknown[]): { id: string; reason: string }[] {
   const byId = new Map<string, unknown>();
   for (const a of answers) {
     const r = a as { id?: unknown; name?: unknown; value?: unknown; answer?: unknown };
@@ -47,13 +47,14 @@ export function answerProblem(fields: unknown[], answers: unknown[]): string {
     if (id) byId.set(id, r.value ?? r.answer);
   }
 
+  const out: { id: string; reason: string }[] = [];
   for (const raw of fields) {
     const f = raw as Partial<FormField> & { name?: string };
     const id = f.id ?? f.name ?? '';
     const v = byId.get(id);
     const empty = v === undefined || v === null || (typeof v === 'string' && v.trim() === '') || (Array.isArray(v) && v.length === 0);
     if (empty) {
-      if (f.required === true) return `нет ответа на обязательное поле: ${f.label ?? id}`;
+      if (f.required === true) out.push({ id, reason: `нет ответа на обязательное поле: ${f.label ?? id}` });
 
       continue;
     }
@@ -61,9 +62,27 @@ export function answerProblem(fields: unknown[], answers: unknown[]): string {
     const opts = Array.isArray(f.options) ? f.options.map(o => String(o).trim().toLowerCase()) : [];
     if ((f.kind === 'choice' || f.kind === 'select') && opts.length > 0) {
       const vals = (Array.isArray(v) ? v : [v]).map(x => String(x).trim().toLowerCase());
-      if (vals.some(x => !opts.includes(x))) return `вариант не совпал: ${f.label ?? id}`;
+      if (vals.some(x => opts.includes(x) === false)) out.push({ id, reason: `вариант не совпал: ${f.label ?? id}` });
     }
   }
 
-  return '';
+  return out;
+}
+
+// Sets human: true (with reason) on answers that are empty for a required field or match no option.
+export function markHuman(fields: unknown[], answers: Answer[]): Answer[] {
+  const bad = new Map(fieldProblems(fields, answers).map(p => [p.id, p.reason]));
+  const out = answers.map(a => (bad.has(a.id) ? { ...a, human: true, reason: a.reason ?? bad.get(a.id) } : a));
+  for (const [id, reason] of bad)
+    if (out.some(a => a.id === id) === false) out.push({ id, human: true, reason });
+
+  return out;
+}
+
+export function answerProblem(fields: unknown[], answers: unknown[]): string {
+  const first = fieldProblems(fields, answers)[0];
+  if (first !== undefined)
+    return first.reason;
+
+  return answers.some(a => (a as Answer | null)?.human === true) ? 'нужен твой ответ: проверь Разбор' : '';
 }

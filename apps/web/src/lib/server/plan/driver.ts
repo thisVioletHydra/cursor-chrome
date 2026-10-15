@@ -35,6 +35,7 @@ export function createPlanner(store: Store, deps: Deps) {
       running.set(login, p);
       return p;
     },
+    running: (login: string) => running.has(login),
     status(login: string) {
       const st = store.get(login, (deps.now ?? Date.now)());
       return { enabled: store.enabled(login), phase: st.phase, queued: st.queue.length, sentToday: st.sentToday, hold: st.hold };

@@ -21,7 +21,9 @@ test('queue: enqueue → next → report resolves enqueue promise, FIFO', async 
   assert.equal(b.kind, 'wait');
   bus.report('roman', { id: b.id, ok: false, error: 'нет элемента' });
   assert.deepEqual(await p2, { ok: false, error: 'нет элемента' });
-  assert.equal(bus.report('roman', { id: b.id, ok: true }).status, 'ok', 'duplicate report acknowledged without resolving twice');
+  // duplicate report: idempotent ack, no second effect (the enqueue result stays the first one)
+  assert.equal(bus.report('roman', { id: b.id, ok: true, result: 'второй' }).status, 'ok');
+  assert.deepEqual(await p2, { ok: false, error: 'нет элемента' });
   assert.deepEqual(bus.stats(), { accounts: 0, polls: 0, queued: 0 });
 });
 
@@ -152,4 +154,19 @@ test('HTTP: 204 on empty poll, 200 with command, report flow, config ETag', asyn
   assert.ok((await c1.json()).selectors);
   assert.equal((await handleConfig(req('/c', { headers: { ...auth, 'if-none-match': etag } }), loginOf)).status, 304);
   await sleep(1);
+});
+
+test('lease: a picked command goes to one tab only; the same tab may re-poll it, another tab never', async () => {
+  const bus = createBus(quiet);
+  const p = bus.enqueue('roman', click);
+  const a = await bus.next('roman', undefined, 0, 'tab-A');
+  assert.equal(a.kind, 'click');
+  assert.equal(await bus.next('roman', undefined, 0, 'tab-B'), null, 'other tab does not get it');
+  assert.equal(await bus.next('roman', undefined, 0), null, 'anonymous poll does not get it');
+  const again = await bus.next('roman', undefined, 0, 'tab-A');
+  assert.equal(again.id, a.id, 'same tab re-poll (lost response) gets the same command');
+  assert.equal(bus.report('roman', { id: a.id, ok: true, result: 1 }).status, 'ok');
+  assert.equal(bus.report('roman', { id: a.id, ok: true, result: 2 }).status, 'ok');
+  assert.deepEqual(await p, { ok: true, result: 1 });
+  assert.equal(await bus.next('roman', undefined, 0, 'tab-A'), null, 'finished command is not re-sent');
 });
