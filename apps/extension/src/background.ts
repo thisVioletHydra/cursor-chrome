@@ -1,3 +1,4 @@
+import { idempotentExecutor } from './link/command-receipts';
 import type { CommandName, WsRequest } from '@cursor-chrome/protocol';
 
 import { NATIVE_HOST_NAME } from '@cursor-chrome/protocol';
@@ -72,6 +73,7 @@ onGateReopen(async () => {
 });
 
 // Stage B: server commands over long-poll. One loop at a time; only while linked; ends on 401/closed gate.
+const execOnce = idempotentExecutor({ get: key => browser.storage.local.get(key), set: items => browser.storage.local.set(items) }, getSyncKey, execServerCmd);
 let serverLinkOn = false;
 // popup opened: wake a sleeping loop (flag may have just been enabled) or start it if it ended
 // stage D: admin settings via GET /api/ext/config (ETag/304) → extConfig:v1 cache; seed once if admin is empty
@@ -104,7 +106,7 @@ function startServerLink(): void {
     base: getSyncUrl,
     key: getSyncKey,
     gateOpen: async () => (await linkPaused()) === false,
-    exec: execServerCmd,
+    exec: execOnce,
     onUnauthorized: async () => {
       await linkPaused().catch(() => true);
     },

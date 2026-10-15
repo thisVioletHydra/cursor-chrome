@@ -1,6 +1,7 @@
 // Stage B transport: server → extension commands. In-memory only, per account, no timers left
 // running without a waiter, no background loops. A command of one login never reaches another.
 import crypto from 'node:crypto';
+import { commandJournal, type CommandJournal } from './command-journal.ts';
 
 export const KINDS = ['navigate', 'click', 'type', 'select', 'press_key', 'read', 'snapshot', 'wait', 'hh_apply'] as const;
 export type Kind = (typeof KINDS)[number];
@@ -105,7 +106,7 @@ interface Pending { wire: Wire; queuedAt: number; execMs: number; picked: boolea
 interface Poller { id: number; resolve: (w: Wire | null) => void; timer: ReturnType<typeof setTimeout> }
 interface Box { queue: Pending[]; inflight: Map<string, Pending>; poller: Poller | null }
 
-export interface BusOpts { now?: () => number; limits?: Partial<typeof LIMITS>; log?: (line: string) => void }
+export interface BusOpts { now?: () => number; limits?: Partial<typeof LIMITS>; log?: (line: string) => void; journal?: CommandJournal }
 
 export function createBus(opts: BusOpts = {}) {
   const now = opts.now ?? Date.now;
@@ -113,6 +114,26 @@ export function createBus(opts: BusOpts = {}) {
   const log = opts.log ?? ((line: string) => console.info(line));
   const boxes = new Map<string, Box>();
   let pollSeq = 0;
+  const completed = new Map<string, { login: string; id: string; at: number }>();
+  const receiptKey = (login: string, id: string) => JSON.stringify([login, id]);
+  const persist = () => {
+    for (const [key, row] of completed) if (now() - row.at > 86400_000) completed.delete(key);
+    opts.journal?.save({ version: 1,
+      pending: [...boxes].flatMap(([login, b]) => [...b.queue, ...b.inflight.values()].map(p => ({ login, wire: p.wire, queuedAt: p.queuedAt, execMs: p.execMs }))),
+      completed: [...completed.values()],
+    });
+  };
+  const saved = opts.journal?.load() as { version?: number; pending?: {login:string; wire:Wire; queuedAt:number; execMs:number}[]; completed?: {login:string; id:string; at:number}[] } | null;
+  if (saved && saved.version !== 1) throw new Error('unsupported command journal');
+  for (const row of saved?.completed ?? []) completed.set(receiptKey(row.login, row.id), row);
+  for (const row of saved?.pending ?? []) {
+    if (validate(row.wire) || completed.has(receiptKey(row.login, row.wire.id))) continue;
+    if (now() - row.queuedAt > L.queueTtlMs + L.maxExecMs) continue;
+    let b = boxes.get(row.login);
+    if (!b) { b = {queue:[], inflight:new Map(), poller:null}; boxes.set(row.login, b); }
+    b.queue.push({wire:row.wire, queuedAt:now(), execMs:row.execMs, picked:false, done:()=>{}});
+  }
+
 
   const box = (login: string): Box => {
     let b = boxes.get(login);
@@ -145,10 +166,12 @@ export function createBus(opts: BusOpts = {}) {
     p.picked = true;
     p.wire.deadline = now() + p.execMs;
     b.inflight.set(p.wire.id, p);
+    persist();
     p.timer = setTimeout(() => {
       if (b.inflight.delete(p.wire.id)) {
         log(`ext-cmd ${login} ${p.wire.kind} ${p.wire.id} timeout`);
         p.done({ ok: false, error: 'таймаут выполнения' });
+        persist();
         tidy(login);
       }
     }, p.execMs);
@@ -171,6 +194,7 @@ export function createBus(opts: BusOpts = {}) {
     return new Promise<Outcome>((resolve) => {
       const wire: Wire = { id: crypto.randomUUID(), kind: cmd.kind, params: structuredClone(cmd.params), deadline: 0 };
       b.queue.push({ wire, queuedAt: now(), execMs, picked: false, done: resolve });
+      persist();
       log(`ext-cmd ${login} ${cmd.kind} ${wire.id} queued`);
       if (b.poller !== null) {
         const pl = b.poller;
@@ -191,7 +215,7 @@ export function createBus(opts: BusOpts = {}) {
     }
     const b = box(login);
     expire(login, b);
-    const ready = pick(login, b);
+    const ready = b.inflight.values().next().value?.wire ?? pick(login, b);
     if (ready !== null || waitMs <= 0) {
       tidy(login);
       return Promise.resolve(ready);
@@ -235,12 +259,15 @@ export function createBus(opts: BusOpts = {}) {
     catch { return { status: 'bad', error: 'result не JSON' }; }
     if (size > L.maxResultBytes)
       return { status: 'too_big', error: `result больше ${L.maxResultBytes} байт` };
+    if (completed.has(receiptKey(login, id as string))) return { status: 'ok' };
     const b = boxes.get(login);
     const p = b?.inflight.get(id as string);
     if (b === undefined || p === undefined)
       return { status: 'unknown' };
     b.inflight.delete(id as string);
     clearTimeout(p.timer);
+    completed.set(receiptKey(login, id as string), {login, id: id as string, at:now()});
+    persist();
     log(`ext-cmd ${login} ${p.wire.kind} ${p.wire.id} ${ok ? 'ok' : 'fail'} ${size}b`);
     p.done(ok ? { ok: true, result: result ?? null } : { ok: false, error: error as string });
     tidy(login);
@@ -253,5 +280,5 @@ export function createBus(opts: BusOpts = {}) {
 }
 
 // process-wide singleton used by routes and (stage C) server code
-export const bus = createBus();
+export const bus = createBus({journal: commandJournal()});
 export const enqueue = bus.enqueue;

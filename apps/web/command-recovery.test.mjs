@@ -1,0 +1,43 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { commandJournal } from './src/lib/server/thin/command-journal.ts';
+import { createBus } from './src/lib/server/thin/cmd-bus.ts';
+import { idempotentExecutor } from '../extension/src/link/command-receipts.ts';
+test('restart, lost report and redelivery never execute twice; other account cannot report', async t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cmd-recovery-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const journal=commandJournal(path.join(dir,'commands.json'));
+  const one=createBus({journal, log:()=>{}});
+  void one.enqueue('a',{kind:'click',params:{selector:'#submit'}});
+  const wire=await one.next('a',undefined,0);
+  const memory={}; const area={get:async key=>({[key]:structuredClone(memory[key])}),set:async patch=>Object.assign(memory,structuredClone(patch))};
+  let count=0;
+  const run=idempotentExecutor(area,async()=>'token-a',async()=>({ok:true,result:++count}));
+  assert.equal((await run(wire)).result,1);
+  const two=createBus({journal, log:()=>{}});
+  const again=await two.next('a',undefined,0);
+  assert.equal(again.id,wire.id);
+  assert.equal((await run(again)).result,1);
+  assert.equal(count,1);
+  assert.equal(two.report('b',{id:wire.id,ok:true,result:1}).status,'unknown');
+  assert.equal(two.report('a',{id:wire.id,ok:true,result:1}).status,'ok');
+  const three=createBus({journal, log:()=>{}});
+  assert.equal(await three.next('a',undefined,0),null);
+  assert.equal(three.report('a',{id:wire.id,ok:true,result:1}).status,'ok');
+  // resolve the first in-memory waiter and cancel its timer
+  one.report('a',{id:wire.id,ok:true,result:1});
+});
+test('worker crash receipt refuses ambiguous operation, expiry and token scope are enforced', async () => {
+  const area={data:{},async get(k){return {[k]:structuredClone(this.data[k])}},async set(p){Object.assign(this.data,structuredClone(p))}};
+  let calls=0;
+  const exec=async()=>({ok:true,result:++calls});
+  const wire={id:'id',kind:'click',params:{selector:'#send'},deadline:2000};
+  const run=idempotentExecutor(area,async()=>'a',exec,()=>1000);
+  await Promise.all([run(wire),run(wire)]);assert.equal(calls,1);
+  for(const receipts of Object.values(area.data)) delete receipts[0].outcome;
+  assert.equal((await idempotentExecutor(area,async()=>'a',exec,()=>1000)(wire)).ok,false);
+  assert.equal((await idempotentExecutor(area,async()=>'b',exec,()=>3000)(wire)).ok,false);
+  assert.equal(calls,1);
+});

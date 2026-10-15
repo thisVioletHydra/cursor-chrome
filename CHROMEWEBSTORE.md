@@ -32,3 +32,5 @@ Public privacy policy URL, publisher/contact details, final data disclosure, per
 ## Version history
 
 - 0.5.130: bounded connection checks, account-safe history, saved power toggle, admin review navigation and build identification. No new permissions. Connection health checks send only the configured extension token to its server.
+
+- 0.5.131: durable account-scoped command delivery and crash-safe execution receipts. Command payloads and report acknowledgements are journaled on the configured server volume; local receipts are scoped by a hash of the connection token. No added permissions.

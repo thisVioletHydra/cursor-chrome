@@ -21,7 +21,7 @@ test('queue: enqueue → next → report resolves enqueue promise, FIFO', async 
   assert.equal(b.kind, 'wait');
   bus.report('roman', { id: b.id, ok: false, error: 'нет элемента' });
   assert.deepEqual(await p2, { ok: false, error: 'нет элемента' });
-  assert.equal(bus.report('roman', { id: b.id, ok: true }).status, 'unknown', 'second report ignored');
+  assert.equal(bus.report('roman', { id: b.id, ok: true }).status, 'ok', 'duplicate report acknowledged without resolving twice');
   assert.deepEqual(bus.stats(), { accounts: 0, polls: 0, queued: 0 });
 });
 
