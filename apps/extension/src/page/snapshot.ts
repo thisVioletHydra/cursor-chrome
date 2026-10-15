@@ -195,7 +195,7 @@ function visibleBox(element: Element): boolean {
 
 function shadowRootOf(element: Element): ShadowRoot | null {
   try {
-    const opened = browser.dom?.openOrClosedShadowRoot?.(element);
+    const opened = browser.dom?.openOrClosedShadowRoot?.(element as HTMLElement);
     if (opened)
       return opened;
   }

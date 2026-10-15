@@ -38,10 +38,10 @@ export async function syncExtConfig(d: SyncDeps): Promise<SyncEnd> {
       if (res.status !== 200)
         return { status: 'failed', settings: null };
 
-      const body = await res.json() as { settings?: unknown };
+      const body = await res.json() as { settings?: unknown; serverPlanner?: unknown };
       if ((await d.key()).trim() !== key) return {status:'failed',settings:null};
       const settings = cleanSettings(body?.settings);
-      await d.set({ [EXT_CONFIG_KEY]: { etag: res.headers.get('etag') ?? '', settings, at: now() } satisfies ExtConfigCache });
+      await d.set({ [EXT_CONFIG_KEY]: { etag: res.headers.get('etag') ?? '', settings, at: now(), serverPlanner: body?.serverPlanner === true || settings?.serverPlanner === true } satisfies ExtConfigCache });
 
       return { status: 'fresh', settings };
     }

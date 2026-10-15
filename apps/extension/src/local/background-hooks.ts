@@ -8,7 +8,7 @@ import { importFromServer } from './server-import.ts';
 import { installPassHeader } from './pass-header.ts';
 import { refreshConfig } from './config-cache.ts';
 import { forgetBadge } from '../link/offscreen-ctl';
-import { FAST_PROBE_MS, gateOpen, gateText, LINK_GATE_KEY, probeDue, readGate, refreshGate } from './link-gate.ts';
+import { checkLink, FAST_PROBE_MS, gateOpen, gateText, gateView, LINK_GATE_KEY, probeDue, readGate, refreshGate } from './link-gate.ts';
 import { installGateFetch } from './gate-fetch.ts';
 
 const ACCESS_ALARM = 'cc-access-check';
@@ -41,33 +41,52 @@ async function accessTick(): Promise<void> {
 
 const LINK_ALARM = 'cc-link-gate';
 
+let probing: Promise<Awaited<ReturnType<typeof readGate>>> | null = null;
+
 // true = not linked to the admin (no token / 401 / dead server): all site actions pause quietly.
 export async function linkPaused(): Promise<boolean> {
   let gate = await readGate(area);
   // closed gate: probe on a growing interval (30 s … 15 min), not on every alarm/message
   if (probeDue(gate)) {
     const prev = gate;
-    gate = await refreshGate(area, await getSyncUrl(), await getSyncKey(), fetch, prev).catch(() => prev);
+    // one re-check in flight: alarms, messages and the 2 s fast timer share it
+    probing ??= (async () => refreshGate(area, await getSyncUrl(), await getSyncKey(), fetch, prev))()
+      .catch(() => prev)
+      .finally(() => {
+        probing = null;
+      });
+    gate = await probing;
   }
   void paintGateBadge(gate);
 
   return gateOpen(gate) === false;
 }
 
-// popup open: every 3 s it asks for a live check of an OPEN gate, so a dead server shows within ~5 s.
-// Closed gate → nothing here (the backoff probe owns it). One request in flight, at most one per 2.5 s.
+// popup/options open: every 3 s a live check — OPEN gate (a dead server shows within ~5 s) or DOWN gate
+// (the server back → full UI within ~3 s). Key screen → nothing. One request in flight, at most one per 2.5 s.
 let pingAt = 0;
 let pinging = false;
 export async function pingGate(now = Date.now()): Promise<void> {
   if (pinging || now - pingAt < 2500)
     return;
   const gate = await readGate(area);
-  if (gateOpen(gate) === false)
+  const view = gateView(gate, now);
+  // key screen (no key / 401 / gone): nothing to ping, the user has to paste a link
+  if (view === 'bind')
     return;
   pinging = true;
   pingAt = now;
   try {
-    await refreshGate(area, await getSyncUrl(), await getSyncKey(), fetch, gate);
+    if (view === 'open') {
+      await refreshGate(area, await getSyncUrl(), await getSyncKey(), fetch, gate);
+    }
+    else {
+      // server down + popup/options open: one /api/link per ping; written only when the answer changes the view
+      // (still down → no write, so the background backoff and fails counter stay as they are)
+      const checked = await checkLink(await getSyncUrl(), await getSyncKey(), fetch);
+      if (checked.state !== 'down')
+        await area.set({ [LINK_GATE_KEY]: checked });
+    }
   }
   catch {
   }

@@ -10,7 +10,8 @@ import test from 'node:test';
 const src = p => fs.readFileSync(new URL(p, import.meta.url), 'utf8');
 const ORIGIN = 'https://s.example';
 const mem = (gate) => { const data = { [LINK_GATE_KEY]: gate };
-  return { data, get: async k => ({ [k]: data[k] }), set: async items => Object.assign(data, items) }; };
+  return { data, get: async k => ({ [k]: data[k] }), set: async items => Object.assign(data, items) };
+};
 
 test('lost link: not a single /api/queue request goes out; 401 closes the gate at once', async () => {
   const now = Date.now();
@@ -18,7 +19,8 @@ test('lost link: not a single /api/queue request goes out; 401 closes the gate a
   const sent = [];
   let status = 200;
   const original = async (url) => { sent.push(url);
-    return new Response('{}', { status }); };
+    return new Response('{}', { status });
+  };
   const f = makeGateFetch(original, area, () => ORIGIN, () => now);
   await f(`${ORIGIN}/api/queue`);
   assert.equal(sent.length, 1);
@@ -46,14 +48,15 @@ test('stale ok gate (TTL over) → also paused', async () => {
   const area = mem({ state: 'ok', host: 's.example', at: 0 });
   const sent = [];
   const f = makeGateFetch(async (u) => { sent.push(u);
-    return new Response('{}'); }, area, () => ORIGIN, () => 10 * 60_000);
+    return new Response('{}');
+  }, area, () => ORIGIN, () => 10 * 60_000);
   assert.equal((await f(`${ORIGIN}/api/queue`)).status, 503);
   assert.equal(sent.length, 0);
 });
 
-test('popup: gate change by state → connect screen (no TTL comparison)', () => {
+test('popup: gate change by state → connect screen or «не на связи» (no TTL comparison)', () => {
   const popup = src('./src/popup/popup.ts');
-  assert.match(popup, /if \(bindMode\(next, Date\.now\(\), false\) && bindOn === false\)\n      paintBind\(true\);/);
+  assert.match(popup, /const view = gateView\(next, Date\.now\(\), false\);\n    if \(view !== 'open' && \(bindOn === false \|\| keyScreen !== \(view === 'bind'\)\)\)\n      paintBind\(true, view === 'bind'\);/);
   assert.doesNotMatch(popup, /gateTransition\(/);
 });
 

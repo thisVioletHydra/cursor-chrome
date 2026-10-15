@@ -88,9 +88,21 @@ export async function retryWhileUpdating(base: string, run: () => Promise<Respon
 
 // popup/options: on open check /healthz; while down show the bar, ping every 3 s, hide and call onBack.
 // Dead domain (404/410/fallback) → stop at once with GONE_TEXT; still down after GIVE_UP_MS → same text + «Повторить».
-export async function watchUpdating(node: HTMLElement | null, base: string, onBack: () => void = () => {}, opts: Opts = {}): Promise<void> {
+// idempotent per node: a second start while one watcher runs joins it (no parallel /healthz loops)
+const watching = new WeakMap<object, Promise<void>>();
+export function watchUpdating(node: HTMLElement | null, base: string, onBack: () => void = () => {}, opts: Opts = {}): Promise<void> {
   if (node === null || !base)
-    return;
+    return Promise.resolve();
+  const running = watching.get(node);
+  if (running)
+    return running;
+  const run = watchOnce(node, base, onBack, opts).finally(() => watching.delete(node));
+  watching.set(node, run);
+
+  return run;
+}
+
+async function watchOnce(node: HTMLElement, base: string, onBack: () => void, opts: Opts): Promise<void> {
   const { fetcher = fetch, sleep = wait, interval = PING_MS, maxWait = GIVE_UP_MS, steps } = opts;
   let state = await probe(base, fetcher);
   if (state === 'ok')

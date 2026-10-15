@@ -6,6 +6,7 @@ import { SERVER_STEPS_MS, stepAt } from '../link/backoff.ts';
 export const LINK_GATE_KEY = 'linkGate';
 export const LINK_OK_TTL_MS = 3 * 60_000;
 export const NOT_LINKED_TEXT = 'Не подключено к админке';
+export const DOWN_TEXT = 'Сервер не на связи — пауза, перепроверяю…';
 export const RELINK_TEXT = 'Переподключи расширение: вставь новую ссылку из админки';
 
 export type LinkState = 'ok' | 'none' | 'gone' | 'unauthorized' | 'down';
@@ -13,6 +14,7 @@ export type LinkState = 'ok' | 'none' | 'gone' | 'unauthorized' | 'down';
 // fast: closed by a live failure (network error / 502-504 seen by the fetch guard); first re-check in FAST_PROBE_MS
 export type LinkGate = { state: LinkState; host: string; at: number; login?: string; fails?: number; fast?: boolean };
 export const FAST_PROBE_MS = 2000;
+export const LINK_CHECK_TIMEOUT_MS = 2500;
 
 export function hostOf(url: string): string {
   try {
@@ -30,25 +32,42 @@ export async function checkLink(url: string, key: string, fetcher: typeof fetch 
     return { state: 'none', host, at: now };
 
   const base = `${new URL(url.trim()).protocol}//${host}`;
-  // Three bounded observations: immediate HTTP errors take 10 s, stalled requests at most 16 s.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2000);
-    try {
-      const res = await fetcher(`${base}/api/link`, { cache: 'no-store', signal: controller.signal, headers: { authorization: `Bearer ${key.trim()}` } });
-      if (res.status === 200) {
-        const body = await res.json() as { login?: unknown };
-        const login = typeof body?.login === 'string' ? body.login : '';
-        return { state: 'ok', host, at: Date.now(), ...(login ? { login } : {}) };
-      }
-      if (res.status === 401 || res.status === 403)
-        return { state: 'unauthorized', host, at: Date.now() };
-      if (res.status === 404 || res.status === 410 || res.headers.get('x-railway-fallback') !== null)
-        return { state: 'gone', host, at: Date.now() };
-    } catch {} finally { clearTimeout(timer); }
-    if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 5000));
+  // ONE bounded observation (≤ LINK_CHECK_TIMEOUT_MS): retries are the backoff probe's job (2 s, then 30 s … 15 min),
+  // so a dead server closes the gate within ~3 s and nothing waits on a retry chain.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LINK_CHECK_TIMEOUT_MS);
+  try {
+    const res = await fetcher(`${base}/api/link`, { cache: 'no-store', signal: controller.signal, headers: { authorization: `Bearer ${key.trim()}` } });
+    if (res.status === 200) {
+      const body = await res.json().catch(() => null) as { login?: unknown } | null;
+      const login = typeof body?.login === 'string' ? body.login : '';
+      return { state: 'ok', host, at: Date.now(), ...(login ? { login } : {}) };
+    }
+    if (res.status === 401 || res.status === 403)
+      return { state: 'unauthorized', host, at: Date.now() };
+    if (res.status === 404 || res.status === 410 || res.headers.get('x-railway-fallback') !== null)
+      return { state: 'gone', host, at: Date.now() };
   }
+  catch {
+  }
+  finally {
+    clearTimeout(timer);
+  }
+
   return { state: 'down', host, at: Date.now() };
+}
+
+// Deep compare for writes: a gate write that changes nothing must not happen (every write fires
+// storage.onChanged in the popup, options and SW). `at` matters only to keep an «ok» fresh (TTL/2).
+export function sameGate(prev: LinkGate | null | undefined, next: LinkGate, now = Date.now()): boolean {
+  if (prev === null || prev === undefined)
+    return false;
+
+  const strip = ({ at: _at, ...rest }: LinkGate) => JSON.stringify(Object.entries(rest).filter(([, v]) => v !== undefined).sort(([a], [b]) => a.localeCompare(b)));
+  if (strip(prev) !== strip(next))
+    return false;
+
+  return next.state !== 'ok' || now - prev.at < LINK_OK_TTL_MS / 2;
 }
 
 export function gateOpen(gate: LinkGate | null | undefined, now = Date.now()): boolean {
@@ -61,7 +80,7 @@ export function gateText(gate: LinkGate | null | undefined): string {
   if (gate.state === 'gone' || gate.state === 'unauthorized')
     return RELINK_TEXT;
   if (gate.state === 'down')
-    return `${NOT_LINKED_TEXT}: сервер не отвечает, пауза`;
+    return DOWN_TEXT;
 
   return '';
 }
@@ -157,6 +176,17 @@ export function bindMode(gate: LinkGate | null | undefined, now = Date.now(), st
     return gateOpen(gate, now) === false;
 
   return gate?.state !== 'ok';
+}
+
+// What the popup/options show for a gate: 'open' → full UI; 'bind' → key screen (no key, 401/403, gone);
+// 'down' → «Сервер не на связи — пауза, перепроверяю…», actions blocked, the saved link is NOT asked again.
+// A stale «ok» (TTL ran out, the backoff probe has not confirmed yet) is 'down' too: the key itself was accepted.
+export type GateView = 'open' | 'bind' | 'down';
+export function gateView(gate: LinkGate | null | undefined, now = Date.now(), strict = true): GateView {
+  if (bindMode(gate, now, strict) === false)
+    return 'open';
+
+  return gate?.state === 'down' || gate?.state === 'ok' ? 'down' : 'bind';
 }
 
 // «Подключить»: a connect link (https://host/connect#key) or a bare key for the already known server.

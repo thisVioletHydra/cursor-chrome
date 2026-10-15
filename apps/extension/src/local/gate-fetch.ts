@@ -2,7 +2,7 @@
 // gate closed → no request at all (synthetic 503 «paused»); server answers 401/403 → gate becomes «unauthorized»
 // at once (popup → connect screen, badge «!», queue/autopilot loops stop). Only /api/link and /api/access/* pass
 // while closed (they are how the link gets re-checked). Writes only its own linkGate key.
-import { checkLink, gateOpen, LINK_GATE_KEY, type LinkGate } from './link-gate.ts';
+import { gateOpen, LINK_GATE_KEY, type LinkGate } from './link-gate.ts';
 
 type Area = { get: (keys: string) => Promise<Record<string, unknown>>; set: (items: Record<string, unknown>) => Promise<void> };
 
@@ -41,19 +41,12 @@ export function makeGateFetch(original: typeof fetch, area: Area, origin: () => 
     const gate = (stored[LINK_GATE_KEY] ?? null) as LinkGate | null;
     if (passesClosedGate(path) === false && gateOpen(gate, now()) === false)
       return new Response(JSON.stringify(PAUSED_BODY), { status: 503, headers: { 'content-type': 'application/json', 'x-cc-paused': '1' } });
+    // live failure on an open gate: close it at once (fast → background re-check in 2 s, then backoff).
+    // Only a storage write: the caller never waits for a re-check, and the failed request is never retried.
     const markLost = async () => {
-      const cur = ((await area.get(LINK_GATE_KEY).catch(() => ({})))[LINK_GATE_KEY] ?? null) as LinkGate | null;
-      if (gateOpen(cur, now())) {
-        const key = (await area.get('applySyncKey')).applySyncKey;
-        // Confirm using a read-only request; never retry the original mutation.
-        if (typeof key === 'string' && key) {
-          const checked = await checkLink(base, key, original);
-          if (checked.state === 'ok') return;
-          await area.set({ [LINK_GATE_KEY]: { ...checked, login: cur?.login, fails: 3 } });
-        } else {
-          await area.set({ [LINK_GATE_KEY]: lostGate(cur, new URL(base).host, now()) }).catch(() => {});
-        }
-      }
+      const cur = ((await area.get(LINK_GATE_KEY).catch(() => ({} as Record<string, unknown>)))[LINK_GATE_KEY] ?? null) as LinkGate | null;
+      if (gateOpen(cur, now()))
+        await area.set({ [LINK_GATE_KEY]: lostGate(cur, new URL(base).host, now()) }).catch(() => {});
     };
     let res: Response;
     try {

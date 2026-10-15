@@ -8,16 +8,22 @@ export function splitThinAnswers(params: unknown): { resumeKind: ThinResumeKind 
   let resumeKind: ThinResumeKind | null = null;
   if (raw === null || typeof raw !== 'object')
     return { resumeKind, answers };
+
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
     if (key === '__resumeKind') {
       if (value === 'frontend' || value === 'fullstack')
         resumeKind = value;
+
       continue;
     }
+
     if (key.startsWith('__'))
-      continue; // other service keys: never an answer
+      continue;
+
+ // other service keys: never an answer
     if (typeof value === 'string')
       answers[key] = value;
   }
+
   return { resumeKind, answers };
 }

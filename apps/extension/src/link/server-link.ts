@@ -4,6 +4,7 @@
 // Idle/stop answers from the planner are honoured as pauses. Nothing happens on sites until a command arrives.
 // Auth: Bearer extToken; x-access-pass/x-ext-version are added by the pass-header fetch wrapper.
 import { makeBackoff, MAX_STEP_MS, SERVER_STEPS_MS } from './backoff.ts';
+import { tabHeader } from './transit-context.ts';
 
 export const CMD_KINDS = ['readDOM', 'navigate', 'click', 'type', 'select', 'press_key', 'read', 'snapshot', 'wait', 'hh_apply'] as const;
 export type CmdKind = (typeof CMD_KINDS)[number];
@@ -18,6 +19,11 @@ export type LinkDeps = {
   runEpoch?: () => Promise<string>;
   beforeRound?: () => Promise<void>;
   isEnabled?: () => Promise<boolean>;
+  // server planner transit: chain start (and after every idle/stop) = POST with this body; inside the chain GET
+  context?: () => Promise<string | null>;
+  // stable worker-tab id for x-ext-tab (lease of a re-delivered command)
+  tabId?: () => Promise<string>;
+  onLost?: (id: string) => Promise<void>;
   exec: (cmd: Wire) => Promise<Outcome>;
   fetcher?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
@@ -51,7 +57,8 @@ export function wakeableSleep(ms: number): Promise<void> {
   return new Promise<void>((resolve) => {
     const done = () => { clearTimeout(timer);
       sleepers.delete(done);
-      resolve(); };
+      resolve();
+    };
     const timer = setTimeout(done, ms);
     sleepers.add(done);
   });
@@ -90,6 +97,9 @@ export async function serverLinkLoop(d: LinkDeps): Promise<LoopEnd> {
   const now = d.now ?? Date.now;
   const backoff = makeBackoff(SERVER_STEPS_MS);
   const max = d.maxRounds ?? Number.POSITIVE_INFINITY;
+  let chainOpen = false;
+  // report answered {lost:true}: the server dropped that command; never act on the same id again
+  const lost = new Set<string>();
   for (let round = 0; round < max; round += 1) {
     if (await d.gateOpen() === false)
       return 'closed';
@@ -101,10 +111,18 @@ export async function serverLinkLoop(d: LinkDeps): Promise<LoopEnd> {
       return 'closed';
 
     const auth = { authorization: `Bearer ${key}`, ...(d.runEpoch ? {'x-ext-run':await d.runEpoch()} : {}), ...(d.isEnabled ? {'x-ext-enabled':String(await d.isEnabled())} : {}) };
+    const tab = d.tabId ? tabHeader(await d.tabId()) : '';
+    if (tab)
+      Object.assign(auth, { 'x-ext-tab': tab });
     const started = now();
+    const body0 = chainOpen || !d.context ? null : await d.context().catch(() => null);
     let res: Response;
     try {
-      res = await fetcher(`${base}/api/ext/next`, { cache: 'no-store', signal: AbortSignal.timeout(30_000), headers: auth });
+      res = await fetcher(`${base}/api/ext/next`, body0 === null
+        ? { cache: 'no-store', signal: AbortSignal.timeout(30_000), headers: auth }
+        : { method: 'POST', cache: 'no-store', signal: AbortSignal.timeout(30_000), headers: { ...auth, 'content-type': 'application/json' }, body: body0 });
+      if (body0 !== null && (res.status === 200 || res.status === 204))
+        chainOpen = true;
     }
     catch {
       await sleep(backoff.next());
@@ -119,10 +137,12 @@ export async function serverLinkLoop(d: LinkDeps): Promise<LoopEnd> {
 
     if (res.status === 404 || res.status === 410)
       return 'no-server';
+
  // server without stage B: stop quietly, gate reopen restarts us
     if (res.status === 204) {
       const after = nextAfterMs(res);
       if (after !== null) { // flag off on the server: come back later (popup open wakes us earlier)
+        chainOpen = false;
         backoff.reset();
         await sleep(after);
         continue;
@@ -144,6 +164,7 @@ export async function serverLinkLoop(d: LinkDeps): Promise<LoopEnd> {
     const body = await res.json().catch(() => null) as unknown;
     backoff.reset();
     if (isPause(body)) {
+      chainOpen = false; // idle/stop ends the chain: the next round re-sends the context
       await d.onPause?.(body);
       await sleep(pauseMs(body));
       continue;
@@ -155,8 +176,11 @@ export async function serverLinkLoop(d: LinkDeps): Promise<LoopEnd> {
     }
 
     // the gate may have closed while we were waiting: never act on the site then
-    const out: Outcome = (await d.key()).trim() !== key || await d.gateOpen() === false
-      ? { ok: false, error: 'нет связи с админкой' }
+    const refused = lost.has(body.id)
+      ? 'команда потеряна сервером; повтор запрещён'
+      : (await d.key()).trim() !== key || await d.gateOpen() === false ? 'нет связи с админкой' : '';
+    const out: Outcome = refused
+      ? { ok: false, error: refused }
       : await d.exec(body).catch(error => ({ ok: false as const, error: error instanceof Error ? error.message : String(error) }));
     const report = out.ok ? { id: body.id, ok: true, result: out.result ?? null } : { id: body.id, ok: false, error: String(out.error || 'ошибка').slice(0, 2000) };
     try {
@@ -165,6 +189,12 @@ export async function serverLinkLoop(d: LinkDeps): Promise<LoopEnd> {
         await d.onUnauthorized?.();
 
         return 'unauthorized';
+      }
+      const answer = await sent.json().catch(() => null) as { lost?: unknown } | null;
+      if (answer?.lost === true) {
+        // the action is not repeated; the planner re-reads the page with its next readDOM
+        lost.add(body.id);
+        await d.onLost?.(body.id);
       }
     }
     catch {

@@ -4,11 +4,11 @@ import { getFlags, setFlags } from './flags';
 import { freshPilot, pilotStep } from '../chrome/pilot';
 import { closePinnedHh } from '../tab/worker-tab';
 
-export async function applyPilot(event: PilotEvent): Promise<Pilot> {
+export async function applyPilot(event: PilotEvent, opts: { user?: boolean } = {}): Promise<Pilot> {
   const flags = await getFlags();
   const next = pilotStep({ ...freshPilot(), on: flags.autoQueue }, event);
   if (next.on !== flags.autoQueue) {
-    const stored = await setFlags({ autoQueue: next.on });
+    const stored = await setFlags({ autoQueue: next.on }, opts);
     if (stored.autoQueue !== next.on)
       return { ...next, on: stored.autoQueue, closeBotTab: false };
   }

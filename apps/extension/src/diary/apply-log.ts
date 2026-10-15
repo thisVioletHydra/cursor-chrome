@@ -1,7 +1,7 @@
 import { browser } from '../browser-host';
 import { migrateOldDomain } from '../local/domain-move.ts';
 import { readGate } from '../local/link-gate';
-import { vacancyIdFromUrl } from './history-view';
+import { ownerOf, vacancyIdFromUrl } from './history-view';
 
 export type ApplyStatus = 'sent' | 'needsHuman';
 
@@ -94,7 +94,7 @@ export async function appendApply(record: ApplyRecord): Promise<ApplyRecord[]> {
 
   const sameDay = dayKey(normalized.sentAt);
   const dup = log.some((item) => {
-    if ((item.owner || 'thisVioletHydra').toLowerCase() !== (normalized.owner || 'thisVioletHydra').toLowerCase()) return false;
+    if (ownerOf(item) !== ownerOf(normalized)) return false;
 
     if (applyStatus(item) !== applyStatus(normalized))
       return false;
@@ -139,7 +139,7 @@ export async function todayCount(now = Date.now()): Promise<number> {
   const gate = (await browser.storage.local.get('linkGate')).linkGate as {login?:string;state?:string}|undefined;
   if (gate?.state !== 'ok' || !gate.login) return 0;
   return log.filter(item =>
-    (item.owner || 'thisVioletHydra').toLowerCase() === gate.login?.toLowerCase()
+    ownerOf(item) === gate.login?.toLowerCase()
     && dayKey(item.sentAt) === key
     && applyStatus(item) === 'sent'
     && isJunkApply(item) === false).length;
@@ -177,7 +177,7 @@ function uniqueByVacancy(log: ApplyRecord[]): ApplyRecord[] {
     if (item.vacancyId.length === 0)
       return true;
 
-    const key = `${(item.owner || 'thisVioletHydra').toLowerCase()}:${applyStatus(item)}:${item.vacancyId}`;
+    const key = `${ownerOf(item)}:${applyStatus(item)}:${item.vacancyId}`;
     if (seen.has(key))
       return false;
 

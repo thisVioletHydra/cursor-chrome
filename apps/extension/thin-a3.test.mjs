@@ -18,7 +18,8 @@ test('gate-fetch: network error on an open gate → lost at once (fast), next qu
   const a = area(okGate(now));
   let sent = 0;
   const f = makeGateFetch(async () => { sent += 1;
-    throw new TypeError('Failed to fetch'); }, a, () => O, () => now);
+    throw new TypeError('Failed to fetch');
+  }, a, () => O, () => now);
   await assert.rejects(f(`${O}/api/queue`));
   assert.equal(a.store.linkGate.state, 'down');
   assert.equal(a.store.linkGate.fast, true);

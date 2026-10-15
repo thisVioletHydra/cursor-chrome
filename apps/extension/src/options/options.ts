@@ -9,9 +9,10 @@ import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 import { renderDebug } from './debug-tab.ts';
 import { browser } from '../browser-host';
 import { byokInfo, idbKeyStore, saveByok } from '../local/byok.ts';
-import { bannerHtml, updateFlag } from '../local/version.ts';
-import { watchUpdating } from '../local/updating.ts';
-import { paintLinkPanel } from '../local/link-panel.ts';
+import { bannerHtml, UPDATE_KEY, updateFlag } from '../local/version.ts';
+import { paintLinkPanel, paintLinkState } from '../local/link-panel.ts';
+import { BIND_TITLE, DOWN_TEXT, LINK_GATE_KEY, parseConnectInput, readGate } from '../local/link-gate.ts';
+import { LOCKED_HIDDEN, optionsLocked, optionsView } from './options-gate.ts';
 import { maskKey, readClipboardKey, STEPS, testKey, validXaiKey, XAI_KEYS_URL } from '../local/key-wizard.ts';
 // provider ids the server accepts in x-llm-provider (server-side presets; no custom URLs from the client)
 const PRESETS = [{ id: 'xai', name: 'xAI Grok' }, { id: 'groq', name: 'Groq' }, { id: 'gemini', name: 'Gemini' }, { id: 'zai', name: 'Z.ai' }, { id: 'openrouter', name: 'OpenRouter' }, { id: 'cohere', name: 'Cohere' }, { id: 'deepseek', name: 'DeepSeek' }, { id: 'mistral', name: 'Mistral' }];
@@ -110,7 +111,8 @@ function factsTab(): HTMLElement {
     el('div', { className: 'row' }, el('label', { textContent: 'Rules (one per line)' }), rules),
     el('div', { className: 'row' }, el('label', { textContent: 'Notes' }), notes),
     el('div', { className: 'row' }, el('label', { textContent: 'Resume' }), resume),
-    el('button', { className: 'btn', textContent: 'Save facts', onclick: () => void save({ ...data, facts: { rules: rules.value.split('\n').map(s => s.trim()).filter(Boolean), notes: notes.value, resume: resume.value } }) }));
+    el('button', { className: 'btn', textContent: 'Save facts', onclick: () => void save({ ...data, facts: { rules: rules.value.split('\n').map((s: string) => s.trim()).filter(Boolean), notes: notes.value, resume: resume.value } }) })
+  );
 }
 
 function memoryTab(): HTMLElement {
@@ -145,7 +147,7 @@ function rulesTab(): HTMLElement {
       el('div', { className: 'tools' },
         el('button', { className: 'btn ghost', textContent: 'Save', onclick: () => {
           const rules = [...data.rules];
-          rules[index] = { ...rule, title: title.value.trim(), answer: answer.value.trim(), aliases: aliases.value.split('\n').map(s => s.trim()).filter(Boolean) };
+          rules[index] = { ...rule, title: title.value.trim(), answer: answer.value.trim(), aliases: aliases.value.split('\n').map((s: string) => s.trim()).filter(Boolean) };
           void save({ ...data, rules });
         } }),
         el('button', { className: 'btn ghost', textContent: 'Delete', onclick: () => void save({ ...data, rules: data.rules.filter((_, i) => i !== index) }).then(draw) }))));
@@ -225,8 +227,82 @@ async function serverBase(): Promise<string> {
 // Outdated-version banner: the flag comes from the server's response headers (x-ext-outdated / 426).
 async function drawUpdate(): Promise<void> {
   document.getElementById('update')!.innerHTML = bannerHtml(await updateFlag(storageArea), await serverBase());
-  void watchUpdating(document.getElementById('updating'), await serverBase(), () => location.reload());
-  void paintLinkPanel(document.getElementById('link-state'), await getSyncUrl(), await getSyncKey(), storageArea).catch(() => null);
+}
+
+// one live /api/link check (page open, new link saved); the gate is written only if it changed
+async function checkLinkNow(): Promise<void> {
+  const gate = await paintLinkPanel(document.getElementById('link-state'), await getSyncUrl(), await getSyncKey(), storageArea).catch(() => null);
+  if (gate !== null)
+    applyLock(optionsView(gate, true));
+}
+
+// ── Lock: no valid link → only «Введи ключ для связи» + server line (like the popup); data tabs are not rendered.
+let locked: boolean | null = null;
+let lockView: ReturnType<typeof optionsView> | null = null;
+
+function applyLock(view: ReturnType<typeof optionsView>): void {
+  if (lockView === view)
+    return;
+
+  const on = view !== 'open';
+  const was = locked;
+  lockView = view;
+  locked = on;
+  for (const id of LOCKED_HIDDEN)
+    document.getElementById(id)?.toggleAttribute('hidden', on);
+  if (on) {
+    // down: saved link is valid, only the server is unreachable → status, no key field
+    document.getElementById('view')!.replaceChildren(view === 'down' ? downCard() : connectCard());
+
+    return;
+  }
+  // unlocked after a lock: full reload so every tab reads fresh local data
+  if (was === true)
+    location.reload();
+}
+
+function downCard(): HTMLElement {
+  const card = el('div', { className: 'card' }, el('b', { textContent: DOWN_TEXT }));
+  card.style.color = 'var(--warn)';
+
+  return card;
+}
+
+function connectCard(): HTMLElement {
+  const input = el('input', { placeholder: 'Ссылка подключения из админки', autocomplete: 'off' });
+  const error = el('div', { className: 'dim connect-error' });
+  const save = el('button', { className: 'btn', textContent: 'Подключить', type: 'submit' });
+  const form = el('form', { className: 'card connect', onsubmit: (event: Event) => {
+    event.preventDefault();
+    void (async () => {
+      const parsed = parseConnectInput(input.value, await getSyncUrl().catch(() => ''));
+      if (parsed === null) {
+        error.textContent = 'Это не ссылка подключения';
+
+        return;
+      }
+      save.disabled = true;
+      try {
+        const result = await browser.runtime.sendMessage({ type: 'set-sync-url', url: parsed.url, key: parsed.key }) as { ok?: boolean };
+        if (result?.ok !== true) {
+          error.textContent = 'Не сохранилось';
+
+          return;
+        }
+        input.value = '';
+        const gate = await paintLinkPanel(document.getElementById('link-state'), parsed.url, parsed.key, storageArea).catch(() => null);
+        if (gate !== null && optionsLocked(gate, true) === false)
+          location.reload();
+        else
+          error.textContent = 'Ключ не принят';
+      }
+      finally {
+        save.disabled = false;
+      }
+    })();
+  } }, el('b', { textContent: BIND_TITLE }), el('div', { className: 'tools' }, input, save), error);
+
+  return form;
 }
 
 // BYOK: own LLM key, encrypted (WebCrypto AES-GCM) in chrome.storage.local, sent only as x-llm-key.
@@ -316,8 +392,33 @@ function llmTab(): HTMLElement {
 }
 
 async function main(): Promise<void> {
+  // gate first: nothing from local data is drawn while the link is not valid
+  applyLock(optionsView(await readGate(storageArea).catch(() => null), false));
   void drawUpdate();
-  browser.storage.onChanged.addListener(() => void drawUpdate());
+  void checkLinkNow();
+  // only the keys this page shows; a gate change is painted from storage (no request) — no onChanged → fetch → write loop
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local')
+      return;
+    if (UPDATE_KEY in changes)
+      void drawUpdate();
+    if ('applySyncUrl' in changes || 'applySyncKey' in changes)
+      void checkLinkNow();
+    if (LINK_GATE_KEY in changes) {
+      const gate = (changes[LINK_GATE_KEY].newValue ?? null) as Parameters<typeof optionsView>[0];
+      if (gate)
+        void getSyncUrl().then(url => paintLinkState(document.getElementById('link-state'), gate, url)).catch(() => null);
+      applyLock(optionsView(gate, true));
+    }
+  });
+  // like the popup: while the page is open and the server is down, the SW re-checks once per ~3 s (shared, one in flight)
+  setInterval(() => {
+    if (lockView === 'down' && document.visibilityState === 'visible')
+      void browser.runtime.sendMessage({ type: 'gate-ping' }).catch(() => {});
+  }, 3000);
+  if (locked === true)
+    return;
+
   data = await localStore.loadOrEmpty();
   if (await localStore.initialized() === false) {
     const result = await importFromServer(localStore, await syncBaseOf(), await getSyncKey());

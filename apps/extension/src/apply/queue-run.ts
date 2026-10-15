@@ -738,7 +738,7 @@ async function takeLink(base: string, key: string, run: QueueRun, link: { id: st
     else if (why.length > 0)
       await tellPage(`queue-run.ts · ${why}`);
 
-    if (ignore && 'tabId' in shown && await hideOpenVacancy(shown.tabId, link.id, row => postHidden(base, key, row)) === false)
+    if (ignore && 'tabId' in shown && await hideOpenVacancy(shown.tabId, link.id, async (row) => { await postHidden(base, key, row); }) === false)
       return { started: false, stop: true, reason: HIDE_POPUP_STUCK };
 
     if (ended) {

@@ -5,11 +5,11 @@ import { labeledApplies, paintApplyGroup, readWaitingKey } from '../hh/history-l
 import { openWorkerUrl, pinHere, refreshWorkerPanel } from './popup-pin';
 import { browser } from '../browser-host';
 import { bannerHtml, updateFlag } from '../local/version';
-import { POPUP_STEPS_MS, POPUP_WAIT_MS, watchUpdating } from '../local/updating';
 import { paintLinkPanel } from '../local/link-panel';
 import { EXT_CONFIG_KEY } from '../pilot/ext-settings';
-import { makePowerQueue } from '../pilot/power-queue';
-import { adminUrl, BIND_TITLE, bindMode, DEFAULT_ADMIN_URL, gateText, LINK_GATE_KEY, type LinkGate, parseConnectInput, readGate } from '../local/link-gate';
+import { makeGeneration, makeWishSender, settlePower } from '../pilot/power-settle.ts';
+import { adminUrl, BIND_TITLE, bindMode, DEFAULT_ADMIN_URL, DOWN_TEXT, gateText, gateView, LINK_GATE_KEY, parseConnectInput, readGate } from '../local/link-gate';
+import type { LinkGate } from '../local/link-gate';
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
 
 type ApplyRecord = {
@@ -217,9 +217,10 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (gateChange !== undefined) {
     // by state, not by TTL: a stale «ok» → «unauthorized/down» must switch to the connect screen at once
     const next = gateChange.newValue as LinkGate | undefined;
-    if (bindMode(next, Date.now(), false) && bindOn === false)
-      paintBind(true);
-    else if (bindMode(next) === false && bindOn)
+    const view = gateView(next, Date.now(), false);
+    if (view !== 'open' && (bindOn === false || keyScreen !== (view === 'bind')))
+      paintBind(true, view === 'bind');
+    else if (gateView(next) === 'open' && bindOn)
       location.reload();
   }
 
@@ -672,6 +673,10 @@ function paintStatus(text: string, kind: 'ok' | 'fail' | 'plain' = 'plain'): voi
   if (pillEl === null)
     return;
 
+  // server down: the yellow «не на связи» line stays until the gate reopens (reload) or turns into the key screen
+  if (bindOn && keyScreen === false && text !== DOWN_TEXT)
+    return;
+
   pillEl.hidden = false;
   pillEl.className = kind === 'plain' ? 'status' : `status ${kind}`;
   pillEl.textContent = text;
@@ -847,7 +852,7 @@ async function reviveHh(kick: boolean): Promise<void> {
   reviving = true;
   try {
     const opened = await ensureHh();
-    if (autoOn === false)
+    if ((autoOn as boolean) === false)
       return;
 
     if (opened.ok !== true) {
@@ -961,102 +966,112 @@ async function paintBootStatus(): Promise<void> {
   kickSearch();
 }
 
-// a click during «Включаю…/Выключаю…» is queued, not dropped (fast on→off)
-const powerClick = makePowerQueue(() => togglePower());
+// fast clicks: no queue — every click flips from the last target and the newest click owns the button
+const powerGen = makeGeneration();
+const powerClick = () => togglePower();
 
-async function togglePower(): Promise<void> {
+async function readAutoFlag(): Promise<boolean> {
+  const flags = (await browser.storage.local.get('flags')).flags as { autoQueue?: unknown } | undefined;
+
+  return flags?.autoQueue === true;
+}
+
+function watchAutoFlag(changed: (value: boolean) => void): () => void {
+  const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
+    if (area === 'local' && changes.flags !== undefined)
+      changed((changes.flags.newValue as { autoQueue?: unknown } | undefined)?.autoQueue === true);
+  };
+  browser.storage.onChanged.addListener(listener);
+
+  return () => browser.storage.onChanged.removeListener(listener);
+}
+
+// one source of truth for the button: `wish` (what the user asked last); storage confirms it, the SW applies only
+// the newest seq. N clicks → parity; «off» is never lost behind a slow «on».
+let wish: boolean | null = null;
+const wishSender = makeWishSender((on, seq) => void applyWish(on, seq, powerGen.current()));
+
+function togglePower(): void {
   if (bindOn)
     return;
   if (powerBtn === null || powerBtn.disabled)
     return;
 
-  const next = autoOn === false;
+  const next = (wish ?? autoOn) === false;
   if (next && adminOn === false) {
     paintPowerNote('Сначала подключи админку в Настройках');
 
     return;
   }
 
+  powerGen.next();
+  wish = next;
   powering = true;
   powerFail = '';
   clingUntil = 0;
-  powerBtn.textContent = next ? 'Включаю…' : 'Выключаю…';
+  autoOn = next;
   clearPowerNote();
+  paintPower(); // the wanted state at once
+  wishSender.wish(next);
+}
+
+async function applyWish(next: boolean, seq: number, gen: number): Promise<void> {
+  const sent = browser.runtime.sendMessage({ type: 'set-flags', autoQueue: next, seq }) as Promise<{ error?: string; autoQueue?: boolean; stale?: boolean }>;
+  sent.catch(() => {});
+  // final ≤ 2 s: storage confirmation (or the safety timeout), not the whole enable chain
+  await settlePower(next, readAutoFlag, watchAutoFlag);
+  if (gen !== powerGen.current())
+    return; // a newer click owns the button
+  powering = false;
+  wish = null;
+  autoOn = await readAutoFlag().catch(() => next);
+  paintPower();
+  if (autoOn === false)
+    paintOff();
+  let result: { error?: string; autoQueue?: boolean; stale?: boolean } | undefined;
   try {
-    const result = await browser.runtime.sendMessage({ type: 'set-flags', autoQueue: next }) as { error?: string; autoQueue?: boolean };
-    if (typeof result?.error === 'string' && result.error.length > 0 && result.autoQueue === true) {
-      autoOn = true;
-      paintStatus(pilotLine(result.error), 'fail');
-
-      return;
-    }
-
-    if (typeof result?.error === 'string' && result.error.length > 0) {
-      powerFail = result.error;
-      autoOn = false;
-      paintOff();
-
-      return;
-    }
-
-    if (typeof result?.autoQueue !== 'boolean') {
-      await syncAuto();
-      const link = await readPilotLink();
-      if (autoOn && link.length > 0) {
-        paintStatus(pilotLine(link), 'fail');
-
-        return;
-      }
-
-      powerFail = 'нет ответа';
-      if (next)
-        autoOn = false;
-
-      return;
-    }
-
-    autoOn = result.autoQueue;
-    paintPower();
-    if (autoOn === false) {
-      paintOff();
-
-      return;
-    }
-
-    clingUntil = Date.now() + 15_000;
-    const paused = await readPaused();
-    if (paused !== null) {
-      paintStatus(`Пауза до ${clockOf(paused)}`);
-
-      return;
-    }
-
-    revivedAt = Date.now();
-    paintStatus('Включено', 'ok');
-    kickSearch();
+    result = await sent;
   }
   catch (error) {
-    const text = error instanceof Error ? error.message : 'не вышло';
-    await syncAuto();
-    const link = await readPilotLink();
-    if (next && autoOn) {
-      paintStatus(pilotLine(link), 'fail');
-
-      return;
-    }
-
-    if (next) {
-      powerFail = text;
-      autoOn = false;
-    }
-    else {
-      paintPowerNote(text);
-    }
+    result = { error: error instanceof Error ? error.message : 'не вышло' };
   }
-  finally {
-    powering = false;
+  if (gen !== powerGen.current() || result?.stale === true)
+    return;
+  const error = typeof result?.error === 'string' ? result.error : '';
+  autoOn = await readAutoFlag().catch(() => autoOn);
+  if (error && autoOn) {
+    paintStatus(pilotLine(error), 'fail');
+
+    return;
+  }
+  if (error && next) {
+    powerFail = error;
     paintPower();
+    paintOff();
+
+    return;
   }
+  if (error) {
+    paintPowerNote(error);
+
+    return;
+  }
+  paintPower();
+  if (autoOn === false) {
+    paintOff();
+
+    return;
+  }
+  clingUntil = Date.now() + 15_000;
+  const paused = await readPaused();
+  if (paused !== null) {
+    paintStatus(`Пауза до ${clockOf(paused)}`);
+
+    return;
+  }
+  revivedAt = Date.now();
+  paintStatus('Включено', 'ok');
+  kickSearch();
 }
 
 async function runQueue(): Promise<void> {
@@ -1149,24 +1164,26 @@ void (async () => {
   const node = document.getElementById('cc-update');
   if (node)
     node.innerHTML = bannerHtml(await updateFlag(area), base);
-  // deploy window: small «updating» bar, ping /healthz every 3 s, then reload the popup data
-  // no key = connect screen: no deploy-wait loop at all; otherwise growing pings, at most 2 min
-  if ((await getSyncKey()).trim().length > 0)
-    void watchUpdating(document.getElementById('cc-updating'), base, () => location.reload(), { steps: POPUP_STEPS_MS, maxWait: POPUP_WAIT_MS });
+  // one source of truth for «server unreachable» (deploy window included): the gate. Down → the yellow
+  // «Сервер не на связи — пауза…» line; the 3 s gate-ping (one /api/link) brings the UI back. No /healthz loop here.
   const gate = await paintLinkPanel(document.getElementById('cc-link'), await getSyncUrl(), await getSyncKey(), area).catch(() => null);
-  paintBind(bindMode(gate));
+  const view = gateView(gate);
+  paintBind(view !== 'open', view === 'bind');
 })();
 
 // ── Bind mode: no valid token / server unreachable → only the connect screen (existing form + classes).
 // Tabs, autopilot card, «Включить», «Запинить», history and other settings are hidden; version + hash stay.
 let bindOn = false;
-const gateArea = { set: (items: Record<string, unknown>) => browser.storage.local.set(items) };
+const gateArea = { get: (keys: string) => browser.storage.local.get(keys) as Promise<Record<string, unknown>>, set: (items: Record<string, unknown>) => browser.storage.local.set(items) };
 const connectHome = connectForm?.parentElement ?? null;
 const connectNext = connectForm?.nextElementSibling ?? null;
 let bindAdmin: HTMLAnchorElement | null = null;
 
-function paintBind(on: boolean): void {
+// keyScreen=false: server down with a saved valid link → same lock, but a yellow «не на связи» status instead of the key form
+let keyScreen = false;
+function paintBind(on: boolean, key = true): void {
   bindOn = on;
+  keyScreen = on && key;
   const tabsEl = document.getElementById('tabs');
   if (tabsEl)
     tabsEl.hidden = on;
@@ -1174,8 +1191,9 @@ function paintBind(on: boolean): void {
     for (const id of ['view-history', 'pin-note'])
       document.getElementById(id)?.setAttribute('hidden', '');
   }
+  // down: #pill (the yellow status) lives inside .autopilot-card, so the card stays visible; actions stay disabled
   for (const el of document.querySelectorAll<HTMLElement>('.autopilot-card, .pin-line'))
-    el.hidden = on;
+    el.hidden = on && (key || el.classList.contains('autopilot-card') === false);
   const settings = document.getElementById('view-settings');
   const main = document.getElementById('view-main');
   if (powerBtn)
@@ -1185,6 +1203,24 @@ function paintBind(on: boolean): void {
     pinBtn.disabled = on;
   if (connectForm === null || main === null)
     return;
+  if (on && key === false) {
+    main.hidden = false;
+    if (settings)
+      settings.hidden = true;
+    if (bindAdmin)
+      bindAdmin.hidden = true;
+    if (connectHome && connectForm.parentElement !== connectHome)
+      connectHome.insertBefore(connectForm, connectNext);
+    connectForm.hidden = true;
+    paintStatus(DOWN_TEXT);
+    if (pillEl)
+      pillEl.style.color = 'var(--amber)';
+
+    return;
+  }
+  connectForm.hidden = false;
+  if (pillEl)
+    pillEl.style.color = '';
   if (on) {
     main.hidden = false;
     if (settings)
@@ -1228,16 +1264,21 @@ function paintBind(on: boolean): void {
 
 async function paintThinPopup(): Promise<void> {
   if (bindOn || await serverMode() === false) return;
+
   document.getElementById('tabs')?.setAttribute('hidden','');
   document.getElementById('view-history')?.setAttribute('hidden','');
   document.getElementById('view-settings')?.setAttribute('hidden','');
   document.getElementById('view-main')?.removeAttribute('hidden');
-  for (const el of document.querySelectorAll<HTMLElement>('.pin-line, #auto-line')) el.hidden = true;
+  for (const element of document.querySelectorAll<HTMLElement>('.pin-line, #auto-line')) element.hidden = true;
+
   if (connectForm) document.getElementById('view-main')?.append(connectForm);
 }
 
 
 // first paint from the stored state (no TTL) so the full UI does not flash before the live check
 void readGate({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>>, set: async () => {} })
-  .then(gate => paintBind(bindMode(gate, Date.now(), false)))
+  .then((gate) => {
+    const view = gateView(gate, Date.now(), false);
+    paintBind(view !== 'open', view === 'bind');
+  })
   .catch(() => paintBind(true));

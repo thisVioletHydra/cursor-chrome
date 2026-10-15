@@ -1,3 +1,5 @@
+import type { LinkGate } from './local/link-gate.ts';
+
 import { serverMode } from './local/server-mode';
 import { keepHhClicks } from './hh/stay-on-tab';
 import { startHhJob } from './hh/job';
@@ -6,7 +8,6 @@ import { click, hover, pressKey, selectOption, typeInto } from './page/actions';
 import { byRef, bySelector, snapshot } from './page/snapshot';
 import { browser } from './browser-host';
 import { BIND_MARK_ATTR, BIND_MARK_EVENT, bindMark, contentGateOpen, isGatedMessage, LINK_GATE_KEY, markOrigins, PAUSED_REPLY, shouldMarkPage } from './local/link-gate.ts';
-import type { LinkGate } from './local/link-gate.ts';
 import { getSyncUrl } from './diary/apply-log';
 import { installGateFetch } from './local/gate-fetch.ts';
 
@@ -20,7 +21,11 @@ function startHhJobOnce(): void {
     return;
 
   hhJobStarted = true;
-  void serverMode().then(thin => { if (thin === null || thin === undefined) startHhJob(); });
+  // serverMode() is boolean: the old null/undefined check never matched, so the hh job never started
+  void serverMode().then((thin) => {
+    if (thin === false)
+      startHhJob();
+  }).catch(() => startHhJob());
 }
 void contentGateOpen({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>> }).then((open) => {
   if (open)

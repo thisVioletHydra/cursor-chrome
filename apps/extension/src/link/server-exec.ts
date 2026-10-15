@@ -27,16 +27,22 @@ export function pageSnap(selector: string | null, maxChars: number): { url: stri
       const id = input.id || input.name || '';
       const label = (input.id ? document.querySelector(`label[for="${CSS.escape(input.id)}"]`)?.textContent : '') || input.closest('label')?.textContent || input.getAttribute('aria-label') || input.placeholder || '';
       const options = element.tagName === 'SELECT' ? Array.from((element as HTMLSelectElement).options).map(o => ({text:o.text.trim(),value:o.value})) : undefined;
-      const selector = input.id ? `#${CSS.escape(input.id)}` : input.name ? `[name=${JSON.stringify(input.name)}]${input.type==='radio'||input.type==='checkbox'?`[value=${JSON.stringify(input.value)}]`:''}` : '';
-      fields.push({ id, selector, value:input.type==='radio'||input.type==='checkbox'?input.value:'', name: input.name || '', type: element.tagName === 'SELECT' ? 'select' : element.tagName === 'TEXTAREA' ? 'textarea' : input.type, label: label.trim().slice(0, 500), required: input.required === true, ...(options ? { options } : {}) });
+      const selector = input.id ? `#${CSS.escape(input.id)}` : input.name ? `[name=${JSON.stringify(input.name)}]${input.type==='radio'||input.type==='checkbox' ? `[value=${JSON.stringify(input.value)}]` : ''}` : '';
+      fields.push({ id, selector, value:input.type==='radio'||input.type==='checkbox' ? input.value : '', name: input.name || '', type: element.tagName === 'SELECT' ? 'select' : element.tagName === 'TEXTAREA' ? 'textarea' : input.type, label: label.trim().slice(0, 500), required: input.required === true, ...(options ? { options } : {}) });
     }
   }
 
   const controls = root ? Array.from(root.querySelectorAll('button, [role="option"], [data-qa="resume-title"]')).map((element) => {
-    const parts:string[]=[]; let node:Element|null=element;
-    while(node && node!==document.documentElement){const parent: Element | null=node.parentElement;parts.unshift(`${node.tagName}:nth-child(${Array.from(parent?.children || []).indexOf(node)+1})`);node=parent;}
+    const parts:string[]=[];
+    let node:Element|null=element;
+    while (node && node!==document.documentElement) {
+      const parent: Element | null=node.parentElement;
+      parts.unshift(`${node.tagName}:nth-child(${Array.from(parent?.children || []).indexOf(node)+1})`);
+      node=parent;
+    }
+
     const all=Array.from(document.querySelectorAll(element.tagName));
-    return {text:element.textContent?.trim().slice(0,300)||'', selector:element.id?`#${CSS.escape(element.id)}`:`html > ${parts.join(' > ')}` , path:all.indexOf(element)};
+    return {text:element.textContent?.trim().slice(0,300)||'', selector:element.id ? `#${CSS.escape(element.id)}` : `html > ${parts.join(' > ')}` , path:all.indexOf(element)};
   }) : [];
   return { url: location.href, html, fields, controls, found: root !== null };
 }

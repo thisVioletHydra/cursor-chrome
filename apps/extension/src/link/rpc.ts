@@ -2,6 +2,7 @@ import { serverMode } from '../local/server-mode';
 import { askCloud } from '../apply/answer';
 import { appendApply, clearWaiting, dropWaiting, getSyncKey, getSyncUrl, listApplies, setSyncKey, setSyncUrl, sweepDismissedWaiting, todayCount, waitingHuman } from '../diary/apply-log';
 import { adminManaged, getFlags, setFlags } from '../pilot/flags';
+import { makePowerGate, noteUserWish, userWishOff } from '../pilot/power-wish.ts';
 import { managedBy } from '../pilot/ext-settings';
 import { backfillUnpinnedReviews, handleNeedsHuman, isHhWorkerTab } from '../apply/human-review';
 import { syncNegotiations } from '../apply/negotiations';
@@ -16,7 +17,7 @@ import { DETECT_LINE } from '../hh/detect-wall';
 import { clearFormHold } from '../apply/form-hold';
 import { forgetHangReport, guardCaptcha, queueBusy, readPausedUntil, readQueueReport, runQueue } from '../apply/queue-run';
 import { pullSavedResume } from '../apply/resume-pull';
-import { checkWorker, listJobTabs, openHhBackground, openOnHhTab, pinWorker } from '../tab/worker-tab';
+import { checkWorker, closePinnedHh, listJobTabs, openHhBackground, openOnHhTab, pinWorker } from '../tab/worker-tab';
 import { ensurePinnedHh, openPinnedWorker } from '../tab/worker-open';
 import { viewItems } from '../diary/history-view';
 import { gateOpen, readGate } from '../local/link-gate';
@@ -252,7 +253,18 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
     if ('autoQueue' in message)
       patch.autoQueue = message.autoQueue === true;
 
-    replyJob(reply, writeFlags(patch));
+    // autopilot wish with a seq: an older seq than the newest seen is dropped (reply = current state)
+    const seq = typeof message.seq === 'number' ? message.seq : undefined;
+    if (typeof patch.autoQueue === 'boolean' && powerGate.accept(seq) === false) {
+      replyJob(reply, (async () => ({ ...await getFlags(), stale: true }))());
+
+      return true;
+    }
+
+    if (typeof patch.autoQueue === 'boolean')
+      noteUserWish(patch.autoQueue);
+
+    replyJob(reply, writeFlags(patch, seq));
 
     return true;
   },
@@ -291,16 +303,26 @@ async function flagsAfter(
   return { ...await getFlags(), autoQueue: on };
 }
 
-async function writeFlags(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; showMachine?: boolean; autoQueue?: boolean }): Promise<unknown> {
-  if (await serverMode() && typeof patch.autoQueue === 'boolean') {
-    if (patch.autoQueue) await browser.storage.local.set({serverRunEpoch:Date.now()});
-    const decided = await applyPilot(patch.autoQueue ? {type:'enable'} : {type:'stop',reason:'user'});
+const powerGate = makePowerGate();
 
-    return flagsAfter(patch, decided.on);
+async function writeFlags(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; showMachine?: boolean; autoQueue?: boolean }, seq?: number): Promise<unknown> {
+  if (await serverMode() && typeof patch.autoQueue === 'boolean') {
+    const on = patch.autoQueue;
+
+    return powerGate.locked(async () => {
+      if (powerGate.stale(seq))
+        return { ...await getFlags(), stale: true };
+
+      if (on)
+        await browser.storage.local.set({ serverRunEpoch: Date.now() });
+      const decided = await applyPilot(on ? { type: 'enable' } : { type: 'stop', reason: 'user' });
+
+      return flagsAfter(patch, decided.on);
+    });
   }
 
   if (patch.autoQueue === true)
-    return enablePilot(patch);
+    return enablePilot(patch, seq);
 
   if (patch.autoQueue === false)
     return disablePilot(patch);
@@ -308,7 +330,48 @@ async function writeFlags(patch: { hideJunk?: boolean; keepSession?: boolean; sh
   return setFlags(patch);
 }
 
-async function enablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; showMachine?: boolean; autoQueue?: boolean }): Promise<unknown> {
+async function enablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; showMachine?: boolean; autoQueue?: boolean }, seq?: number): Promise<unknown> {
+  const decided = await powerGate.locked(() => enableDecide(patch, seq));
+  if ('error' in decided || 'stale' in decided)
+    return decided;
+
+  const next = decided;
+  if (powerGate.stale(seq))
+    return { ...await getFlags(), stale: true };
+  if (next.autoQueue === true) {
+    const opened = await ensurePinnedHh();
+    if (powerGate.stale(seq) || userWishOff()) {
+      // «off» landed while the tab was opening: do not leave an orphan bot tab
+      if (userWishOff())
+        await closePinnedHh();
+
+      return { ...await getFlags(), stale: true };
+    }
+    if (opened.ok === false)
+      return { ...next, error: opened.reason || 'не удалось открыть площадку' };
+  }
+
+  await forgetStuckHang();
+  if (powerGate.stale(seq))
+    return { ...await getFlags(), stale: true };
+  const pushed = await pushPilot(true);
+  if (pushed.ok) {
+    await clearPilotPending();
+    await clearPilotLink();
+
+    return next;
+  }
+
+  await notePilotLink(pushed.error);
+
+  return { ...next, error: pushed.error };
+}
+
+// short decision step under the power lock: guards + applyPilot(enable); a newer wish already seen → no write
+async function enableDecide(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; showMachine?: boolean; autoQueue?: boolean }, seq?: number): Promise<Awaited<ReturnType<typeof flagsAfter>> | { error: string; autoQueue: false } | Record<string, unknown> & { stale: true }> {
+  if (powerGate.stale(seq))
+    return { ...await getFlags(), stale: true };
+
   if (await guardDetect()) {
     await clearPilotPending();
     await clearPilotLink();
@@ -323,35 +386,28 @@ async function enablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; s
     return { error: 'капча, позови человека', autoQueue: false };
   }
 
+  if (userWishOff())
+    return { ...await getFlags(), stale: true };
+
   await clearPilotStop();
   await clearFormHold();
   await setPilotPending('on');
-  const decided = await applyPilot({ type: 'enable' });
-  const next = await flagsAfter(patch, decided.on);
-  if (next.autoQueue === true) {
-    const opened = await ensurePinnedHh();
-    if (opened.ok === false)
-      return { ...next, error: opened.reason || 'не удалось открыть площадку' };
-  }
-
-  await forgetStuckHang();
-  const pushed = await pushPilot(true);
-  if (pushed.ok) {
+  if (powerGate.stale(seq)) {
     await clearPilotPending();
-    await clearPilotLink();
 
-    return next;
+    return { ...await getFlags(), stale: true };
   }
+  const decided = await applyPilot({ type: 'enable' });
 
-  await notePilotLink(pushed.error);
-
-  return { ...next, error: pushed.error };
+  return flagsAfter(patch, decided.on);
 }
 
 async function disablePilot(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; showMachine?: boolean; autoQueue?: boolean }): Promise<unknown> {
-  await setPilotPending('off');
+  // «off» does not queue behind the lock or an opening tab: it is written at once and closes the bot tab.
+  // An enable still in flight cannot write true afterwards (userWishOff + stale checks in setFlags/enablePilot).
   await markPilotStop();
-  const decided = await applyPilot({ type: 'stop', reason: 'user' });
+  await setPilotPending('off');
+  const decided = await applyPilot({ type: 'stop', reason: 'user' }, { user: true });
   const next = await flagsAfter(patch, decided.on);
 
   await clearPilotLink();

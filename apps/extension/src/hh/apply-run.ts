@@ -239,7 +239,7 @@ async function submitStep(): Promise<ApplyResult> {
     return afterAgain;
 
   const errors = formErrors();
-  const outcomes: Array<[boolean, () => ApplyResult]> = [
+  const outcomes: Array<[boolean, () => ApplyResult | Promise<ApplyResult>]> = [
     [errors.length > 0, () => humanResult({ reason: errors[0] || 'ошибка формы', hints: errors.slice(0, 8) })],
     [freshSuccess(hadToast), () => sentResult()],
   ];

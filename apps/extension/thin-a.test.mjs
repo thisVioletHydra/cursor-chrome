@@ -79,7 +79,8 @@ test('popup deploy wait grows and stops; no loop without a key', async () => {
   assert.deepEqual(pauses.slice(0, 5), [3000, 6000, 12_000, 30_000, 60_000]);
   assert.ok(pauses.reduce((a, b) => a + b, 0) <= 120_000 + 60_000);
   assert.ok(pauses.length <= 6);
-  assert.match(src('./src/popup/popup.ts'), /if \(\(await getSyncKey\(\)\)\.trim\(\)\.length > 0\)\n    void watchUpdating\(/);
+  // popup: the gate is the single source of «server down» — no /healthz watcher there any more
+  assert.doesNotMatch(src('./src/popup/popup.ts'), /watchUpdating\(/);
 });
 
 test('no 1-second reconnect loops left: native, ws, pokes, queue rest loop gated', () => {

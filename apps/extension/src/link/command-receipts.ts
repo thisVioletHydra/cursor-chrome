@@ -16,7 +16,7 @@ export function idempotentExecutor(
   return (cmd: Wire): Promise<Outcome> => {
     const run = async (): Promise<Outcome> => {
       const key = await token();
-      if (!key.trim()) return { ok: false, error: 'нет аккаунта' };
+      if (key.trim() === null || key.trim() === undefined) return { ok: false, error: 'нет аккаунта' };
 
       const digest = await crypto.subtle.digest(
         'SHA-256',

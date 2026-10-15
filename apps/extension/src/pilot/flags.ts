@@ -3,6 +3,7 @@ import { clearTeaClock, resetTeaClock } from '../apply/tea-clock';
 import { openingTab } from '../tab/worker-tab';
 import { browser } from '../browser-host';
 import { waitUntil } from './power-queue.ts';
+import { userWishOff } from './power-wish';
 import { adminSettingsOf, EXT_CONFIG_KEY, localPatch, mergeSettings } from './ext-settings';
 
 export type Flags = {
@@ -46,14 +47,15 @@ function localOf(raw: unknown): Flags {
   };
 }
 
-export async function setFlags(asked: Partial<Flags>): Promise<Flags> {
+export async function setFlags(asked: Partial<Flags>, opts: { user?: boolean } = {}): Promise<Flags> {
   const patch = localPatch(asked, await adminManaged());
   const prev = await getFlags();
   const next = { ...prev, ...patch };
   const turningOn = prev.autoQueue === false && next.autoQueue === true;
   const turningOff = prev.autoQueue === true && next.autoQueue === false;
   // the bot tab is still opening (fast on→off): wait for it instead of silently keeping the pilot on
-  if (turningOff && openingTab() && await waitUntil(() => openingTab() === false, 8000) === false)
+  // a user «off» never waits: it is written at once, the opening tab is closed by the stop step
+  if (turningOff && opts.user !== true && openingTab() && await waitUntil(() => openingTab() === false, 8000) === false)
     return prev;
 
   if (turningOn)
@@ -73,6 +75,10 @@ export async function setFlags(asked: Partial<Flags>): Promise<Flags> {
     return live;
 
   const stored = { ...(await getLocalFlags()), ...patch };
+  // checked synchronously right before the write: after a user «off» nothing may revive the pilot
+  if (stored.autoQueue === true && live.autoQueue === false && userWishOff())
+    return live;
+
   if (stored.autoQueue === true && live.autoQueue === false)
     await clearPilotStop();
 

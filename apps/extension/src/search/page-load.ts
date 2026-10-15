@@ -101,7 +101,7 @@ function hrefPages(html: string, qa: string): number[] {
     const tag = start >= 0 && end > start ? html.slice(start, end + 1) : '';
     const href = tag.match(/href="([^"]*)"/);
     const value = href?.[1].match(/(?:^|[?&])(?:amp;)?page=(\d+)/);
-    if (value !== undefined) {
+    if (value) {
       const parsed = Number(value[1]);
       if (Number.isInteger(parsed))
         pages.push(parsed);

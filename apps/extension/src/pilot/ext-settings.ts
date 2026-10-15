@@ -6,7 +6,8 @@ export const EXT_SEED_KEY = 'extSettingsSeed:v1'; // new key: local → admin se
 export const MANAGED = ['hideJunk', 'keepSession', 'showPop', 'showMachine'] as const;
 export type Managed = (typeof MANAGED)[number];
 export type AdminSettings = Partial<Record<Managed, boolean>> & { serverPlanner?: boolean };
-export type ExtConfigCache = { etag: string; settings: AdminSettings | null; at: number };
+// serverPlanner: top-level in config v2 (kept here next to settings; same extConfig:v1 key)
+export type ExtConfigCache = { etag: string; settings: AdminSettings | null; at: number; serverPlanner?: boolean };
 
 export function cleanSettings(raw: unknown): AdminSettings | null {
   if (raw === null || typeof raw !== 'object')

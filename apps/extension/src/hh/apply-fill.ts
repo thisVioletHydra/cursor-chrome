@@ -12,7 +12,8 @@ import type { StandardKind } from '../local/standard-fill';
 import { noteLive } from './live-log';
 import { BUILTIN, cachedConfig, selector } from '../local/config-cache';
 import { browser } from '../browser-host';
-import { pickResume, resumeKind, vacancyBody, vacancyTitle, type ResumeKind } from './resume';
+import type { ResumeKind } from './resume';
+import { pickResume, resumeKind, vacancyBody, vacancyTitle } from './resume';
 import { applyRoot, employerQuestionnaire, isCoverLetter, isStandardQuestion, promptFields } from './screen-questions';
 
 export type FillFail = {
@@ -47,9 +48,9 @@ async function fromProfile(kind: StandardKind, block: HTMLElement): Promise<bool
 const FILL: Record<QuestionKind, (block: HTMLElement) => Promise<boolean>> = {
   city: block => fromProfile('city', block),
   pay: block => fromProfile('pay', block),
-  ip: block => clickChoice(block, /^(да|yes)\b/i),
-  open: block => clickChoice(block, /^(да|yes)\b/i),
-  schedule: block => clickChoice(block, /удал|remote|дистанц|гибк/i),
+  ip: async block => clickChoice(block, /^(да|yes)\b/i),
+  open: async block => clickChoice(block, /^(да|yes)\b/i),
+  schedule: async block => clickChoice(block, /удал|remote|дистанц|гибк/i),
   citizen: block => fromProfile('citizen', block),
 };
 

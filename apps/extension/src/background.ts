@@ -2,6 +2,10 @@ import type { CommandName, WsRequest } from '@cursor-chrome/protocol';
 
 import { serverMode } from './local/server-mode';
 import { idempotentExecutor } from './link/command-receipts';
+import { buildTransit, transitBody } from './link/transit-context.ts';
+import { localStore } from './local/chrome-store.ts';
+import { coverLetter } from './hh/letter';
+import { getWorkerTabId } from './tab/worker-tab';
 import { NATIVE_HOST_NAME } from '@cursor-chrome/protocol';
 import { pageInfo, runCommand } from './link/commands';
 import { installFocusLock } from './tab/focus-lock';
@@ -107,12 +111,23 @@ function startServerLink(): void {
   void serverLinkLoop({
     beforeRound: pullExtConfig,
     runEpoch: async () => String((await browser.storage.local.get('serverRunEpoch')).serverRunEpoch || ''),
-    onPause: async pause => { if(pause.type==='stop') await applyPilot({type:'stop',reason:'captcha'}); },
+    onPause: async pause => { if (pause.type==='stop') await applyPilot({type:'stop',reason:'captcha'}); },
     base: getSyncUrl,
     key: getSyncKey,
     gateOpen: async () => (await linkPaused()) === false,
     exec: async cmd => (await getFlags()).autoQueue ? execOnce(cmd) : {ok:false,error:'выключено пользователем'},
     isEnabled: async () => (await getFlags()).autoQueue,
+    // transit context only in server mode; the old bus keeps plain GET
+    context: async () => {
+      if (await serverMode() === false)
+        return null;
+
+      const data = await localStore.load().catch(() => null);
+      const letter = await coverLetter().catch(() => '');
+
+      return transitBody(buildTransit(data, letter).context);
+    },
+    tabId: async () => `tab:${(await getWorkerTabId().catch(() => null)) ?? 'none'}`,
     onUnauthorized: async () => {
       await linkPaused().catch(() => true);
     },
@@ -131,7 +146,8 @@ browser.storage.onChanged.addListener((changes, area) => {
     void setBadge(connected);
 
   if (changes.flags || changes['extConfig:v1']) { wakeServerLink();
-    startServerLink(); }
+    startServerLink();
+  }
 
   if (turnedAutoOn(changes.flags)) {
     clearHangHalt();
@@ -149,7 +165,8 @@ browser.storage.onChanged.addListener((changes, area) => {
 
 browser.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'cc-link-gate') { void pullExtConfig();
-    startServerLink(); }
+    startServerLink();
+  }
 
   if (alarm.name === SOON_ALARM) {
     void runSearchSoon();

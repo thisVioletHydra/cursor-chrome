@@ -13,7 +13,8 @@ const mockArea = () => {
   return { box, get: async key => ({ [key]: box[key] }), set: async (items) => { Object.assign(box, structuredClone(items)); } };
 };
 const memKeys = () => { let key = null;
-  return { get: async () => key, put: async (k) => { key = k; } }; };
+  return { get: async () => key, put: async (k) => { key = k; } };
+};
 const DATA = {
   profile: { version: 1, savedAt: 1, custom: [], fields: { salaryNumber: { mode: 'fixed', value: '100000' } } },
   coverLetter: 'Тестовое письмо',
@@ -34,7 +35,8 @@ test('thin answer: only near candidates go to the server, with profile/letter/fa
 test('thin answer: headers (Bearer, x-llm-key, x-ext-version), 426 and errors → human', async () => {
   let sent;
   const ok = async (url, init) => { sent = { url, init };
-    return new Response(JSON.stringify({ answers: [{ id: '0', answer: '5', source: 'human' }] }), { status: 200 }); };
+    return new Response(JSON.stringify({ answers: [{ id: '0', answer: '5', source: 'human' }] }), { status: 200 });
+  };
   const out = await askServer('http://s', 'ext_k', [{ prompt: 'Q', kind: 'text', options: [] }], { profile: null }, { llmKey: 'gsk_FAKE', llmProvider: 'groq', version: '0.5.1' }, ok);
   assert.equal(out[0].answer, '5');
   assert.equal(sent.url, 'http://s/api/answer');
@@ -76,7 +78,8 @@ test('config cache: ETag 304, junk → last valid, server down → cache, nothin
   assert.equal(area.box[CONFIG_KEY].etag, '"e1"');
   let asked;
   const notModified = await refreshConfig(area, 'http://s', '1', async (url, init) => { asked = init.headers;
-    return new Response(null, { status: 304 }); });
+    return new Response(null, { status: 304 });
+  });
   assert.equal(asked['if-none-match'], '"e1"');
   assert.equal(asked['x-ext-version'], '1');
   assert.deepEqual([notModified.from, notModified.config.version], ['cache', 3]);

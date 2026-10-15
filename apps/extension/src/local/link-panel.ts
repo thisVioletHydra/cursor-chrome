@@ -1,6 +1,8 @@
 // Popup/options strip: «Сервер: <host>» + link state. When not linked: «Не подключено к админке» /
 // «Переподключи расширение…» and «Открыть админку». The connect-link input stays the existing form.
-import { adminUrl, checkLink, gateOpen, gateText, type LinkGate, LINK_GATE_KEY, RELINK_TEXT, serverLine, serverMismatch } from './link-gate.ts';
+import type { LinkGate } from './link-gate.ts';
+
+import { adminUrl, checkLink, gateOpen, gateText, LINK_GATE_KEY, RELINK_TEXT, sameGate, serverLine, serverMismatch } from './link-gate.ts';
 
 // syncUrl: the stored server; when it differs from the gate's server the link is stale → relink text.
 export function linkPanelParts(gate: LinkGate | null, syncUrl = ''): { server: string; warn: string; admin: string } {
@@ -10,11 +12,20 @@ export function linkPanelParts(gate: LinkGate | null, syncUrl = ''): { server: s
   return { server: serverLine(gate), warn: gateOpen(gate, gate?.at ?? 0) ? '' : gateText(gate), admin: gateOpen(gate, gate?.at ?? 0) ? '' : adminUrl(gate, syncUrl) };
 }
 
-type Area = { set: (items: Record<string, unknown>) => Promise<void> };
+type Area = { set: (items: Record<string, unknown>) => Promise<void>; get?: (keys: string) => Promise<Record<string, unknown>> };
 
+// One live check + paint. The gate is written only when it really changed (no write → no onChanged storm).
 export async function paintLinkPanel(node: HTMLElement | null, url: string, key: string, area: Area | null, fetcher: typeof fetch = fetch): Promise<LinkGate> {
   const gate = await checkLink(url, key, fetcher);
-  await area?.set({ [LINK_GATE_KEY]: gate }).catch(() => {});
+  const prev = area?.get ? ((await area.get(LINK_GATE_KEY).catch(() => ({} as Record<string, unknown>)))[LINK_GATE_KEY] ?? null) as LinkGate | null : null;
+  if (sameGate(prev, gate) === false)
+    await area?.set({ [LINK_GATE_KEY]: gate }).catch(() => {});
+
+  return paintLinkState(node, gate, url);
+}
+
+// Paint only (no network): used on storage changes.
+export function paintLinkState(node: HTMLElement | null, gate: LinkGate, url: string): LinkGate {
   if (node === null)
     return gate;
 

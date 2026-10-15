@@ -438,7 +438,7 @@ async function waitLoaded(tabId: number): Promise<void> {
 export async function waitTab(tabId: number, timeoutMs = 10_000): Promise<void> {
   await new Promise<void>((resolve) => {
     const timer = setTimeout(finish, timeoutMs);
-    const onUpdated = (id: number, info: chrome.tabs.TabChangeInfo) => {
+    const onUpdated = (id: number, info: chrome.tabs.OnUpdatedInfo) => {
       if (id !== tabId || info.status !== 'complete')
         return;
 

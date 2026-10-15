@@ -146,7 +146,7 @@ export async function collectVacancies(
     const listedNext = new Map<string, number>();
 
     async function harvest(query: string, page: number, hold: number | null, gap: boolean): Promise<PageHit> {
-      if (await releaseHidePopup(tabId) === 'stuck') {
+      if (await releaseHidePopup(tabId!) === 'stuck') {
         await tellPage(HIDE_POPUP_STUCK);
         hideBlocked = true;
 
@@ -156,7 +156,7 @@ export async function collectVacancies(
       if (gap)
         await flipPause();
 
-      const pulled = await pull(tabId, searchUrl(query, page), page);
+      const pulled = await pull(tabId!, searchUrl(query, page), page);
       if (sawCaptcha)
         return 'fail';
 
@@ -188,7 +188,7 @@ export async function collectVacancies(
       const here = landed === null ? page : landed;
       const seen = cardsOf(serpHtml(pulled.html));
       const batch = lightOn ? seen.slice(0, LIGHT_CAP) : seen;
-      const nextPage = lightOn ? null : await listedAfter(tabId, pulled.html, here, batch.length);
+      const nextPage = lightOn ? null : await listedAfter(tabId!, pulled.html, here, batch.length);
       if (nextPage === null)
         listedNext.delete(query);
       else
@@ -215,7 +215,7 @@ export async function collectVacancies(
       const cards = new Map(batch.map(card => [card.id, card]));
       if (knownIds.length > 0)
         await tellPage(`hh-search.ts · скрываю знакомые, ${knownIds.length}`);
-      const hidden = await hideKnown(tabId, pulled.url, knownIds.filter(id => fresh.has(id) === false), cards, marks.why, noteHidden);
+      const hidden = await hideKnown(tabId!, pulled.url, knownIds.filter(id => fresh.has(id) === false), cards, marks.why, noteHidden);
       if (hidden === false) {
         hideBlocked = true;
 

@@ -23,7 +23,8 @@ function rig(responses, over = {}) {
     return typeof next === 'function' ? next() : next ?? new Response(null, { status: 204 });
   };
   return { calls, sleeps, execs, deps: { ...base, gateOpen: async () => true, fetcher, sleep: async (ms) => { sleeps.push(ms); }, now: () => t, exec: async (cmd) => { execs.push(cmd);
-    return { ok: true, result: { url: 'https://hh.ru/x', html: '<b>' } }; }, ...over } };
+    return { ok: true, result: { url: 'https://hh.ru/x', html: '<b>' } };
+  }, ...over } };
 }
 
 test('loop: gate closed → no requests at all', async () => {
@@ -64,8 +65,11 @@ test('loop: command → exec → report with the same id; nothing executed witho
 
 test('loop: gate closes while waiting → command refused, site untouched', async () => {
   let open = true;
-  const r = rig([() => { open = false;
-    return json({ id: 'c2', kind: 'click', params: { selector: '#a' } }); }, json({ ok: true })], { gateOpen: async () => open, maxRounds: 2 });
+  const r = rig([() => {
+    open = false;
+
+    return json({ id: 'c2', kind: 'click', params: { selector: '#a' } });
+  }, json({ ok: true })], { gateOpen: async () => open, maxRounds: 2 });
   assert.equal(await serverLinkLoop(r.deps), 'closed');
   assert.equal(r.execs.length, 0);
   assert.equal(JSON.parse(r.calls[1].body).ok, false);
@@ -124,7 +128,8 @@ test('loop: 204 + x-next-after → sleeps that long (cap 15 min), no 30 s backof
     gateOpen: async () => true,
     exec: async () => ({ ok: true, result: null }),
     fetcher: async () => { calls += 1;
-      return new Response(null, { status: 204, headers: { 'x-next-after': '900000' } }); },
+      return new Response(null, { status: 204, headers: { 'x-next-after': '900000' } });
+    },
     sleep: async (ms) => { slept.push(ms); },
     maxRounds: 3,
   });
