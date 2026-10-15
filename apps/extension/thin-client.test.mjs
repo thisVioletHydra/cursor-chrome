@@ -12,7 +12,8 @@ const mockArea = () => {
   const box = {};
   return { box, get: async key => ({ [key]: box[key] }), set: async (items) => { Object.assign(box, structuredClone(items)); } };
 };
-const memKeys = () => { let key = null; return { get: async () => key, put: async (k) => { key = k; } }; };
+const memKeys = () => { let key = null;
+  return { get: async () => key, put: async (k) => { key = k; } }; };
 const DATA = {
   profile: { version: 1, savedAt: 1, custom: [], fields: { salaryNumber: { mode: 'fixed', value: '100000' } } },
   coverLetter: 'Тестовое письмо',
@@ -32,7 +33,8 @@ test('thin answer: only near candidates go to the server, with profile/letter/fa
 
 test('thin answer: headers (Bearer, x-llm-key, x-ext-version), 426 and errors → human', async () => {
   let sent;
-  const ok = async (url, init) => { sent = { url, init }; return new Response(JSON.stringify({ answers: [{ id: '0', answer: '5', source: 'human' }] }), { status: 200 }); };
+  const ok = async (url, init) => { sent = { url, init };
+    return new Response(JSON.stringify({ answers: [{ id: '0', answer: '5', source: 'human' }] }), { status: 200 }); };
   const out = await askServer('http://s', 'ext_k', [{ prompt: 'Q', kind: 'text', options: [] }], { profile: null }, { llmKey: 'gsk_FAKE', llmProvider: 'groq', version: '0.5.1' }, ok);
   assert.equal(out[0].answer, '5');
   assert.equal(sent.url, 'http://s/api/answer');
@@ -42,7 +44,7 @@ test('thin answer: headers (Bearer, x-llm-key, x-ext-version), 426 and errors �
   assert.equal(sent.init.body.includes('gsk_FAKE'), false, 'key never in the body');
   const old = await askServer('http://s', 'k', [{ prompt: 'Q', kind: 'text', options: [] }], {}, {}, async () => new Response('{}', { status: 426 }));
   assert.match(old[0].reason, /устарело/);
-  const down = await askServer('http://s', 'k', [{ prompt: 'Q', kind: 'text', options: [] }], {}, {}, async () => { throw new Error('x'); });
+  const down = await askServer('http://s', 'k', [{ prompt: 'Q', kind: 'text', options: [] }], {}, { retry: { maxWait: 0 } }, async () => { throw new Error('x'); });
   assert.equal(down[0].human, true);
   const source = fs.readFileSync(new URL('./src/hh/apply-fill.ts', import.meta.url), 'utf8');
   assert.equal(/decideWithIndex|localAnswer|decideFill/.test(source), false, 'no decision logic left in apply-fill');
@@ -73,7 +75,8 @@ test('config cache: ETag 304, junk → last valid, server down → cache, nothin
   assert.equal(first.from, 'server');
   assert.equal(area.box[CONFIG_KEY].etag, '"e1"');
   let asked;
-  const notModified = await refreshConfig(area, 'http://s', '1', async (url, init) => { asked = init.headers; return new Response(null, { status: 304 }); });
+  const notModified = await refreshConfig(area, 'http://s', '1', async (url, init) => { asked = init.headers;
+    return new Response(null, { status: 304 }); });
   assert.equal(asked['if-none-match'], '"e1"');
   assert.equal(asked['x-ext-version'], '1');
   assert.deepEqual([notModified.from, notModified.config.version], ['cache', 3]);

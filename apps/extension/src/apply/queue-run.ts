@@ -1,7 +1,7 @@
-import { serverMode } from '../local/server-mode';
 import type { Hunt, QueueItem } from './admin-api';
 import type { FoundCard } from '../search/hh-search';
 
+import { serverMode } from '../local/server-mode';
 import { SEARCH_HOURS_ENABLED } from '../../../hh/src/feature-flags.ts';
 import { claimRelook, dropKnown, dropLinks, fetchHunt, fetchLinks, fetchQueue, keepWorkHours, markRead, postFound, postHidden, postWalk, rememberPage, seenAmong } from './admin-api';
 import { getSyncKey, getSyncUrl } from '../diary/apply-log';
@@ -86,7 +86,8 @@ export function queueBusy(): boolean {
 }
 
 export async function runQueue(): Promise<QueueRun> {
-  if (await serverMode()) return {ok:true} as QueueRun;
+  if (await serverMode()) return blank('серверный режим');
+
   if (running)
     return blank(hangHalted() ? 'расширение зависло' : 'уже идёт');
 
@@ -517,6 +518,7 @@ async function applyPending(base: string, key: string, run: QueueRun): Promise<A
       const reply = await applyOne(item);
       if (reply.reason === HIDE_POPUP_STUCK)
         return { started, stop: true, reason: HIDE_POPUP_STUCK };
+
       if (hangHalted()) {
         run.left -= 1;
 
@@ -842,7 +844,7 @@ async function noteReply(base: string, key: string, run: QueueRun, item: QueueIt
   if (stop.length === 0)
     return null;
 
-  if ((stop.startsWith('лимит откликов площадки') || stop.startsWith('лимит откликов hh')))
+  if ( (stop.startsWith('лимит откликов площадки') || stop.startsWith('лимит откликов hh')))
     await stopForToday();
   else
     await pauseUntilMorning();

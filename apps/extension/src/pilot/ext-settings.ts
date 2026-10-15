@@ -5,18 +5,22 @@ export const EXT_CONFIG_KEY = 'extConfig:v1'; // new key: cache of GET /api/ext/
 export const EXT_SEED_KEY = 'extSettingsSeed:v1'; // new key: local → admin seed done (once)
 export const MANAGED = ['hideJunk', 'keepSession', 'showPop', 'showMachine'] as const;
 export type Managed = (typeof MANAGED)[number];
-export type AdminSettings = Partial<Record<Managed, boolean>>;
+export type AdminSettings = Partial<Record<Managed, boolean>> & { serverPlanner?: boolean };
 export type ExtConfigCache = { etag: string; settings: AdminSettings | null; at: number };
 
 export function cleanSettings(raw: unknown): AdminSettings | null {
   if (raw === null || typeof raw !== 'object')
     return null;
+
   const out: AdminSettings = {};
   for (const key of MANAGED) {
     const v = (raw as Record<string, unknown>)[key];
     if (typeof v === 'boolean')
       out[key] = v;
   }
+
+  if (typeof (raw as any).serverPlanner === 'boolean') out.serverPlanner = (raw as any).serverPlanner;
+
   return Object.keys(out).length > 0 ? out : null;
 }
 
@@ -32,9 +36,11 @@ export function managedBy(admin: AdminSettings | null): Managed[] {
 export function mergeSettings<T extends Record<Managed, boolean>>(local: T, admin: AdminSettings | null): T {
   if (admin === null)
     return local;
+
   const out = { ...local };
   for (const key of managedBy(admin))
     (out as Record<Managed, boolean>)[key] = admin[key] === true;
+
   return out;
 }
 

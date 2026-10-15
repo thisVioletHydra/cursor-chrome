@@ -27,7 +27,8 @@ const LOGIN_URL = 'https://hh.ru/account/login';
 const RENDER_WAIT_MS = 1_500;
 
 export async function syncNegotiations(): Promise<NegotiationsSync> {
-  if (await serverMode()) return {ok:true} as NegotiationsSync;
+  if (await serverMode()) return {ok:true,count:0,reason:'серверный режим'};
+
   if (await captchaHolding())
     return { ok: true, count: 0, reason: '' };
 
@@ -139,6 +140,7 @@ function delay(ms: number): Promise<void> {
  */
 function extractNegotiations(): unknown[] {
   type Row = { vacancyId: string; state: string; employer: string; title: string; url: string; updatedAt: number };
+
   type Rec = Record<string, unknown>;
 
   const out = new Map<string, Row>();
@@ -192,7 +194,7 @@ function extractNegotiations(): unknown[] {
 
   const rowFromRecord = (rec: Rec): Row | null => {
     const vacancy = asRec(rec.vacancy);
-    const vacancyId = text(vacancy?.id !== undefined ? String(vacancy.id) : '') || text(rec.vacancyId !== undefined ? String(rec.vacancyId) : '');
+    const vacancyId = text(vacancy?.id === undefined ? '' : String(vacancy.id)) || text(rec.vacancyId === undefined ? '' : String(rec.vacancyId));
     if (/^\d+$/.test(vacancyId) === false)
       return null;
 

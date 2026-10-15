@@ -51,7 +51,8 @@ async function applyHistory(): Promise<unknown> {
   const gate = await readGate(browser.storage.local).catch(() => null);
   const view = { linked: gateOpen(gate), login: gate?.login ?? '' };
 
-  return { log: viewItems(log, view), today: await todayCount(), waiting: viewItems(waitingHuman(log), view) };
+  const owned = viewItems(log, view);
+  return { log: owned, today: await todayCount(), waiting: waitingHuman(owned) };
 }
 
 async function dropWaitingMessage(message: Record<string, unknown>): Promise<unknown> {
@@ -292,9 +293,12 @@ async function flagsAfter(
 
 async function writeFlags(patch: { hideJunk?: boolean; keepSession?: boolean; showPop?: boolean; showMachine?: boolean; autoQueue?: boolean }): Promise<unknown> {
   if (await serverMode() && typeof patch.autoQueue === 'boolean') {
+    if (patch.autoQueue) await browser.storage.local.set({serverRunEpoch:Date.now()});
     const decided = await applyPilot(patch.autoQueue ? {type:'enable'} : {type:'stop',reason:'user'});
+
     return flagsAfter(patch, decided.on);
   }
+
   if (patch.autoQueue === true)
     return enablePilot(patch);
 

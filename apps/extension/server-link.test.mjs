@@ -1,9 +1,9 @@
+import { httpsOnly, isWire, nextAfterMs, pauseMs, serverLinkLoop, wakeableSleep, wakeServerLink } from './src/link/server-link.ts';
+import { scrubHtml, fixtureName } from './src/local/fixture-scrub.ts';
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-
-import { httpsOnly, isWire, nextAfterMs, pauseMs, serverLinkLoop, wakeableSleep, wakeServerLink } from './src/link/server-link.ts';
-import { scrubHtml, fixtureName } from './src/local/fixture-scrub.ts';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const base = { base: async () => 'https://s.example', key: async () => 'k'.repeat(24) };
@@ -19,9 +19,11 @@ function rig(responses, over = {}) {
     const next = responses.shift();
     if (next instanceof Error)
       throw next;
+
     return typeof next === 'function' ? next() : next ?? new Response(null, { status: 204 });
   };
-  return { calls, sleeps, execs, deps: { ...base, gateOpen: async () => true, fetcher, sleep: async (ms) => { sleeps.push(ms); }, now: () => t, exec: async (cmd) => { execs.push(cmd); return { ok: true, result: { url: 'https://hh.ru/x', html: '<b>' } }; }, ...over } };
+  return { calls, sleeps, execs, deps: { ...base, gateOpen: async () => true, fetcher, sleep: async (ms) => { sleeps.push(ms); }, now: () => t, exec: async (cmd) => { execs.push(cmd);
+    return { ok: true, result: { url: 'https://hh.ru/x', html: '<b>' } }; }, ...over } };
 }
 
 test('loop: gate closed → no requests at all', async () => {
@@ -62,7 +64,8 @@ test('loop: command → exec → report with the same id; nothing executed witho
 
 test('loop: gate closes while waiting → command refused, site untouched', async () => {
   let open = true;
-  const r = rig([() => { open = false; return json({ id: 'c2', kind: 'click', params: { selector: '#a' } }); }, json({ ok: true })], { gateOpen: async () => open, maxRounds: 2 });
+  const r = rig([() => { open = false;
+    return json({ id: 'c2', kind: 'click', params: { selector: '#a' } }); }, json({ ok: true })], { gateOpen: async () => open, maxRounds: 2 });
   assert.equal(await serverLinkLoop(r.deps), 'closed');
   assert.equal(r.execs.length, 0);
   assert.equal(JSON.parse(r.calls[1].body).ok, false);
@@ -88,7 +91,8 @@ test('primitives: navigate https only; wire check; executor maps all kinds', () 
   const src = fs.readFileSync(new URL('./src/link/server-exec.ts', import.meta.url), 'utf8');
   for (const kind of ['navigate', 'click', 'type', 'select', 'press_key', 'read', 'snapshot', 'wait', 'hh_apply'])
     assert.match(src, new RegExp(`case '${kind}':`), kind);
-  assert.match(src, /runHhApplyThin\(\)/);
+
+  assert.match(src, /runHhApplyThin\(splitThinAnswers\(p\)\.resumeKind\)/);
   assert.match(src, /captcha: true/);
   assert.match(src, /detect: true/);
   const bg = fs.readFileSync(new URL('./src/background.ts', import.meta.url), 'utf8');
@@ -99,7 +103,7 @@ test('thin hh_apply: no second «Откликнуться» click, no form → e
   const run = fs.readFileSync(new URL('./src/hh/apply-run.ts', import.meta.url), 'utf8');
   assert.match(run, /async \(\) => \(thin \? null : openStep\(\)\)/);
   assert.match(run, /if \(thin && await until\([^\n]*3000\) === false\)\n    return fail\(THIN_NO_FORM\);/);
-  assert.match(fs.readFileSync(new URL('./src/content.ts', import.meta.url), 'utf8'), /runApply\(message\.resume === true, message\.thin === true\)/);
+  assert.match(fs.readFileSync(new URL('./src/content.ts', import.meta.url), 'utf8'), /runApply\(message\.resume === true, message\.thin === true, message\.resumeKind/);
 });
 
 test('fixture scrub: no emails, phones, input values, scripts, applicant name', () => {
@@ -107,6 +111,7 @@ test('fixture scrub: no emails, phones, input values, scripts, applicant name', 
   const out = scrubHtml(html);
   for (const bad of ['Роман', 'abc', 'секрет', 'roman@mail.ru', '999', '0123456789abcdef', 'моё письмо'])
     assert.equal(out.includes(bad), false, bad);
+
   assert.match(fixtureName('https://hh.ru/vacancy/123?x=1', new Date('2026-10-15T00:00:00Z')), /^hh-vacancy-N-2026-10-15-00-00-00\.html$/);
 });
 
@@ -114,9 +119,14 @@ test('loop: 204 + x-next-after → sleeps that long (cap 15 min), no 30 s backof
   const slept = [];
   let calls = 0;
   const end = await serverLinkLoop({
-    base: async () => 'https://x.test', key: async () => 'k', gateOpen: async () => true, exec: async () => ({ ok: true, result: null }),
-    fetcher: async () => { calls += 1; return new Response(null, { status: 204, headers: { 'x-next-after': '900000' } }); },
-    sleep: async (ms) => { slept.push(ms); }, maxRounds: 3,
+    base: async () => 'https://x.test',
+    key: async () => 'k',
+    gateOpen: async () => true,
+    exec: async () => ({ ok: true, result: null }),
+    fetcher: async () => { calls += 1;
+      return new Response(null, { status: 204, headers: { 'x-next-after': '900000' } }); },
+    sleep: async (ms) => { slept.push(ms); },
+    maxRounds: 3,
   });
   assert.equal(end, 'rounds');
   assert.equal(calls, 3);

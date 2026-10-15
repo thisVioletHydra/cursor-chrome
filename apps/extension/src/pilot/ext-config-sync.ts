@@ -20,10 +20,12 @@ export async function syncExtConfig(d: SyncDeps): Promise<SyncEnd> {
   const now = d.now ?? Date.now;
   if (await d.gateOpen() === false)
     return 'closed';
+
   const base = (await d.base()).trim().replace(/\/+$/, '');
   const key = (await d.key()).trim();
   if (!base || !key)
     return 'closed';
+
   const auth = { authorization: `Bearer ${key}` };
   const stored = await d.get([EXT_CONFIG_KEY, EXT_SEED_KEY, 'flags']);
   const cache = stored[EXT_CONFIG_KEY] as Partial<ExtConfigCache> | undefined;
@@ -32,11 +34,15 @@ export async function syncExtConfig(d: SyncDeps): Promise<SyncEnd> {
       const res = await fetcher(`${base}/api/ext/config`, { cache: 'no-store', headers: etag ? { ...auth, 'if-none-match': etag } : auth });
       if (res.status === 304)
         return { status: 'same', settings: cleanSettings(cache?.settings) };
+
       if (res.status !== 200)
         return { status: 'failed', settings: null };
+
       const body = await res.json() as { settings?: unknown };
+      if ((await d.key()).trim() !== key) return {status:'failed',settings:null};
       const settings = cleanSettings(body?.settings);
       await d.set({ [EXT_CONFIG_KEY]: { etag: res.headers.get('etag') ?? '', settings, at: now() } satisfies ExtConfigCache });
+
       return { status: 'fresh', settings };
     }
     catch {
@@ -44,20 +50,24 @@ export async function syncExtConfig(d: SyncDeps): Promise<SyncEnd> {
     }
   };
   const first = await pull(typeof cache?.etag === 'string' ? cache.etag : '');
-  if (first.status === 'failed' || first.settings !== null || stored[EXT_SEED_KEY] === true)
+  if (first.status === 'failed' || MANAGED.some(name => typeof first.settings?.[name] === 'boolean') || stored[EXT_SEED_KEY] === true)
     return first.status;
+
   // admin is empty: hand over local values once (only if the user ever set them locally)
   const local = stored.flags;
   if (local === null || typeof local !== 'object')
     return first.status;
+
   const values: Record<string, boolean> = {};
   for (const name of MANAGED) {
     const v = (local as Record<string, unknown>)[name];
     if (typeof v === 'boolean')
       values[name] = v;
   }
+
   if (Object.keys(values).length === 0)
     return first.status;
+
   try {
     const res = await fetcher(`${base}/api/ext/config/seed`, { method: 'POST', cache: 'no-store', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify(values) });
     if (res.status !== 200)
@@ -66,7 +76,9 @@ export async function syncExtConfig(d: SyncDeps): Promise<SyncEnd> {
   catch {
     return first.status;
   }
+
   await d.set({ [EXT_SEED_KEY]: true });
   await pull('');
+
   return 'seeded';
 }

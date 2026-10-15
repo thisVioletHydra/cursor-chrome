@@ -3,6 +3,19 @@ import { enhance } from '$lib/admin-forms';
 
 import Mark from '$lib/Mark.svelte';
 
+const scenarioRows = [
+  ['savedLinks','Сохранённые ссылки'],
+  ['relook','Повторный просмотр'],
+  ['resumePick','Выбор резюме'],
+  ['letter','Сопроводительное письмо'],
+  ['murky','Сомнительные вопросы'],
+  ['testTask','Тестовые задания'],
+  ['jobOffer','Окна предложений'],
+  ['hideJunk','Скрытие нерелевантных вакансий'],
+  ['invites','Приглашения'],
+  ['quota','Дневной и недельный лимиты'],
+] as const;
+
 let { data } = $props();
 let issued = $state('');
 let fetched = $state('');
@@ -129,6 +142,16 @@ const later = [
         <li><label class="flex items-center gap-1.5 text-sm text-zinc-200"><input class="accent-indigo-400" type="checkbox" name={row.key} checked={data.settings?.[row.key] ?? row.fallback} />{row.label}</label></li>
       {/each}
     </ul>
+    <fieldset class="mt-5 border-t border-white/10 pt-4">
+      <legend class="text-sm font-medium text-white">Серверный режим</legend>
+      <label class="flex items-center gap-2 text-sm text-zinc-200"><input type="checkbox" name="serverPlanner" checked={data.serverPlanner} />Серверный планировщик</label>
+      <p class="mt-2 text-xs text-zinc-400">Старые сценарии сохраняются до переключения. Питание бота переключается кнопкой «Включить» в попапе. Темп, часы, поисковые запросы, профиль и письмо задаются на соответствующих страницах админки.</p>
+      <div class="mt-3 grid gap-2 sm:grid-cols-2">
+        {#each scenarioRows as [key,label]}
+          <label class="flex items-center gap-2 text-sm text-zinc-200"><input type="checkbox" name={'scenario_' + key} checked={data.scenarios[key] === true} />{label}</label>
+        {/each}
+      </div>
+    </fieldset>
     <button class="mt-4 rounded-lg bg-indigo-500/30 px-4 py-2 text-sm text-white hover:bg-indigo-500/40 disabled:opacity-50" type="submit">Сохранить</button>
     {#if settingsMessage !== ''}
       <p class="mt-3 text-sm break-words {settingsOk ? 'text-emerald-300' : 'text-rose-300'}" aria-live="polite">{settingsMessage}</p>

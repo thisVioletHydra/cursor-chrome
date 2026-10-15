@@ -15,6 +15,8 @@ export type LinkDeps = {
   base: () => Promise<string>;
   key: () => Promise<string>;
   gateOpen: () => Promise<boolean>;
+  runEpoch?: () => Promise<string>;
+  beforeRound?: () => Promise<void>;
   isEnabled?: () => Promise<boolean>;
   exec: (cmd: Wire) => Promise<Outcome>;
   fetcher?: typeof fetch;
@@ -30,6 +32,7 @@ export type LoopEnd = 'closed' | 'unauthorized' | 'no-server' | 'rounds';
 export function httpsOnly(url: unknown): string | null {
   try {
     const u = new URL(String(url ?? ''));
+
     return u.protocol === 'https:' ? u.href : null;
   }
   catch {
@@ -41,11 +44,14 @@ export function httpsOnly(url: unknown): string | null {
 const sleepers = new Set<() => void>();
 export function wakeServerLink(): void {
   for (const done of [...sleepers]) done();
+
   sleepers.clear();
 }
 export function wakeableSleep(ms: number): Promise<void> {
   return new Promise<void>((resolve) => {
-    const done = () => { clearTimeout(timer); sleepers.delete(done); resolve(); };
+    const done = () => { clearTimeout(timer);
+      sleepers.delete(done);
+      resolve(); };
     const timer = setTimeout(done, ms);
     sleepers.add(done);
   });
@@ -53,7 +59,9 @@ export function wakeableSleep(ms: number): Promise<void> {
 export function nextAfterMs(res: Response): number | null {
   const raw = res.headers.get('x-next-after');
   if (raw === null) return null;
+
   const n = Number(raw);
+
   return Number.isFinite(n) && n > 0 ? Math.min(MAX_STEP_MS, Math.max(1000, n)) : null;
 }
 
@@ -85,11 +93,14 @@ export async function serverLinkLoop(d: LinkDeps): Promise<LoopEnd> {
   for (let round = 0; round < max; round += 1) {
     if (await d.gateOpen() === false)
       return 'closed';
+
+    await d.beforeRound?.();
     const base = (await d.base()).trim().replace(/\/+$/, '');
     const key = (await d.key()).trim();
     if (!base || !key)
       return 'closed';
-    const auth = { authorization: `Bearer ${key}`, ...(d.isEnabled ? {'x-ext-enabled':String(await d.isEnabled())} : {}) };
+
+    const auth = { authorization: `Bearer ${key}`, ...(d.runEpoch ? {'x-ext-run':await d.runEpoch()} : {}), ...(d.isEnabled ? {'x-ext-enabled':String(await d.isEnabled())} : {}) };
     const started = now();
     let res: Response;
     try {
@@ -99,12 +110,16 @@ export async function serverLinkLoop(d: LinkDeps): Promise<LoopEnd> {
       await sleep(backoff.next());
       continue;
     }
+
     if (res.status === 401 || res.status === 403) {
       await d.onUnauthorized?.();
+
       return 'unauthorized';
     }
+
     if (res.status === 404 || res.status === 410)
-      return 'no-server'; // server without stage B: stop quietly, gate reopen restarts us
+      return 'no-server';
+ // server without stage B: stop quietly, gate reopen restarts us
     if (res.status === 204) {
       const after = nextAfterMs(res);
       if (after !== null) { // flag off on the server: come back later (popup open wakes us earlier)
@@ -112,16 +127,20 @@ export async function serverLinkLoop(d: LinkDeps): Promise<LoopEnd> {
         await sleep(after);
         continue;
       }
+
       if (now() - started < QUICK_MS)
         await sleep(backoff.next());
       else
         backoff.reset();
+
       continue;
     }
+
     if (res.status !== 200) {
       await sleep(backoff.next());
       continue;
     }
+
     const body = await res.json().catch(() => null) as unknown;
     backoff.reset();
     if (isPause(body)) {
@@ -129,12 +148,14 @@ export async function serverLinkLoop(d: LinkDeps): Promise<LoopEnd> {
       await sleep(pauseMs(body));
       continue;
     }
+
     if (isWire(body) === false) {
       await sleep(backoff.next());
       continue;
     }
+
     // the gate may have closed while we were waiting: never act on the site then
-    const out: Outcome = await d.gateOpen() === false
+    const out: Outcome = (await d.key()).trim() !== key || await d.gateOpen() === false
       ? { ok: false, error: 'нет связи с админкой' }
       : await d.exec(body).catch(error => ({ ok: false as const, error: error instanceof Error ? error.message : String(error) }));
     const report = out.ok ? { id: body.id, ok: true, result: out.result ?? null } : { id: body.id, ok: false, error: String(out.error || 'ошибка').slice(0, 2000) };
@@ -142,6 +163,7 @@ export async function serverLinkLoop(d: LinkDeps): Promise<LoopEnd> {
       const sent = await fetcher(`${base}/api/ext/report`, { method: 'POST', cache: 'no-store', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify(report) });
       if (sent.status === 401 || sent.status === 403) {
         await d.onUnauthorized?.();
+
         return 'unauthorized';
       }
     }

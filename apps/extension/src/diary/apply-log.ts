@@ -94,6 +94,8 @@ export async function appendApply(record: ApplyRecord): Promise<ApplyRecord[]> {
 
   const sameDay = dayKey(normalized.sentAt);
   const dup = log.some((item) => {
+    if ((item.owner || 'thisVioletHydra').toLowerCase() !== (normalized.owner || 'thisVioletHydra').toLowerCase()) return false;
+
     if (applyStatus(item) !== applyStatus(normalized))
       return false;
 
@@ -127,8 +129,6 @@ export async function listApplies(): Promise<ApplyRecord[]> {
 
   const all = raw.filter(isApplyRecord);
   const clean = uniqueByVacancy(all.filter(item => isJunkApply(item) === false));
-  if (clean.length !== all.length)
-    await browser.storage.local.set({ [LOG_KEY]: clean });
 
   return clean;
 }
@@ -136,9 +136,11 @@ export async function listApplies(): Promise<ApplyRecord[]> {
 export async function todayCount(now = Date.now()): Promise<number> {
   const key = dayKey(now);
   const log = await listApplies();
-
+  const gate = (await browser.storage.local.get('linkGate')).linkGate as {login?:string;state?:string}|undefined;
+  if (gate?.state !== 'ok' || !gate.login) return 0;
   return log.filter(item =>
-    dayKey(item.sentAt) === key
+    (item.owner || 'thisVioletHydra').toLowerCase() === gate.login?.toLowerCase()
+    && dayKey(item.sentAt) === key
     && applyStatus(item) === 'sent'
     && isJunkApply(item) === false).length;
 }
@@ -175,7 +177,7 @@ function uniqueByVacancy(log: ApplyRecord[]): ApplyRecord[] {
     if (item.vacancyId.length === 0)
       return true;
 
-    const key = `${applyStatus(item)}:${item.vacancyId}`;
+    const key = `${(item.owner || 'thisVioletHydra').toLowerCase()}:${applyStatus(item)}:${item.vacancyId}`;
     if (seen.has(key))
       return false;
 
@@ -334,6 +336,7 @@ async function healStoredSync(): Promise<StoredSync> {
   // dead old Railway domain in storage → new host (only the URL fields; token untouched)
   if (browser.storage?.local !== undefined)
     await migrateOldDomain(browser.storage.local as never).catch(() => []);
+
   const current = await readStoredSync();
   const parts = connectLinkParts(current.url);
   if (parts === null)

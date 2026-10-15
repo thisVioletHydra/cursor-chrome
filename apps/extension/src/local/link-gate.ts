@@ -30,10 +30,10 @@ export async function checkLink(url: string, key: string, fetcher: typeof fetch 
     return { state: 'none', host, at: now };
 
   const base = `${new URL(url.trim()).protocol}//${host}`;
-  // Three bounded observations: immediate HTTP errors take 10 s, stalled requests at most 19 s.
+  // Three bounded observations: immediate HTTP errors take 10 s, stalled requests at most 16 s.
   for (let attempt = 0; attempt < 3; attempt++) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
+    const timer = setTimeout(() => controller.abort(), 2000);
     try {
       const res = await fetcher(`${base}/api/link`, { cache: 'no-store', signal: controller.signal, headers: { authorization: `Bearer ${key.trim()}` } });
       if (res.status === 200) {

@@ -4,8 +4,9 @@
 import type { Deps, Item, Settings } from '../plan/types.ts';
 import type { NegotiationRow } from '../plan/negotiations.ts';
 
-import { applyOutcomes, askChain, chainFromEnv, coveredWaiters, dayOpen, dropWaiters, forgetLinks, knownAmong, markDone, markSent, noteHidden, notePassed, parseFacts, listCanon, listMemory, parseProfile, readLinks, readMemory, readQueue, remember, runTenant, takeRelook } from '@cursor-chrome/hh';
-import { planStoreDeps, type StoreIO } from '../plan/deps-impl.ts';
+import { applyOutcomes, askChain, chainFromEnv, coveredWaiters, dayOpen, dropWaiters, forgetLinks, knownAmong, markDone, markSent, noteHidden, notePassed, restoreWaiter, saveWaiterForm, asCapturedForm, readDecisions, takeDecision, parseFacts, listCanon, listMemory, parseProfile, readLinks, readMemory, readQueue, remember, runTenant, takeRelook } from '@cursor-chrome/hh';
+import { planStoreDeps } from '../plan/deps-impl.ts';
+import type { StoreIO } from '../plan/deps-impl.ts';
 import { weekOpen } from '../week';
 import { createPlanFlags } from './plan-flags.ts';
 import { chainOf, readAccount } from '../secrets';
@@ -37,6 +38,15 @@ export function planDeps(headersOf: (login: string) => Headers, flags: { scenari
 
   return {
     ...planStoreDeps(storeIO),
+    reviewItems: login => inTenant(login, async () => {
+      const approved = new Set((await readDecisions()).filter(d=>d.action==='approved').map(d=>d.id));
+      return (await readQueue()).filter(r=>r.status==='needsHuman' && approved.has(r.id)).map(r=>({id:r.id,title:r.title,url:r.url,company:r.company}));
+    }),
+    reviewAnswers: (login,id) => inTenant(login, async () => (await readDecisions()).find(d=>d.id===id && d.action==='approved')?.answers || []),
+    captureForm: (login,item,fields,text) => inTenant(login,async()=>{
+      const form=asCapturedForm({url:item.url,at:Date.now(),text,questions:(fields as any[]).map(f=>({prompt:f.prompt || f.label,kind:f.kind==='select' ? 'choice' : f.kind,options:f.options,required:f.required,fieldKey:f.id}))});
+      if (form) await saveWaiterForm(item.id,form);
+    }),
     coverLetter: login => inTenant(login, async () => (await readAccount(login)).coverLetter),
     // existing thin /api/answer engine; BYOK only from the headers of the extension's own request
     answer: (login, body) => inTenant(login, async () => {
@@ -50,11 +60,18 @@ export function planDeps(headersOf: (login: string) => Headers, flags: { scenari
       return { answers: out.answers };
     }),
     // transit: the account's own facts for this one answer, never copied into planner state
-    context: login => inTenant(login, async () => { const account = await readAccount(login); return { profile: parseProfile(account.profile), coverLetter: account.coverLetter, facts: parseFacts(account.facts).rules, rules: await listCanon(), memory: await listMemory() }; }),
+    context: login => inTenant(login, async () => { const account = await readAccount(login);
+      return { profile: parseProfile(account.profile), coverLetter: account.coverLetter, facts: parseFacts(account.facts).rules, rules: await listCanon(), memory: await listMemory() }; }),
     // same storage as /api/applied: queue row + seen
     recordApplied: (login, row) => inTenant(login, async () => {
+      if (row.status === 'sent' || row.status === 'needsHuman') {
+        await restoreWaiter({...row,company:'',at:Date.now(),status:row.status});
+        if ((await readDecisions()).some(d=>d.id===row.id && d.action==='approved')) await takeDecision(row.id);
+      }
+
       if (row.status === 'sent' || row.status === 'needsHuman')
         await markDone(row.id, row.status, row.reason ? [row.reason] : []);
+
       if (row.status === 'sent')
         await markSent(row.id);
       else
@@ -69,6 +86,7 @@ export function planDeps(headersOf: (login: string) => Headers, flags: { scenari
     onNegotiationRows: (login, rows) => inTenant(login, async () => {
       if (rows.length === 0)
         return;
+
       await remember([...new Set(rows.map(row => row.vacancyId))]);
       await applyOutcomes(rows.map(row => ({ id: row.vacancyId, outcome: row.state, at: row.updatedAt || Date.now() })));
     }),

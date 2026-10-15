@@ -5,7 +5,8 @@ import { runApply } from './hh/apply-run';
 import { click, hover, pressKey, selectOption, typeInto } from './page/actions';
 import { byRef, bySelector, snapshot } from './page/snapshot';
 import { browser } from './browser-host';
-import { BIND_MARK_ATTR, BIND_MARK_EVENT, bindMark, contentGateOpen, isGatedMessage, LINK_GATE_KEY, type LinkGate, markOrigins, PAUSED_REPLY, shouldMarkPage } from './local/link-gate.ts';
+import { BIND_MARK_ATTR, BIND_MARK_EVENT, bindMark, contentGateOpen, isGatedMessage, LINK_GATE_KEY, markOrigins, PAUSED_REPLY, shouldMarkPage } from './local/link-gate.ts';
+import type { LinkGate } from './local/link-gate.ts';
 import { getSyncUrl } from './diary/apply-log';
 import { installGateFetch } from './local/gate-fetch.ts';
 
@@ -17,8 +18,9 @@ let hhJobStarted = false;
 function startHhJobOnce(): void {
   if (hhJobStarted)
     return;
+
   hhJobStarted = true;
-  void serverMode().then(thin => { if (!thin) startHhJob(); });
+  void serverMode().then(thin => { if (thin === null || thin === undefined) startHhJob(); });
 }
 void contentGateOpen({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>> }).then((open) => {
   if (open)
@@ -28,6 +30,7 @@ void contentGateOpen({ get: keys => browser.storage.local.get(keys) as Promise<R
 browser.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || changes[LINK_GATE_KEY] === undefined)
     return;
+
   void contentGateOpen({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>> }).then((open) => {
     if (open)
       startHhJobOnce();
@@ -39,9 +42,11 @@ browser.storage.onChanged.addListener((changes, area) => {
 async function paintBindMark(gate: LinkGate | null | undefined): Promise<void> {
   if (window !== window.top || location.pathname.startsWith('/admin') === false)
     return;
+
   const origins = markOrigins(gate, await getSyncUrl().catch(() => ''));
   if (shouldMarkPage(location.origin, location.pathname, document.querySelector('meta[name="nojob-admin"]') !== null, origins) === false)
     return;
+
   const mark = bindMark(gate);
   document.documentElement.setAttribute(BIND_MARK_ATTR, mark);
   window.postMessage({ type: BIND_MARK_EVENT, mark }, location.origin);
@@ -107,6 +112,7 @@ browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (isGatedMessage(type) === false)
     return onPageMessage[type]?.(message, sendResponse) ?? false;
+
   if (onPageMessage[type] === undefined)
     return false;
 

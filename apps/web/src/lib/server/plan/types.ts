@@ -32,6 +32,9 @@ export interface Deps {
   onInvitation?: (login: string, row: NegotiationRow) => Promise<void>; // new invitation seen
   quota?: (login: string) => Promise<{ day: boolean; week: boolean }>; // admin hunt.day / hunt.week
   // per-account settings coming from admin (pace, keepWorkHours, query words)
+  reviewItems?: (login:string)=>Promise<Item[]>;
+  reviewAnswers?: (login:string,id:string)=>Promise<Array<{prompt:string;answer:string}>>;
+  captureForm?: (login:string,item:Item,fields:unknown[],text:string)=>Promise<void>;
   settings?: (login: string) => Promise<Settings>;
 }
 

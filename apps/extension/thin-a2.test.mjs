@@ -1,22 +1,24 @@
 // Stage A blockers: popup → connect screen on 401/lost, no /api/queue after the link is gone, badge «!»,
 // admin URL scheme from the sync URL, pulse throttle, ws retry counter outside offscreen.
+import { makeGateFetch, passesClosedGate, PAUSED_BODY } from './src/local/gate-fetch.ts';
+import { adminUrl, bindMode, LINK_GATE_KEY } from './src/local/link-gate.ts';
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
-import { makeGateFetch, passesClosedGate, PAUSED_BODY } from './src/local/gate-fetch.ts';
-import { adminUrl, bindMode, LINK_GATE_KEY } from './src/local/link-gate.ts';
-
 const src = p => fs.readFileSync(new URL(p, import.meta.url), 'utf8');
 const ORIGIN = 'https://s.example';
-const mem = (gate) => { const data = { [LINK_GATE_KEY]: gate }; return { data, get: async k => ({ [k]: data[k] }), set: async items => Object.assign(data, items) }; };
+const mem = (gate) => { const data = { [LINK_GATE_KEY]: gate };
+  return { data, get: async k => ({ [k]: data[k] }), set: async items => Object.assign(data, items) }; };
 
 test('lost link: not a single /api/queue request goes out; 401 closes the gate at once', async () => {
   const now = Date.now();
   const area = mem({ state: 'ok', host: 's.example', at: now });
   const sent = [];
   let status = 200;
-  const original = async (url) => { sent.push(url); return new Response('{}', { status }); };
+  const original = async (url) => { sent.push(url);
+    return new Response('{}', { status }); };
   const f = makeGateFetch(original, area, () => ORIGIN, () => now);
   await f(`${ORIGIN}/api/queue`);
   assert.equal(sent.length, 1);
@@ -25,11 +27,12 @@ test('lost link: not a single /api/queue request goes out; 401 closes the gate a
   assert.equal(res.status, 401);
   assert.equal(area.data[LINK_GATE_KEY].state, 'unauthorized');
   assert.equal(bindMode(area.data[LINK_GATE_KEY]), true);
-  for (let i = 0; i < 8; i += 1) {
+  for (let index = 0; index < 8; index += 1) {
     const paused = await f(`${ORIGIN}/api/queue`, { method: 'POST' });
     assert.equal(paused.status, 503);
     assert.deepEqual(await paused.json(), PAUSED_BODY);
   }
+
   assert.equal(sent.length, 2, 'after 401: zero further queue requests');
   // the link check itself still passes, foreign hosts are not touched
   await f(`${ORIGIN}/api/link`);
@@ -42,7 +45,8 @@ test('lost link: not a single /api/queue request goes out; 401 closes the gate a
 test('stale ok gate (TTL over) → also paused', async () => {
   const area = mem({ state: 'ok', host: 's.example', at: 0 });
   const sent = [];
-  const f = makeGateFetch(async (u) => { sent.push(u); return new Response('{}'); }, area, () => ORIGIN, () => 10 * 60_000);
+  const f = makeGateFetch(async (u) => { sent.push(u);
+    return new Response('{}'); }, area, () => ORIGIN, () => 10 * 60_000);
   assert.equal((await f(`${ORIGIN}/api/queue`)).status, 503);
   assert.equal(sent.length, 0);
 });

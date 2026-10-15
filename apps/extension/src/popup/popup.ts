@@ -1,3 +1,4 @@
+import { serverMode } from '../local/server-mode';
 import { PILOT_LINK_KEY, readPilotLink, SERVER_SILENT, SERVER_WAIT } from '../pilot/pilot-link';
 import { WORKER_KEY } from '../tab/worker-tab';
 import { labeledApplies, paintApplyGroup, readWaitingKey } from '../hh/history-list';
@@ -229,8 +230,10 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (changes[WORKER_KEY] !== undefined)
     void refreshWorkerPanel();
 
-  if (changes[EXT_CONFIG_KEY] !== undefined)
+  if (changes[EXT_CONFIG_KEY] !== undefined) {
     void paintFlagBoxes().catch(() => {});
+    void paintThinPopup();
+  }
 
   if (changes.flags === undefined)
     return;
@@ -1220,7 +1223,19 @@ function paintBind(on: boolean): void {
     requestAnimationFrame(() => syncTabChip());
   }
   void paintConnect().catch(() => {});
+  void paintThinPopup();
 }
+
+async function paintThinPopup(): Promise<void> {
+  if (bindOn || await serverMode() === false) return;
+  document.getElementById('tabs')?.setAttribute('hidden','');
+  document.getElementById('view-history')?.setAttribute('hidden','');
+  document.getElementById('view-settings')?.setAttribute('hidden','');
+  document.getElementById('view-main')?.removeAttribute('hidden');
+  for (const el of document.querySelectorAll<HTMLElement>('.pin-line, #auto-line')) el.hidden = true;
+  if (connectForm) document.getElementById('view-main')?.append(connectForm);
+}
+
 
 // first paint from the stored state (no TTL) so the full UI does not flash before the live check
 void readGate({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>>, set: async () => {} })

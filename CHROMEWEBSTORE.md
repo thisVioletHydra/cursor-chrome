@@ -23,7 +23,7 @@ Source: `apps/extension/src/manifest.json` (Manifest V3).
 
 Connection URLs and keys are configured by the user and stored locally. Requests to the configured administration server use authentication and exchange queue entries, vacancy information, application results and diagnostic records. Resume information is retrieved by the debug workflow. Job-site requests can use the user's existing authenticated session. The local native host and WebSocket bridge carry automation requests and results; page access can expose page content and user activity.
 
-This popup redesign adds no permissions, endpoints, analytics or external assets. It does not change data handling.
+In server mode the configured server receives DOM snapshots, form field metadata and answers to plan browser actions. Command payloads and acknowledgements are journaled on its existing volume. The browser stores execution receipts, scoped by a hash of the connection token, to prevent duplicate actions. Connection tokens never enter that command journal. No analytics or new permissions are added.
 
 ## Publication requirements still pending
 
@@ -36,3 +36,5 @@ Public privacy policy URL, publisher/contact details, final data disclosure, per
 - 0.5.131: durable account-scoped command delivery and crash-safe execution receipts. Command payloads and report acknowledgements are journaled on the configured server volume; local receipts are scoped by a hash of the connection token. No added permissions.
 
 - 0.5.132: server planner converts search, form answers and submission into navigate/click/type/select/readDOM/wait. Legacy scenarios remain behind the account switch. Form snapshots and answer text travel to the configured server for processing.
+
+- 0.5.133: admin scenario controls and server-mode switch, popup status/link/power view, account-isolated history counts, review form capture and human-approved answers. Existing IndexedDB, storage and volume data are retained; legacy thin SQLite settings are read without modification and new settings are written to JSON.

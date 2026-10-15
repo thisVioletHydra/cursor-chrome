@@ -1,0 +1,23 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import sqlite from 'node:sqlite';
+import { createPlanFlags } from './src/lib/server/thin/plan-flags.ts';
+import { createExtSettings } from './src/lib/server/thin/ext-settings.ts';
+test('legacy databases remain byte-for-byte intact; new settings and scenarios survive restart, isolated by login', t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'thin-migration-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const legacy=path.join(dir,'plan-flags.sqlite');const db=new sqlite.DatabaseSync(legacy);
+ db.exec("CREATE TABLE plan_flag(login TEXT PRIMARY KEY, enabled INTEGER, at INTEGER); INSERT INTO plan_flag VALUES ('a',1,1)");db.close();
+ const original=fs.readFileSync(legacy);
+ const flags=createPlanFlags(path.join(dir,'plan-flags.json'));
+ assert.equal(flags.enabled('a'),true);assert.equal(flags.enabled('b'),false);
+ flags.setScenarios('a',{letter:true,inviteAutoReply:true});flags.close();
+ assert.equal(flags.scenarios('a').letter,true);assert.equal(flags.scenarios('a').inviteAutoReply,false);
+ assert.equal(flags.scenarios('b').letter,false);
+ assert.deepEqual(fs.readFileSync(legacy),original);
+ const settings=createExtSettings(path.join(dir,'ext-settings.json'));settings.set('a',{showPop:false});settings.close();
+ assert.deepEqual(settings.get('a'),{showPop:false});assert.equal(settings.get('b'),null);
+ assert.throws(()=>settings.set('../b',{showPop:true}));
+});

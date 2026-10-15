@@ -20,7 +20,7 @@ const strip = (s: string) => s.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').
 
 export function parseForm(html: string): ParsedForm {
   const blocks = html.split('data-qa="task-question"').slice(1);
-  const fields: FormField[] = blocks.map((raw, i) => {
+  const fields: FormField[] = blocks.map((raw, item) => {
     const end = raw.search(/data-qa="task-question"|<\/form>/);
     const chunk = end > 0 ? raw.slice(0, end) : raw.slice(0, 8000);
     const body = chunk.slice(chunk.indexOf('>') + 1);
@@ -31,19 +31,22 @@ export function parseForm(html: string): ParsedForm {
       ? [...chunk.matchAll(/<option[^>]*>([^<]*)<\/option>/g)].map(m => strip(m[1])).filter(Boolean)
       : [...chunk.matchAll(/<label[^>]*>([\s\S]*?)<\/label>/g)].map(m => strip(m[1])).filter(Boolean);
     const radio = /type="(?:radio|checkbox)"|role="radio"/.test(chunk);
-    return { id: name ?? `task-${i}`, label, kind: select ? 'select' : radio ? 'choice' : 'text', options: select || radio ? options : [], custom: CUSTOM_MARK.test(label), required: /\brequired\b|aria-required="true"/.test(chunk) };
+    return { id: name ?? `task-${item}`, label, kind: select ? 'select' : radio ? 'choice' : 'text', options: select || radio ? options : [], custom: CUSTOM_MARK.test(label), required: /\brequired\b|aria-required="true"/.test(chunk) };
   });
   return { fields, letter: /data-qa="[^"]*letter|name="[^"]*letter/.test(html), questionnaire: PAGE_ASK.test(strip(html)) };
 }
 
 // needsHuman rule (lead decision): empty answer on a required field, or a choice that matches no option.
 export function answerProblem(fields: unknown[], answers: unknown[]): string {
+  if (answers.some((a:any)=>a?.human===true)) return 'нужен твой ответ: проверь Разбор';
+
   const byId = new Map<string, unknown>();
   for (const a of answers) {
     const r = a as { id?: unknown; name?: unknown; value?: unknown; answer?: unknown };
     const id = typeof r?.id === 'string' ? r.id : typeof r?.name === 'string' ? r.name : '';
     if (id) byId.set(id, r.value ?? r.answer);
   }
+
   for (const raw of fields) {
     const f = raw as Partial<FormField> & { name?: string };
     const id = f.id ?? f.name ?? '';
@@ -51,13 +54,16 @@ export function answerProblem(fields: unknown[], answers: unknown[]): string {
     const empty = v === undefined || v === null || (typeof v === 'string' && v.trim() === '') || (Array.isArray(v) && v.length === 0);
     if (empty) {
       if (f.required === true) return `нет ответа на обязательное поле: ${f.label ?? id}`;
+
       continue;
     }
+
     const opts = Array.isArray(f.options) ? f.options.map(o => String(o).trim().toLowerCase()) : [];
     if ((f.kind === 'choice' || f.kind === 'select') && opts.length > 0) {
       const vals = (Array.isArray(v) ? v : [v]).map(x => String(x).trim().toLowerCase());
       if (vals.some(x => !opts.includes(x))) return `вариант не совпал: ${f.label ?? id}`;
     }
   }
+
   return '';
 }

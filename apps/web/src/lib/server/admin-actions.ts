@@ -1,8 +1,9 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import type { Stored } from './secrets';
-
 import type { Provider } from '@cursor-chrome/hh';
 
+import { planFlags } from './thin/plan-wire';
+import { SCENARIOS } from './thin/plan-flags';
 import { asProvider, COVER_LETTER, coveredWaiters, distillCorpus, dropWaiters, forgetLinks, notePassed, parseRules, providerName, readQueue, remember, scoreAts, shelvedAmong, splitQueries, splitWaiters, splitWords, staleWaiters, suggestQueries, watchRestart, type QueueItem } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
@@ -58,6 +59,7 @@ export async function verifyAdmin({ request, cookies }: RequestEvent) {
   const login = guard(cookies);
   if (viewingGuest(cookies, login))
     return { ok: false, detail: 'это просмотр', wait: 0 };
+
   const form = await request.formData();
   const section = sectionOf(form);
   if (section === null || section === 'model')
@@ -75,6 +77,7 @@ export async function verifyAdmin({ request, cookies }: RequestEvent) {
     form.set('hhAccessToken', token);
     form.set('hhResumeId', resumeIdOf(rawResume || saved.hhResumeId));
   }
+
   const probe = await probeSection(section, form);
   const wait = probe.ok ? 0 : hold(section, probe.retryAfter);
   if (probe.ok === false)
@@ -260,8 +263,8 @@ export async function suggestQueryAdmin({ cookies }: RequestEvent) {
 
     return { ok: true, detail: picked.queries.join('\n'), via: providerName(picked.provider), wait: 0 };
   }
-  catch (err) {
-    return { ok: false, detail: suggestDetail(err), wait: 0 };
+  catch (error) {
+    return { ok: false, detail: suggestDetail(error), wait: 0 };
   }
 }
 
@@ -287,8 +290,8 @@ export async function scanAtsAdmin({ cookies }: RequestEvent) {
 
     return { ok: true, score: picked.score, flags: picked.flags, via, at, detail: '', wait: 0 };
   }
-  catch (err) {
-    return { ok: false, detail: suggestDetail(err), wait: 0 };
+  catch (error) {
+    return { ok: false, detail: suggestDetail(error), wait: 0 };
   }
 }
 
@@ -497,6 +500,7 @@ export async function importSetupAdmin({ request, cookies }: RequestEvent) {
     else
       fail = model.detail;
   }
+
   if (accepted.length === 0)
     return { ok: false, detail: fail, wait: 0 };
 
@@ -510,6 +514,7 @@ export async function importSetupAdmin({ request, cookies }: RequestEvent) {
     chain = chain.filter(item => item.id !== provider.id);
     chain = [...chain, provider];
   }
+
   chain = collapseChain(chain);
   const next = withChain({
     ...saved,
@@ -652,11 +657,13 @@ function clearSection(section: Section, next: Stored) {
   if (section === 'telegram') {
     next.telegramToken = '';
     next.telegramLabel = '';
+
     return;
   }
 
   if (section === 'model') {
     next.modelChain = '';
+
     return;
   }
 
@@ -696,7 +703,10 @@ export async function extSettingsAdmin({ request, cookies }: RequestEvent) {
   const patch: Record<string, boolean> = {};
   for (const key of MANAGED)
     patch[key] = form.get(key) === 'on';
+
   extSettings.set(login, patch);
+  planFlags.setEnabled(login, form.get('serverPlanner') === 'on');
+  planFlags.setScenarios(login, Object.fromEntries(SCENARIOS.filter(s => s !== 'inviteAutoReply').map(s => [s, form.get(`scenario_${s}`) === 'on'])));
 
   return { ok: true, detail: 'Сохранено. Расширение подхватит при открытии попапа.', wait: 0 };
 }

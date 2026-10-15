@@ -1,3 +1,4 @@
+import { serverMode } from '../local/server-mode';
 import { scanApplied, watchToasts } from './apply-watch';
 import { dismissJobOffer } from './job-offer';
 import { keepLiveLog, mountLiveLog } from './live-log';
@@ -21,7 +22,9 @@ export function startHhJob(): void {
   watchToasts();
   watchScreenQuestions();
   void bootHistory();
-  setInterval(() => {
+  setInterval(async () => {
+    if (await serverMode()) return;
+
     if (document.getElementById('cc-hh-overlay') === null)
       mountOverlay();
 

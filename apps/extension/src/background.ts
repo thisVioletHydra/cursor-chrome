@@ -1,7 +1,7 @@
-import { serverMode } from './local/server-mode';
-import { idempotentExecutor } from './link/command-receipts';
 import type { CommandName, WsRequest } from '@cursor-chrome/protocol';
 
+import { serverMode } from './local/server-mode';
+import { idempotentExecutor } from './link/command-receipts';
 import { NATIVE_HOST_NAME } from '@cursor-chrome/protocol';
 import { pageInfo, runCommand } from './link/commands';
 import { installFocusLock } from './tab/focus-lock';
@@ -78,21 +78,21 @@ const execOnce = idempotentExecutor({ get: key => browser.storage.local.get(key)
 let serverLinkOn = false;
 // popup opened: wake a sleeping loop (flag may have just been enabled) or start it if it ended
 // stage D: admin settings via GET /api/ext/config (ETag/304) → extConfig:v1 cache; seed once if admin is empty
-let configPulling = false;
-function pullExtConfig(): void {
-  if (configPulling)
-    return;
-  configPulling = true;
-  void syncExtConfig({
-    base: getSyncUrl,
-    key: getSyncKey,
-    gateOpen: async () => (await linkPaused()) === false,
-    get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>>,
-    set: items => browser.storage.local.set(items),
-  }).catch(() => 'failed').finally(() => {
-    configPulling = false;
-  });
+let configPulling: Promise<void> | null = null;
+function pullExtConfig(): Promise<void> {
+  if (configPulling) return configPulling;
+
+  configPulling = syncExtConfig({
+    base:getSyncUrl,
+    key:getSyncKey,
+    gateOpen:async()=>(await linkPaused())===false,
+    get:keys=>browser.storage.local.get(keys) as Promise<Record<string,unknown>>,
+    set:items=>browser.storage.local.set(items),
+  }).then(()=>{},()=>{}).finally(()=>{configPulling=null});
+
+  return configPulling;
 }
+
 function nudgeServerLink(): void {
   pullExtConfig();
   wakeServerLink();
@@ -101,9 +101,13 @@ function nudgeServerLink(): void {
 function startServerLink(): void {
   if (serverLinkOn)
     return;
+
   serverLinkOn = true;
   pullExtConfig();
   void serverLinkLoop({
+    beforeRound: pullExtConfig,
+    runEpoch: async () => String((await browser.storage.local.get('serverRunEpoch')).serverRunEpoch || ''),
+    onPause: async pause => { if(pause.type==='stop') await applyPilot({type:'stop',reason:'captcha'}); },
     base: getSyncUrl,
     key: getSyncKey,
     gateOpen: async () => (await linkPaused()) === false,
@@ -126,6 +130,9 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (changes.applyLog !== undefined)
     void setBadge(connected);
 
+  if (changes.flags || changes['extConfig:v1']) { wakeServerLink();
+    startServerLink(); }
+
   if (turnedAutoOn(changes.flags)) {
     clearHangHalt();
     if (holdSoon)
@@ -141,6 +148,9 @@ browser.storage.onChanged.addListener((changes, area) => {
 });
 
 browser.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'cc-link-gate') { void pullExtConfig();
+    startServerLink(); }
+
   if (alarm.name === SOON_ALARM) {
     void runSearchSoon();
 
@@ -224,12 +234,16 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const type = message?.type;
   if (typeof type !== 'string')
     return false;
+
   if (type === 'gate-ping') {
     void pingGate();
+
     return false;
   }
+
   if (type === 'server-link-wake') {
     nudgeServerLink();
+
     return false;
   }
 
@@ -327,6 +341,7 @@ async function onQueueAlarm(): Promise<void> {
 async function syncNegotiationsIfDue(): Promise<void> {
   if (await linkPaused())
     return;
+
   const stored = await browser.storage.local.get(NEGOTIATIONS_AT_KEY);
   const at = stored[NEGOTIATIONS_AT_KEY];
   if (typeof at === 'number' && Date.now() - at < NEGOTIATIONS_EVERY_MS)
@@ -393,6 +408,7 @@ function autoFlag(value: unknown): boolean {
 
 async function armSearchSoon(force: boolean): Promise<void> {
   if (await serverMode()) return;
+
   if (armingSearch)
     return;
 
@@ -533,6 +549,7 @@ async function onNativeMessage(message: unknown): Promise<void> {
 
     return;
   }
+
   try {
     const result = await runCommand(request.method, request.params || {}, connected);
     sendNative(nativePort, { id: request.id, ok: true, result });

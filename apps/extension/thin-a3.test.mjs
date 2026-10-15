@@ -1,10 +1,10 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
-
 import { lostGate, makeGateFetch } from './src/local/gate-fetch.ts';
 import { FAST_PROBE_MS, gateOpen, probeDue, refreshGate } from './src/local/link-gate.ts';
 import { makePowerQueue, waitUntil } from './src/pilot/power-queue.ts';
 import { scrubHtml } from './src/local/fixture-scrub.ts';
+
+import assert from 'node:assert/strict';
+import test from 'node:test';
 
 const O = 'https://srv.test';
 function area(gate) {
@@ -17,7 +17,8 @@ test('gate-fetch: network error on an open gate → lost at once (fast), next qu
   const now = Date.now();
   const a = area(okGate(now));
   let sent = 0;
-  const f = makeGateFetch(async () => { sent += 1; throw new TypeError('Failed to fetch'); }, a, () => O, () => now);
+  const f = makeGateFetch(async () => { sent += 1;
+    throw new TypeError('Failed to fetch'); }, a, () => O, () => now);
   await assert.rejects(f(`${O}/api/queue`));
   assert.equal(a.store.linkGate.state, 'down');
   assert.equal(a.store.linkGate.fast, true);
@@ -37,6 +38,7 @@ test('gate-fetch: 502/503/504 from our server close the gate; synthetic paused 5
     assert.equal((await f(`${O}/api/queue`)).status, status);
     assert.equal(a.store.linkGate.state, 'down', String(status));
   }
+
   const now = Date.now();
   const a = area(okGate(now));
   const f = makeGateFetch(async () => new Response('', { status: 500 }), a, () => O, () => now);
@@ -79,6 +81,7 @@ test('power: fast on→off — second click during «Включаю…» is queu
     log.push(want ? 'on' : 'off');
     if (want)
       await new Promise((r) => { release = r; });
+
     on = want;
   };
   const click = makePowerQueue(toggle);
